@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-set -a; [[ -f .env ]] && . ./.env; set +a
+. "$(dirname "$0")/_env.sh"; load_env
 
 if [[ -z "${LANGFUSE_EE_LICENSE_KEY:-}" ]]; then
   echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in .env. Paste your enterprise key first."

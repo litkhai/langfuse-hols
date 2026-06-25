@@ -11,7 +11,7 @@
 # Requires: EE active (run 05, then 06), `jq`, ADMIN_API_KEY in .env.
 set -euo pipefail
 cd "$(dirname "$0")"
-set -a; [[ -f .env ]] && . ./.env; set +a
+. "$(dirname "$0")/_env.sh"; load_env
 
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
@@ -61,13 +61,13 @@ echo "▶ Schema:"
 "${PSQL[@]}" -c "\d \"${AUDIT_TBL}\""
 
 echo "▶ Most recent audit events (who did what, when) — including the org/project/"
-echo "  membership changes lab 06 just made:"
+echo "  membership changes lab 06 just made (columns are snake_case in Postgres):"
 "${PSQL[@]}" -c "
-  SELECT \"createdAt\", \"userId\", \"orgId\", \"resourceType\", action, \"resourceId\"
+  SELECT created_at, action, resource_type, resource_id, org_id, COALESCE(api_key_id, user_id) AS actor
   FROM \"${AUDIT_TBL}\"
-  ORDER BY \"createdAt\" DESC
+  ORDER BY created_at DESC
   LIMIT 15;" \
-  || "${PSQL[@]}" -c "SELECT * FROM \"${AUDIT_TBL}\" ORDER BY 1 DESC LIMIT 10;"
+  || "${PSQL[@]}" -c "SELECT * FROM \"${AUDIT_TBL}\" ORDER BY created_at DESC LIMIT 10;"
 
 cat <<EOF
 

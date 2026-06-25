@@ -10,7 +10,7 @@
 # Requires: EE active (run 05 first), `jq`, and ADMIN_API_KEY set in .env.
 set -euo pipefail
 cd "$(dirname "$0")"
-set -a; [[ -f .env ]] && . ./.env; set +a
+. "$(dirname "$0")/_env.sh"; load_env
 
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"

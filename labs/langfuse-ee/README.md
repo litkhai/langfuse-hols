@@ -180,7 +180,19 @@ Roles: `OWNER` (all) · `ADMIN` (settings + members) · `MEMBER` (view + create 
 
 ### 📝 Verification status
 
-The Docker Compose stack and `.env` are derived 1:1 from the upstream Langfuse v3 [`docker-compose.yml`](https://github.com/langfuse/langfuse/blob/main/docker-compose.yml) and self-hosting docs (fetched 2026-06-25). The Python SDK calls follow the v3/v4 (OpenTelemetry-native) API, and the enterprise scripts follow the documented Instance Management, Org/SCIM, and projects APIs. Because the full stack requires Docker images + license key at runtime, run the labs in order; the ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
+Verified **end-to-end on 2026-06-25** against **Langfuse v3.197.1** (Docker Compose, 6 containers) with a real enterprise trial license key:
+
+| Step | Result |
+|---|---|
+| `01` stack up | 6 containers healthy; `/api/public/health` → `{"status":"OK","version":"3.197.1"}` |
+| `02` generate traces | 40 traces ingested via the SDK (offline mode) |
+| `03` explore | tables `traces` / `observations` / `scores` are `ReplacingMergeTree`, monthly-partitioned |
+| `04` analytics | all 8 queries pass; cost/latency/quality numbers sane |
+| `05` EE activate | Instance Management API `/api/admin/organizations` → HTTP 200 (license valid) |
+| `06` RBAC/SCIM | org + project + 2 SCIM users + project-level role override, all via API |
+| `07` audit/retention | 14-day retention set (`retentionDays: 14`); audit log shows every lab-06 action |
+
+Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables are `ReplacingMergeTree`, so analytics read with `FINAL` + `WHERE is_deleted = 0` to avoid double-counting un-merged row versions; **(2)** the SDK's `input_tokens`/`output_tokens` are normalized to the Map keys `input`/`output`/`total` in ClickHouse (the queries use `greatest()` over both spellings). The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
 
 ### 🔍 Additional resources
 
@@ -385,7 +397,19 @@ ADMIN_API_KEY → 조직 생성 → 조직 범위 API 키 발급
 
 ### 📝 검증 상태
 
-Docker Compose 스택과 `.env`는 업스트림 Langfuse v3 [`docker-compose.yml`](https://github.com/langfuse/langfuse/blob/main/docker-compose.yml) 및 self-hosting 문서(2026-06-25 기준)에서 1:1로 도출했습니다. Python SDK 호출은 v3/v4(OpenTelemetry 네이티브) API를, 엔터프라이즈 스크립트는 문서화된 Instance Management·Org/SCIM·projects API를 따릅니다. 전체 스택은 런타임에 Docker 이미지 + 라이선스 키가 필요하므로 랩을 순서대로 실행하세요. 랩 03의 ClickHouse `DESCRIBE` 출력이 설치 버전의 정답입니다.
+**2026-06-25**에 실제 엔터프라이즈 트라이얼 라이선스 키로 **Langfuse v3.197.1**(Docker Compose, 컨테이너 6개)에서 **end-to-end 검증**했습니다.
+
+| 단계 | 결과 |
+|---|---|
+| `01` 스택 기동 | 컨테이너 6개 healthy; `/api/public/health` → `{"status":"OK","version":"3.197.1"}` |
+| `02` 트레이스 생성 | SDK(오프라인 모드)로 40건 적재 |
+| `03` 탐색 | `traces`/`observations`/`scores`는 `ReplacingMergeTree`, 월별 파티션 |
+| `04` 분석 | 8개 쿼리 전부 통과; 비용/지연/품질 수치 타당 |
+| `05` EE 활성화 | Instance Management API `/api/admin/organizations` → HTTP 200 (라이선스 유효) |
+| `06` RBAC/SCIM | 조직 + 프로젝트 + SCIM 사용자 2명 + 프로젝트 단위 역할 오버라이드, 전부 API로 |
+| `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그에 lab 06의 모든 동작 기록됨 |
+
+런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다. **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
 
 ### 🔍 추가 자료
 

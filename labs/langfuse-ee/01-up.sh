@@ -37,7 +37,7 @@ for i in $(seq 1 90); do
 done
 
 # Load the headless-init creds for the printout (best effort)
-set -a; [[ -f .env ]] && . ./.env; set +a
+. "$(dirname "$0")/_env.sh"; load_env
 
 cat <<EOF
 

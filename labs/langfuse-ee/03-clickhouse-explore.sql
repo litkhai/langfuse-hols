@@ -89,7 +89,17 @@ FROM default.scores
 GROUP BY name, data_type
 ORDER BY name;
 
--- 8) How ClickHouse partitions the data (Langfuse uses monthly partitions on
+-- 8) ReplacingMergeTree gotcha: Langfuse RE-INGESTS a row each time a trace is
+--    updated (e.g. a span created, then updated with its output). Until a merge
+--    collapses them, multiple versions sit on disk. The dedup key is the sort
+--    key; `event_ts` picks the newest version and `is_deleted` flags deletes.
+--    → Plain count() can over-count; `FINAL` + `is_deleted = 0` gives the truth.
+SELECT
+    count()                                       AS raw_rows,           -- may be inflated
+    (SELECT count() FROM default.traces FINAL WHERE is_deleted = 0) AS deduped_active
+FROM default.traces;
+
+-- 9) How ClickHouse partitions the data (Langfuse uses monthly partitions on
 --    the time column — the basis for fast time-range pruning and data retention).
 SELECT
     table,

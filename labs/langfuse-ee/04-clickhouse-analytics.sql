@@ -11,9 +11,15 @@
 --   docker compose exec -T clickhouse clickhouse-client \
 --     -u clickhouse --password clickhouse --multiquery < 04-clickhouse-analytics.sql
 --
--- Robustness: cost is read from cost_details (input+output) and tokens via a
--- greatest() over the common key spellings, so these work regardless of whether
--- the SDK sent `input_tokens`/`output_tokens` or `input`/`output`.
+-- ── TWO THINGS THAT MAKE THESE QUERIES CORRECT ──────────────────────────────
+-- 1) ReplacingMergeTree: Langfuse re-ingests a row every time a trace/observation
+--    is updated (e.g. a span gets its output after creation). Until a background
+--    merge collapses them, BOTH versions are on disk. We therefore read with
+--    `FINAL` (collapse to the newest version) and `WHERE is_deleted = 0` (drop
+--    soft-deletes). Without FINAL you double-count and see half-populated rows.
+-- 2) Map keys: the SDK sends usage as input_tokens/output_tokens, but Langfuse
+--    normalizes them to the keys `input` / `output` / `total`. We use greatest()
+--    over both spellings so the queries work regardless of SDK version.
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── 1) Spend & token usage by model (the bread-and-butter cost report) ───────
@@ -25,8 +31,8 @@ SELECT
     round(sum(cost_details['input'] + cost_details['output']), 6)           AS total_cost_usd,
     round(sum(cost_details['input'] + cost_details['output'])
             / nullIf(count(), 0), 6)                                        AS avg_cost_per_call
-FROM default.observations
-WHERE type = 'GENERATION'
+FROM default.observations FINAL
+WHERE type = 'GENERATION' AND is_deleted = 0
 GROUP BY model
 ORDER BY total_cost_usd DESC;
 
@@ -38,8 +44,8 @@ SELECT
     quantile(0.50)(dateDiff('millisecond', start_time, end_time))  AS p50_ms,
     quantile(0.95)(dateDiff('millisecond', start_time, end_time))  AS p95_ms,
     quantile(0.99)(dateDiff('millisecond', start_time, end_time))  AS p99_ms
-FROM default.observations
-WHERE type = 'GENERATION' AND end_time > start_time
+FROM default.observations FINAL
+WHERE type = 'GENERATION' AND is_deleted = 0 AND end_time > start_time
 GROUP BY model
 ORDER BY p95_ms DESC;
 
@@ -49,8 +55,8 @@ SELECT
     count()                                              AS calls,
     countIf(level = 'ERROR')                             AS errors,
     round(100.0 * countIf(level = 'ERROR') / count(), 2) AS error_pct
-FROM default.observations
-WHERE type = 'GENERATION'
+FROM default.observations FINAL
+WHERE type = 'GENERATION' AND is_deleted = 0
 GROUP BY model
 ORDER BY error_pct DESC;
 
@@ -60,7 +66,8 @@ WITH trace_tier AS (
     SELECT
         id AS trace_id,
         arrayFirst(t -> t LIKE 'tier:%', tags) AS tier_tag
-    FROM default.traces
+    FROM default.traces FINAL
+    WHERE is_deleted = 0
 )
 SELECT
     replaceOne(tt.tier_tag, 'tier:', '')                       AS tier,
@@ -68,9 +75,9 @@ SELECT
     round(sum(o.cost_details['input'] + o.cost_details['output']), 6) AS cost_usd,
     round(sum(o.cost_details['input'] + o.cost_details['output'])
             / nullIf(count(DISTINCT o.trace_id), 0), 6)        AS cost_per_trace
-FROM default.observations AS o
+FROM default.observations AS o FINAL
 INNER JOIN trace_tier AS tt ON tt.trace_id = o.trace_id
-WHERE o.type = 'GENERATION' AND tt.tier_tag != ''
+WHERE o.type = 'GENERATION' AND o.is_deleted = 0 AND tt.tier_tag != ''
 GROUP BY tier
 ORDER BY cost_usd DESC;
 
@@ -80,7 +87,8 @@ SELECT
     round(100.0 * sumIf(value, name = 'user-thumbs')
             / nullIf(countIf(name = 'user-thumbs'), 0), 1)                 AS thumbs_up_pct,
     round(avgIf(value, name = 'hallucination-check'), 3)                   AS avg_grounding
-FROM default.scores;
+FROM default.scores FINAL
+WHERE is_deleted = 0;
 
 -- ── 6) Per-user spend & engagement leaderboard (cost attribution) ────────────
 SELECT
@@ -88,9 +96,10 @@ SELECT
     count(DISTINCT t.session_id)                               AS sessions,
     count(DISTINCT t.id)                                       AS requests,
     round(sum(o.cost_details['input'] + o.cost_details['output']), 6) AS cost_usd
-FROM default.traces AS t
-INNER JOIN default.observations AS o
-    ON o.trace_id = t.id AND o.type = 'GENERATION'
+FROM default.traces AS t FINAL
+INNER JOIN default.observations AS o FINAL
+    ON o.trace_id = t.id AND o.type = 'GENERATION' AND o.is_deleted = 0
+WHERE t.is_deleted = 0
 GROUP BY t.user_id
 ORDER BY cost_usd DESC
 LIMIT 10;
@@ -101,9 +110,10 @@ SELECT
     count(DISTINCT t.id)                                      AS traces,
     uniqExact(t.user_id)                                      AS users,
     round(sum(o.cost_details['input'] + o.cost_details['output']), 6) AS cost_usd
-FROM default.traces AS t
-LEFT JOIN default.observations AS o
-    ON o.trace_id = t.id AND o.type = 'GENERATION'
+FROM default.traces AS t FINAL
+LEFT JOIN default.observations AS o FINAL
+    ON o.trace_id = t.id AND o.type = 'GENERATION' AND o.is_deleted = 0
+WHERE t.is_deleted = 0
 GROUP BY day
 ORDER BY day;
 
@@ -113,8 +123,8 @@ SELECT
     count()             AS sessions
 FROM (
     SELECT session_id, count(DISTINCT id) AS turns
-    FROM default.traces
-    WHERE session_id != ''
+    FROM default.traces FINAL
+    WHERE is_deleted = 0 AND session_id != ''
     GROUP BY session_id
 )
 GROUP BY turns

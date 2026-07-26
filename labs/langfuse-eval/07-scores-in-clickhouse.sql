@@ -55,20 +55,23 @@ WHERE is_deleted = 0 AND data_type = 'NUMERIC'
 GROUP BY name
 ORDER BY name;
 
-SELECT '── 4) Experiment A/B: avg score per metric, split by dataset run ──' AS section;
--- Evaluator scores carry `dataset_run_id`, so ClickHouse can reproduce the run
--- comparison (prompt-v1 vs prompt-v2). The run-id → run-name mapping lives in the
--- UI / Postgres; here the split itself proves v2 outscores v1.
+SELECT '── 4) Experiment A/B: avg score per metric, split by prompt variant ──' AS section;
+-- Evaluator scores don't carry the dataset-run id in ClickHouse, but lab 04 tags
+-- each experiment trace with its variant — so a scores → traces JOIN reconstructs
+-- the prompt-v1 vs prompt-v2 comparison right here in ClickHouse.
 SELECT
-    substring(dataset_run_id, 1, 8)  AS run,
-    name,
-    count()                          AS n,
-    round(avg(value), 3)             AS avg_value
-FROM scores FINAL
-WHERE is_deleted = 0 AND dataset_run_id IS NOT NULL
-  AND name IN ('keyword-recall', 'answered', 'llm-judge-correctness')
-GROUP BY dataset_run_id, name
-ORDER BY name, run;
+    multiIf(has(t.tags, 'variant:v1'), 'prompt-v1',
+            has(t.tags, 'variant:v2'), 'prompt-v2', 'other') AS variant,
+    s.name                    AS metric,
+    count()                   AS n,
+    round(avg(s.value), 3)    AS avg_value
+FROM scores AS s FINAL
+INNER JOIN traces AS t FINAL ON s.trace_id = t.id
+WHERE s.is_deleted = 0 AND t.is_deleted = 0
+  AND has(t.tags, 'eval-experiment')
+  AND s.name IN ('keyword-recall', 'answered', 'llm-judge-correctness')
+GROUP BY variant, metric
+ORDER BY metric, variant;
 
 SELECT '── 5) Per-trace agreement of signals that co-occur (seed traces) ──' AS section;
 -- user feedback (01) vs automated hallucination-check (01) vs demo human review (06),

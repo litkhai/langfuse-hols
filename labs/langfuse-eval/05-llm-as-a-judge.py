@@ -68,6 +68,8 @@ def make_task(prompt_obj, variant: str):
     system_prompt = prompt_obj.compile(tone="friendly")
 
     def task(*, item, **kwargs):
+        lf.update_current_trace(tags=[f"variant:{variant}", "eval-experiment"],
+                                metadata={"variant": variant})
         return generate_answer(system_prompt=system_prompt, question=item.input["question"],
                                expected=item.expected_output, variant=variant, model=MODEL)
 

@@ -1,6 +1,6 @@
 # Design — `usecase/langfuse-eval/` : The Langfuse Quality Loop
 
-> 상태: **설계 초안 (코드 미작성)** — Ken 검토용.
+> 상태: **구현 완료 · 2026-07-26 end-to-end 검증** — 최신/권위 있는 검증 결과는 [README.md](README.md) 참조. (이 문서는 설계 근거 기록용으로 유지)
 > 작성일: 2026-07-25 · 작성자: Ken Lee (ClickHouse SA)
 > 자매 랩: [`usecase/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
 

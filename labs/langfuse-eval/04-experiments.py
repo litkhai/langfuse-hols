@@ -56,6 +56,10 @@ def make_task(prompt_obj, variant: str):
 
     def task(*, item, **kwargs):
         question = item.input["question"]
+        # Tag the auto-created experiment trace with its variant so ClickHouse can
+        # reconstruct the v1-vs-v2 A/B by joining scores → traces (lab 07 §4).
+        lf.update_current_trace(tags=[f"variant:{variant}", "eval-experiment"],
+                                metadata={"variant": variant})
         # Offline: wrap in a generation so the trace carries model + usage + the
         # prompt LINK. With OPENAI_API_KEY the drop-in wrapper self-traces, so we
         # avoid double-instrumenting.

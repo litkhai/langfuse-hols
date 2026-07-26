@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lab 10 overlay — Instance Governance (EE): UI Customization + Org Creators
+#
+#  Both controls are env-var driven and license-gated. Injected into langfuse-web.
+#  Layer on top of base + EE (10-ee-instance-governance.sh does this):
+#    docker compose -f docker-compose.yml -f docker-compose.ee.yml \
+#                   -f docker-compose.governance.yml up -d
+#
+#  Every value has a workshop default and is overridable from .env.
+#  Docs: https://langfuse.com/self-hosting/administration/ui-customization
+#        https://langfuse.com/self-hosting/administration/organization-creators
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  langfuse-web:
+    environment:
+      # ── A) UI Customization: co-brand + point help/feedback links inward ──
+      LANGFUSE_UI_LOGO_LIGHT_MODE_HREF: ${LANGFUSE_UI_LOGO_LIGHT_MODE_HREF:-https://clickhouse.com/favicon.ico}
+      LANGFUSE_UI_LOGO_DARK_MODE_HREF: ${LANGFUSE_UI_LOGO_DARK_MODE_HREF:-https://clickhouse.com/favicon.ico}
+      LANGFUSE_UI_FEEDBACK_HREF: ${LANGFUSE_UI_FEEDBACK_HREF:-https://github.com/ClickHouse/clickhouse-hols/issues}
+      LANGFUSE_UI_DOCUMENTATION_HREF: ${LANGFUSE_UI_DOCUMENTATION_HREF:-https://clickhouse.com/docs}
+      LANGFUSE_UI_SUPPORT_HREF: ${LANGFUSE_UI_SUPPORT_HREF:-https://clickhouse.com/support}
+      # ── B) Organization Creators: only these emails may create new orgs ──
+      LANGFUSE_ALLOWED_ORGANIZATION_CREATORS: ${LANGFUSE_ALLOWED_ORGANIZATION_CREATORS:-admin@example.com}

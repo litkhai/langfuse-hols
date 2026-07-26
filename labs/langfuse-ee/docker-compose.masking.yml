@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lab 08 overlay — Server-Side Data Masking (EE)
+#
+#  Adds a tiny masking-callback sidecar and wires the Langfuse WORKER to call it
+#  on every OTLP-ingested event — BEFORE the trace is written to ClickHouse.
+#
+#  Layer it on top of the base + EE overlays (08-ee-data-masking.sh does this):
+#    docker compose -f docker-compose.yml -f docker-compose.ee.yml \
+#                   -f docker-compose.masking.yml up -d
+#
+#  Kept as its OWN overlay (not folded into docker-compose.ee.yml) so labs 05–07
+#  never route ingestion through the callback. FAIL_CLOSED=true is the secure
+#  default: if the callback errors, the event is dropped rather than stored raw.
+#  Docs: https://langfuse.com/self-hosting/security/data-masking
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  masking:
+    image: docker.io/python:3.12-slim
+    restart: always
+    command: python /app/masking_service.py
+    volumes:
+      - ./masking_service.py:/app/masking_service.py:ro
+    expose:
+      - "3100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3100/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 2s
+
+  langfuse-worker:
+    depends_on:
+      masking:
+        condition: service_healthy
+    environment:
+      # Only OTLP-ingested events (/api/public/otel — SDK v3+) are masked.
+      LANGFUSE_INGESTION_MASKING_CALLBACK_URL: ${LANGFUSE_INGESTION_MASKING_CALLBACK_URL:-http://masking:3100/mask}
+      LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS: ${LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS:-2000}
+      LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED: ${LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED:-true}

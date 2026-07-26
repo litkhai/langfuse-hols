@@ -2,7 +2,8 @@
 # 01-up.sh — bring the Langfuse self-hosted stack up (OSS mode) and wait until ready.
 #
 #   ./01-up.sh           # OSS stack (labs 01–04)
-#   EE=1 ./01-up.sh      # same stack + enterprise overlay (labs 05–07; needs license key)
+#   EE=1 ./01-up.sh      # same stack + enterprise overlay (labs 05–11; needs license key)
+#                        # (labs 08 & 10 add their own overlays via their scripts)
 set -euo pipefail
 cd "$(dirname "$0")"
 

@@ -2,9 +2,14 @@
 #  Enterprise Edition (EE) overlay — labs 05–07
 #
 #  Adds the enterprise license key to BOTH Langfuse containers. The key unlocks:
-#    • Project-level RBAC roles        • Audit Logs (UI viewer + export)
-#    • Data Retention policies         • SCIM / Organization-scoped API
-#    • Server-side data masking        • UI customization, Org creators allowlist
+#    • Project-level RBAC roles  (lab 06) • Audit Logs         (lab 07)
+#    • Data Retention policies   (lab 07) • SCIM / Org API      (lab 06)
+#    • Server-side data masking  (lab 08) • Protected prompt labels (lab 09)
+#    • UI customization          (lab 10) • Org creators allowlist  (lab 10)
+#    • Instance Management API   (lab 05)
+#
+#  Feature-specific overlays layer ON TOP of this one:
+#    docker-compose.masking.yml     (lab 08) · docker-compose.governance.yml (lab 10)
 #
 #  Usage (merge overlay on top of the base compose):
 #    docker compose -f docker-compose.yml -f docker-compose.ee.yml up -d

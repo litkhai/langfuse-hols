@@ -13,7 +13,9 @@ Langfuse v3 stores all of its OLTP state (users, orgs, projects, prompts, the au
 The workshop has two tracks:
 
 - **OSS track (labs 01–04)** — deploy the full stack with Docker Compose, push realistic traces with the Python SDK, then query the ClickHouse backend directly with SQL.
-- **Enterprise track (labs 05–07)** — activate an **enterprise license key** and exercise the EE-only features: project-level **RBAC**, **SCIM** provisioning, the **Instance Management / Org API**, **Audit Logs**, and **Data Retention** policies.
+- **Enterprise track (labs 05–11)** — activate an **enterprise license key** and exercise the EE-only features: **Instance Management / Org API**, project-level **RBAC**, **SCIM** provisioning, **Audit Logs**, **Data Retention**, **Server-Side Data Masking** (proven against ClickHouse), **Protected Prompt Labels**, **UI Customization**, **Organization-Creators allowlist**, and a **Parquet export ↔ ClickHouse** round-trip.
+
+> This directory is the **`-ee` (Enterprise Edition) edition** of the workshop — the OSS track still runs standalone, but the focus is the enterprise feature surface and how each one lands in (or is proven against) ClickHouse.
 
 ### 🎯 Why this lab
 
@@ -44,19 +46,28 @@ Most Langfuse tutorials stop at "send a trace to Langfuse Cloud." This one is fo
 ### 📁 File Structure
 
 ```
-langfuse/
-├── README.md                  # This file
-├── .env.example               # Secrets, headless-init, EE license key, SDK keys
-├── docker-compose.yml         # OSS stack: web · worker · postgres · clickhouse · redis · minio
-├── docker-compose.ee.yml      # EE overlay: injects license key + admin API key
-├── 01-up.sh                   # Bring the stack up, wait for health, print credentials
-├── 02-generate-traces.py      # Python SDK v3+: nested spans/generations, sessions, scores
-├── 03-clickhouse-explore.sql  # Discover the traces/observations/scores tables in ClickHouse
-├── 04-clickhouse-analytics.sql# Cost / latency / quality analytics straight on ClickHouse
-├── 05-ee-activate.sh          # Restart with the license key, verify EE is active
-├── 06-ee-rbac-scim.sh         # Org/project provisioning, SCIM users, project-level RBAC
-├── 07-ee-audit-retention.sh   # Data-retention policy + read the audit log
-└── 99-cleanup.sh              # Tear the stack down (--purge to wipe volumes)
+langfuse-ee/
+├── README.md                    # This file
+├── .env.example                 # Secrets, headless-init, EE license key, SDK keys
+├── docker-compose.yml           # OSS stack: web · worker · postgres · clickhouse · redis · minio
+├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
+├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
+├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
+├── 01-up.sh                     # Bring the stack up, wait for health, print credentials
+├── 02-generate-traces.py        # Python SDK v3+: nested spans/generations, sessions, scores
+├── 03-clickhouse-explore.sql    # Discover the traces/observations/scores tables in ClickHouse
+├── 04-clickhouse-analytics.sql  # Cost / latency / quality analytics straight on ClickHouse
+├── 05-ee-activate.sh            # Restart with the license key, verify EE is active
+├── 06-ee-rbac-scim.sh           # Org/project provisioning, SCIM users, project-level RBAC
+├── 07-ee-audit-retention.sh     # Data-retention policy + read the audit log
+├── 08-ee-data-masking.sh        # Server-side masking, PROVEN absent in ClickHouse
+│   ├── masking_service.py       #   ↳ tiny stdlib masking-callback sidecar
+│   ├── 08-generate-pii-traces.py#   ↳ send traces containing sentinel secrets/PII
+│   └── 08-verify-masking.sql    #   ↳ ClickHouse proof: raw secrets gone, [REDACTED_*] present
+├── 09-ee-protected-prompts.sh   # Versioned prompts + deployment labels + protected labels
+├── 10-ee-instance-governance.sh # UI customization + organization-creators allowlist
+├── 11-ee-parquet-export.sh      # Blob-storage Parquet export + ClickHouse s3() round-trip
+└── 99-cleanup.sh                # Tear the stack down (--purge to wipe volumes)
 ```
 
 ### ✅ Prerequisites
@@ -69,7 +80,7 @@ langfuse/
 ### 🚀 Quick Start (OSS track)
 
 ```bash
-cd usecase/langfuse
+cd usecase/langfuse-ee
 cp .env.example .env            # edit the # CHANGEME secrets for anything non-local
 
 # 1) Deploy. First boot runs Postgres + ClickHouse migrations (~2-3 min).
@@ -96,10 +107,33 @@ docker compose exec -T clickhouse clickhouse-client -u clickhouse --password cli
 # Put your key in .env:   LANGFUSE_EE_LICENSE_KEY=<your-key>
 #                         ADMIN_API_KEY=<any-strong-random-string>
 
-./05-ee-activate.sh        # redeploy with the EE overlay; verify license is active
-./06-ee-rbac-scim.sh       # create org → org key → project → SCIM users → RBAC roles
-./07-ee-audit-retention.sh # set a 14-day retention policy + dump the audit log
+./05-ee-activate.sh          # redeploy with the EE overlay; verify license is active
+./06-ee-rbac-scim.sh         # create org → org key → project → SCIM users → RBAC roles
+./07-ee-audit-retention.sh   # set a 14-day retention policy + dump the audit log
+./08-ee-data-masking.sh      # mask secrets on ingestion; PROVE they never reach ClickHouse
+./09-ee-protected-prompts.sh # versioned prompts + deployment labels + protected labels
+./10-ee-instance-governance.sh # UI customization + organization-creators allowlist
+./11-ee-parquet-export.sh    # Parquet export to object storage + ClickHouse s3() round-trip
 ```
+
+### 🧩 EE feature coverage
+
+Every Enterprise entitlement listed on the [Langfuse license-key page](https://langfuse.com/self-hosting/license-key), mapped to the lab that exercises it:
+
+| Enterprise entitlement | Lab | ClickHouse angle |
+|---|---|---|
+| Instance Management API | 05 | — |
+| Org Management API & SCIM | 06 | — |
+| Project-level RBAC roles | 06 | — |
+| Audit Logs | 07 | (audit log is in Postgres) |
+| Data Retention policies | 07 | nightly worker deletes old rows from ClickHouse |
+| **Server-Side Data Masking** | 08 | **proof runs on ClickHouse** — raw secrets never persist |
+| **Protected Prompt Labels** | 09 | (prompts are in Postgres) |
+| **UI Customization** | 10 | — |
+| **Organization Creators** | 10 | — |
+| Parquet Blob-Storage Export* | 11 | **ClickHouse `s3()` writes + re-reads the Parquet** |
+
+\* Scheduled blob-storage export is available to all self-hosted projects (not license-gated), but it's the enterprise data-platform / archival story and the most ClickHouse-native lab — so it lives on the enterprise track.
 
 ### 📖 Lab Walkthrough
 
@@ -166,6 +200,43 @@ Roles: `OWNER` (all) · `ADMIN` (settings + members) · `MEMBER` (view + create 
 - **Data Retention**: sets a 14-day retention on the project via `PUT /api/public/projects/{id}`. A non-zero value requires the data-retention entitlement (EE) — the same call is rejected on OSS. A nightly worker then deletes traces/observations/scores older than the window straight from ClickHouse.
 - **Audit Logs**: discovers the audit table in Postgres and dumps the most recent who/what/when records — including the org/project/membership changes lab 06 just made, with full before/after state.
 
+#### 08 — Server-Side Data Masking ([08-ee-data-masking.sh](08-ee-data-masking.sh))
+
+The flagship **ClickHouse-verifiable** EE demo. A tiny masking-callback sidecar ([masking_service.py](masking_service.py), stdlib only) is wired to the worker via [docker-compose.masking.yml](docker-compose.masking.yml) as `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`. Langfuse POSTs each OTLP-ingested trace to it; the service redacts anything matching a secret/PII pattern (API keys, credit cards, e-mails, KR 주민등록번호) and returns the same structure — **before** the trace is persisted.
+
+[08-generate-pii-traces.py](08-generate-pii-traces.py) sends traces containing four sentinel secrets, then [08-verify-masking.sql](08-verify-masking.sql) proves the payoff **directly on ClickHouse**:
+
+```sql
+-- want ALL ZERO: no raw secret reached the OLAP store
+countIf(position(toString(input), '0xDEADBEEF01') > 0 OR position(toString(output), '0xDEADBEEF01') > 0)  AS leaked_api_key
+-- want > 0: the redaction placeholders did land
+countIf(position(toString(input), '[REDACTED_') > 0)  AS masked_observation_rows
+```
+
+Key facts: masking applies **only** to the OTLP endpoint (`/api/public/otel` = SDK v3+); `FAIL_CLOSED=true` drops events if the callback errors (secure default); the callback body is an **OTLP Trace Request proto in JSON**, so the sidecar deep-walks the JSON and only rewrites string leaves.
+
+#### 09 — Protected Prompt Labels ([09-ee-protected-prompts.sh](09-ee-protected-prompts.sh))
+
+Prompt governance. The script creates a versioned prompt, moves the `production` label from v1 → v2 via the API, resolves the current production prompt, then shows those versions living in **Postgres** (prompts are OLTP — not ClickHouse) and the matching rows in the **audit log** (ties back to lab 07). The capstone is the EE **protected label**: once `production` is marked protected in Project Settings, the lab-06 roles apply — Bob (`VIEWER`) and Alice (`MEMBER`) can no longer repoint or delete it, only Owner/Admin can. Protection is toggled in the UI (no public API); enforcement is per user role.
+
+#### 10 — Instance Governance ([10-ee-instance-governance.sh](10-ee-instance-governance.sh))
+
+Two instance-level controls, both env-driven via [docker-compose.governance.yml](docker-compose.governance.yml): **UI Customization** (`LANGFUSE_UI_LOGO_*`, `LANGFUSE_UI_FEEDBACK/DOCUMENTATION/SUPPORT_HREF` — co-brand + point help links inward) and the **Organization-Creators allowlist** (`LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` — only listed emails may create new orgs). The script redeploys `langfuse-web`, then `exec … env | grep`s the running container to **prove the vars are live**, and prints a UI verification checklist.
+
+#### 11 — Parquet Export ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
+
+The enterprise data-platform / archival story, in two parts. **(A)** Configure a scheduled **Parquet** blob-storage export via `PUT /api/public/integrations/blob-storage` (type `S3_COMPATIBLE`, pointed at the workshop MinIO). **(B)** Demonstrate the exact primitive that powers it, **live**, with ClickHouse — no waiting on the scheduler:
+
+```sql
+INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+                        'minio', 'miniosecret', 'Parquet')
+  SELECT * FROM default.traces FINAL WHERE is_deleted = 0 SETTINGS s3_truncate_on_insert = 1;
+SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+                       'minio', 'miniosecret', 'Parquet');   -- read it right back
+```
+
+Pairs with lab 07 as **archive-then-delete**: export before retention deletes. SA gotcha baked in — on self-hosted, **ClickHouse < 25.11** may not surface Parquet export failures (a run can "succeed" with an invalid file); upgrade to ≥ 25.11 or use CSV/JSON for reliable failure detection.
+
 ### 🔑 Gotchas worth remembering
 
 | | Note |
@@ -192,6 +263,15 @@ Verified **end-to-end on 2026-06-25** against **Langfuse v3.197.1** (Docker Comp
 | `06` RBAC/SCIM | org + project + 2 SCIM users + project-level role override, all via API |
 | `07` audit/retention | 14-day retention set (`retentionDays: 14`); audit log shows every lab-06 action |
 
+Labs **08–11 were authored 2026-07-26** against the same Langfuse v3 line + current EE docs, but are **not yet re-run end-to-end** here (they need your license key and a running stack). API/env contracts were pulled from the official docs and the published OpenAPI spec; the ClickHouse portions (masking proof SQL, `s3()` Parquet round-trip) use standard functions. Run them with your key and confirm — field names on the blob-storage integration API in particular can shift across versions.
+
+| Step | What to expect |
+|---|---|
+| `08` data masking | leak counts all `0`, masked-row count `> 0`, payloads show `[REDACTED_*]` |
+| `09` protected prompts | v1→v2 label move; prompt rows in Postgres; prompt actions in the audit log |
+| `10` governance | `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` present in the container env |
+| `11` parquet export | integration accepted; `rows_in_parquet` matches active `traces`; schema re-inferred |
+
 Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables are `ReplacingMergeTree`, so analytics read with `FINAL` + `WHERE is_deleted = 0` to avoid double-counting un-merged row versions; **(2)** the SDK's `input_tokens`/`output_tokens` are normalized to the Map keys `input`/`output`/`total` in ClickHouse (the queries use `greatest()` over both spellings). The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
 
 ### 🔍 Additional resources
@@ -202,6 +282,9 @@ Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables
 - [Enterprise License Key](https://langfuse.com/self-hosting/license-key)
 - [Access Control (RBAC)](https://langfuse.com/docs/administration/rbac) · [SCIM & Org API](https://langfuse.com/docs/administration/scim-and-org-api)
 - [Audit Logs](https://langfuse.com/docs/administration/audit-logs) · [Data Retention](https://langfuse.com/docs/administration/data-retention)
+- [Server-Side Data Masking](https://langfuse.com/self-hosting/security/data-masking) · [Protected Prompt Labels](https://langfuse.com/docs/prompt-management/features/prompt-version-control)
+- [UI Customization](https://langfuse.com/self-hosting/administration/ui-customization) · [Organization Creators](https://langfuse.com/self-hosting/administration/organization-creators)
+- [Export to Blob Storage](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage) · [ClickHouse `s3` table function](https://clickhouse.com/docs/sql-reference/table-functions/s3)
 - [Python SDK](https://langfuse.com/docs/observability/sdk/overview)
 
 ### 📝 License
@@ -211,7 +294,7 @@ MIT License
 ### 👤 Author
 
 Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
-Created: 2026-06-25
+Created: 2026-06-25 · EE track (labs 08–11) added: 2026-07-26
 
 ---
 
@@ -230,7 +313,9 @@ Langfuse v3는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사
 실습은 두 트랙으로 구성됩니다.
 
 - **OSS 트랙 (랩 01–04)** — Docker Compose로 전체 스택 배포 → Python SDK로 현실적인 trace 적재 → ClickHouse 백엔드를 SQL로 직접 조회.
-- **Enterprise 트랙 (랩 05–07)** — **엔터프라이즈 라이선스 키**를 활성화하고 EE 전용 기능을 실습: 프로젝트 단위 **RBAC**, **SCIM** 프로비저닝, **Instance Management / Org API**, **감사 로그(Audit Logs)**, **데이터 보존(Data Retention)** 정책.
+- **Enterprise 트랙 (랩 05–11)** — **엔터프라이즈 라이선스 키**를 활성화하고 EE 전용 기능을 실습: **Instance Management / Org API**, 프로젝트 단위 **RBAC**, **SCIM** 프로비저닝, **감사 로그(Audit Logs)**, **데이터 보존(Data Retention)**, **서버측 데이터 마스킹(ClickHouse로 검증)**, **보호된 프롬프트 라벨(Protected Prompt Labels)**, **UI 커스터마이징**, **조직 생성 허용목록(Organization Creators)**, 그리고 **Parquet 반출 ↔ ClickHouse 라운드트립**.
+
+> 이 디렉토리는 워크숍의 **`-ee`(Enterprise Edition) 에디션**입니다 — OSS 트랙은 여전히 단독 실행되지만, 초점은 엔터프라이즈 기능 전반과 각 기능이 ClickHouse에 어떻게 안착(또는 ClickHouse로 검증)되는지에 있습니다.
 
 ### 🎯 왜 이 랩인가
 
@@ -261,19 +346,28 @@ Langfuse v3는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사
 ### 📁 파일 구조
 
 ```
-langfuse/
-├── README.md                  # 이 문서
-├── .env.example               # 시크릿, headless-init, EE 라이선스 키, SDK 키
-├── docker-compose.yml         # OSS 스택: web · worker · postgres · clickhouse · redis · minio
-├── docker-compose.ee.yml      # EE 오버레이: 라이선스 키 + admin API 키 주입
-├── 01-up.sh                   # 스택 기동, 헬스 대기, 자격증명 출력
-├── 02-generate-traces.py      # Python SDK v3+: 중첩 span/generation, 세션, 스코어
-├── 03-clickhouse-explore.sql  # ClickHouse의 traces/observations/scores 테이블 탐색
-├── 04-clickhouse-analytics.sql# ClickHouse에서 직접 비용/지연/품질 분석
-├── 05-ee-activate.sh          # 라이선스 키로 재기동, EE 활성화 검증
-├── 06-ee-rbac-scim.sh         # 조직/프로젝트 프로비저닝, SCIM 사용자, 프로젝트 단위 RBAC
-├── 07-ee-audit-retention.sh   # 데이터 보존 정책 + 감사 로그 조회
-└── 99-cleanup.sh              # 스택 종료 (--purge 로 볼륨까지 삭제)
+langfuse-ee/
+├── README.md                    # 이 문서
+├── .env.example                 # 시크릿, headless-init, EE 라이선스 키, SDK 키
+├── docker-compose.yml           # OSS 스택: web · worker · postgres · clickhouse · redis · minio
+├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
+├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
+├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
+├── 01-up.sh                     # 스택 기동, 헬스 대기, 자격증명 출력
+├── 02-generate-traces.py        # Python SDK v3+: 중첩 span/generation, 세션, 스코어
+├── 03-clickhouse-explore.sql    # ClickHouse의 traces/observations/scores 테이블 탐색
+├── 04-clickhouse-analytics.sql  # ClickHouse에서 직접 비용/지연/품질 분석
+├── 05-ee-activate.sh            # 라이선스 키로 재기동, EE 활성화 검증
+├── 06-ee-rbac-scim.sh           # 조직/프로젝트 프로비저닝, SCIM 사용자, 프로젝트 단위 RBAC
+├── 07-ee-audit-retention.sh     # 데이터 보존 정책 + 감사 로그 조회
+├── 08-ee-data-masking.sh        # 서버측 마스킹 → ClickHouse에서 부재 증명
+│   ├── masking_service.py       #   ↳ stdlib 전용 초경량 마스킹 콜백 사이드카
+│   ├── 08-generate-pii-traces.py#   ↳ 센티넬 시크릿/PII가 든 trace 전송
+│   └── 08-verify-masking.sql    #   ↳ ClickHouse 증명: 원문 시크릿 부재, [REDACTED_*] 존재
+├── 09-ee-protected-prompts.sh   # 버전 관리 프롬프트 + 배포 라벨 + 보호된 라벨
+├── 10-ee-instance-governance.sh # UI 커스터마이징 + 조직 생성 허용목록
+├── 11-ee-parquet-export.sh      # Blob 스토리지 Parquet 반출 + ClickHouse s3() 라운드트립
+└── 99-cleanup.sh                # 스택 종료 (--purge 로 볼륨까지 삭제)
 ```
 
 ### ✅ 사전 준비물
@@ -286,7 +380,7 @@ langfuse/
 ### 🚀 빠른 시작 (OSS 트랙)
 
 ```bash
-cd usecase/langfuse
+cd usecase/langfuse-ee
 cp .env.example .env            # 로컬 외 용도면 # CHANGEME 시크릿을 수정
 
 # 1) 배포. 첫 기동 시 Postgres + ClickHouse 마이그레이션 (~2-3분)
@@ -313,10 +407,33 @@ docker compose exec -T clickhouse clickhouse-client -u clickhouse --password cli
 # .env 에 키 입력:   LANGFUSE_EE_LICENSE_KEY=<발급받은 키>
 #                    ADMIN_API_KEY=<임의의 강한 랜덤 문자열>
 
-./05-ee-activate.sh        # EE 오버레이로 재배포; 라이선스 활성 검증
-./06-ee-rbac-scim.sh       # 조직 → 조직 키 → 프로젝트 → SCIM 사용자 → RBAC 역할
-./07-ee-audit-retention.sh # 14일 보존 정책 설정 + 감사 로그 덤프
+./05-ee-activate.sh          # EE 오버레이로 재배포; 라이선스 활성 검증
+./06-ee-rbac-scim.sh         # 조직 → 조직 키 → 프로젝트 → SCIM 사용자 → RBAC 역할
+./07-ee-audit-retention.sh   # 14일 보존 정책 설정 + 감사 로그 덤프
+./08-ee-data-masking.sh      # 인제스트 시 시크릿 마스킹; ClickHouse에 도달하지 않음을 증명
+./09-ee-protected-prompts.sh # 버전 관리 프롬프트 + 배포 라벨 + 보호된 라벨
+./10-ee-instance-governance.sh # UI 커스터마이징 + 조직 생성 허용목록
+./11-ee-parquet-export.sh    # 오브젝트 스토리지로 Parquet 반출 + ClickHouse s3() 라운드트립
 ```
+
+### 🧩 EE 기능 커버리지
+
+[Langfuse license-key 페이지](https://langfuse.com/self-hosting/license-key)가 명시하는 모든 Enterprise entitlement을, 이를 실습하는 랩에 매핑:
+
+| Enterprise entitlement | 랩 | ClickHouse 관점 |
+|---|---|---|
+| Instance Management API | 05 | — |
+| Org Management API & SCIM | 06 | — |
+| 프로젝트 단위 RBAC 역할 | 06 | — |
+| 감사 로그(Audit Logs) | 07 | (감사 로그는 Postgres) |
+| 데이터 보존(Data Retention) | 07 | 야간 worker가 오래된 행을 ClickHouse에서 삭제 |
+| **서버측 데이터 마스킹** | 08 | **증명이 ClickHouse에서 실행** — 원문 시크릿 미저장 |
+| **보호된 프롬프트 라벨** | 09 | (프롬프트는 Postgres) |
+| **UI 커스터마이징** | 10 | — |
+| **조직 생성 허용목록** | 10 | — |
+| Parquet Blob 스토리지 반출* | 11 | **ClickHouse `s3()`가 Parquet 쓰기+재조회** |
+
+\* 스케줄 blob 스토리지 반출은 모든 self-hosted 프로젝트에서 사용 가능(라이선스 게이트 아님)하지만, 엔터프라이즈 데이터플랫폼/아카이브 스토리이자 가장 ClickHouse 친화적인 랩이므로 엔터프라이즈 트랙에 포함했습니다.
 
 ### 📖 랩 워크스루
 
@@ -383,6 +500,43 @@ ADMIN_API_KEY → 조직 생성 → 조직 범위 API 키 발급
 - **데이터 보존**: `PUT /api/public/projects/{id}`로 프로젝트에 14일 보존을 설정. 0이 아닌 값은 data-retention entitlement(EE)가 필요하며 — OSS에서는 동일 호출이 거부됩니다. 야간 worker가 보존 기간을 넘긴 trace/observation/score를 ClickHouse에서 직접 삭제합니다.
 - **감사 로그**: Postgres의 감사 테이블을 탐지하여 최근 누가/무엇을/언제 기록을 — 랩 06이 방금 만든 조직/프로젝트/멤버십 변경을 before/after 전체 상태와 함께 — 덤프합니다.
 
+#### 08 — 서버측 데이터 마스킹 ([08-ee-data-masking.sh](08-ee-data-masking.sh))
+
+**ClickHouse로 검증 가능한** 핵심 EE 데모입니다. 초경량 마스킹 콜백 사이드카([masking_service.py](masking_service.py), stdlib 전용)를 [docker-compose.masking.yml](docker-compose.masking.yml)로 worker의 `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`에 연결합니다. Langfuse는 OTLP로 인제스트된 각 trace를 콜백에 POST하고, 콜백은 시크릿/PII 패턴(API 키, 신용카드, 이메일, 주민등록번호)을 리댁션한 뒤 동일 구조로 반환합니다 — **저장 이전에** 일어납니다.
+
+[08-generate-pii-traces.py](08-generate-pii-traces.py)가 4개 센티넬 시크릿이 든 trace를 보내고, [08-verify-masking.sql](08-verify-masking.sql)이 **ClickHouse에서 직접** 결과를 증명합니다:
+
+```sql
+-- 전부 0이어야 함: 원문 시크릿이 OLAP 스토어에 도달하지 않음
+countIf(position(toString(input), '0xDEADBEEF01') > 0 OR position(toString(output), '0xDEADBEEF01') > 0)  AS leaked_api_key
+-- 0보다 커야 함: 리댁션 placeholder는 안착
+countIf(position(toString(input), '[REDACTED_') > 0)  AS masked_observation_rows
+```
+
+핵심: 마스킹은 **OTLP 엔드포인트**(`/api/public/otel` = SDK v3+)에만 적용; `FAIL_CLOSED=true`면 콜백 오류 시 이벤트를 드롭(보안 기본값); 콜백 본문은 **OTLP Trace Request proto(JSON)** 이므로 사이드카는 JSON을 딥워크하며 문자열 리프만 재작성합니다.
+
+#### 09 — 보호된 프롬프트 라벨 ([09-ee-protected-prompts.sh](09-ee-protected-prompts.sh))
+
+프롬프트 거버넌스. 버전 관리 프롬프트를 생성하고 `production` 라벨을 v1 → v2로 API로 이동, 현재 production 프롬프트를 조회한 뒤, 그 버전들이 **Postgres**에 저장됨(프롬프트는 OLTP — ClickHouse 아님)과 **감사 로그**의 대응 행(랩 07과 연결)을 보여줍니다. 마무리는 EE **보호된 라벨**: Project Settings에서 `production`을 보호로 지정하면 랩 06의 역할이 적용되어 Bob(`VIEWER`)·Alice(`MEMBER`)는 라벨을 재지정/삭제할 수 없고 Owner/Admin만 가능합니다. 보호 토글은 UI 전용(공개 API 없음)이며, 강제는 사용자 역할 기준입니다.
+
+#### 10 — 인스턴스 거버넌스 ([10-ee-instance-governance.sh](10-ee-instance-governance.sh))
+
+두 가지 인스턴스 레벨 제어를 [docker-compose.governance.yml](docker-compose.governance.yml)로 env 주입: **UI 커스터마이징**(`LANGFUSE_UI_LOGO_*`, `LANGFUSE_UI_FEEDBACK/DOCUMENTATION/SUPPORT_HREF` — 코브랜딩 + 도움말 링크 내부화)과 **조직 생성 허용목록**(`LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` — 목록의 이메일만 새 조직 생성 가능). 스크립트는 `langfuse-web`를 재배포한 뒤 실행 중 컨테이너에 `exec … env | grep`으로 **변수가 실제 주입되었음을 증명**하고, UI 검증 체크리스트를 출력합니다.
+
+#### 11 — Parquet 반출 ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
+
+엔터프라이즈 데이터플랫폼/아카이브 스토리를 두 파트로. **(A)** `PUT /api/public/integrations/blob-storage`로 스케줄 **Parquet** blob 스토리지 반출 설정(type `S3_COMPATIBLE`, 워크숍 MinIO 지정). **(B)** 그것을 구동하는 바로 그 primitive를 ClickHouse로 **라이브** 시연 — 스케줄러를 기다리지 않음:
+
+```sql
+INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+                        'minio', 'miniosecret', 'Parquet')
+  SELECT * FROM default.traces FINAL WHERE is_deleted = 0 SETTINGS s3_truncate_on_insert = 1;
+SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+                       'minio', 'miniosecret', 'Parquet');   -- 곧바로 다시 읽기
+```
+
+랩 07과 **archive-then-delete**로 짝을 이룸: 보존 삭제 전에 반출. SA 함정 반영 — self-hosted에서 **ClickHouse < 25.11**은 Parquet 반출 실패가 안 뜰 수 있음(불완전 파일인데 "성공"). ≥ 25.11로 업그레이드하거나 신뢰할 수 있는 실패 감지를 위해 CSV/JSON 사용.
+
 ### 🔑 기억할 함정들
 
 | | 노트 |
@@ -409,6 +563,15 @@ ADMIN_API_KEY → 조직 생성 → 조직 범위 API 키 발급
 | `06` RBAC/SCIM | 조직 + 프로젝트 + SCIM 사용자 2명 + 프로젝트 단위 역할 오버라이드, 전부 API로 |
 | `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그에 lab 06의 모든 동작 기록됨 |
 
+랩 **08–11은 2026-07-26에 작성**되었으며, 동일한 Langfuse v3 라인 + 최신 EE 문서를 기준으로 만들었으나 **아직 여기서 end-to-end 재실행은 하지 않았습니다**(라이선스 키와 기동 중인 스택이 필요). API/env 계약은 공식 문서와 공개 OpenAPI 스펙에서 가져왔고, ClickHouse 부분(마스킹 증명 SQL, `s3()` Parquet 라운드트립)은 표준 함수를 사용합니다. 본인 키로 실행해 확인하세요 — 특히 blob-storage 통합 API의 필드명은 버전 간 바뀔 수 있습니다.
+
+| 단계 | 기대 결과 |
+|---|---|
+| `08` 데이터 마스킹 | leak 카운트 전부 `0`, 마스킹 행 수 `> 0`, 페이로드에 `[REDACTED_*]` |
+| `09` 보호된 프롬프트 | v1→v2 라벨 이동; 프롬프트 행이 Postgres에; 프롬프트 동작이 감사 로그에 |
+| `10` 거버넌스 | 컨테이너 env에 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 존재 |
+| `11` parquet 반출 | 통합 수락; `rows_in_parquet`가 활성 `traces`와 일치; 스키마 재추론 |
+
 런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다. **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
 
 ### 🔍 추가 자료
@@ -419,6 +582,9 @@ ADMIN_API_KEY → 조직 생성 → 조직 범위 API 키 발급
 - [Enterprise License Key](https://langfuse.com/self-hosting/license-key)
 - [Access Control (RBAC)](https://langfuse.com/docs/administration/rbac) · [SCIM & Org API](https://langfuse.com/docs/administration/scim-and-org-api)
 - [Audit Logs](https://langfuse.com/docs/administration/audit-logs) · [Data Retention](https://langfuse.com/docs/administration/data-retention)
+- [서버측 데이터 마스킹](https://langfuse.com/self-hosting/security/data-masking) · [보호된 프롬프트 라벨](https://langfuse.com/docs/prompt-management/features/prompt-version-control)
+- [UI 커스터마이징](https://langfuse.com/self-hosting/administration/ui-customization) · [Organization Creators](https://langfuse.com/self-hosting/administration/organization-creators)
+- [Blob 스토리지 반출](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage) · [ClickHouse `s3` 테이블 함수](https://clickhouse.com/docs/sql-reference/table-functions/s3)
 - [Python SDK](https://langfuse.com/docs/observability/sdk/overview)
 
 ### 📝 라이선스
@@ -428,7 +594,7 @@ MIT License
 ### 👤 작성자
 
 Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
-작성일: 2026-06-25
+작성일: 2026-06-25 · EE 트랙(랩 08–11) 추가: 2026-07-26
 
 ---
 

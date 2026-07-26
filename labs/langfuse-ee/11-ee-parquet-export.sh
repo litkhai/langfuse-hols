@@ -30,24 +30,35 @@ ORG_KEY=$(curl -fsS -X POST "${HOST}/api/admin/organizations/${ORG_ID}/apiKeys" 
 ORG_PK=$(echo "$ORG_KEY" | jq -r '.publicKey'); ORG_SK=$(echo "$ORG_KEY" | jq -r '.secretKey')
 orgcurl() { curl -fsS -u "${ORG_PK}:${ORG_SK}" "$@"; }
 
-echo "▶ PUT /api/public/integrations/blob-storage → Parquet, hourly, to MinIO…"
-orgcurl -X PUT "${HOST}/api/public/integrations/blob-storage" \
-  -H "Content-Type: application/json" -d "{
-    \"projectId\":\"${PROJECT_ID}\",
-    \"type\":\"S3_COMPATIBLE\",
-    \"bucketName\":\"${BUCKET}\",
-    \"endpoint\":\"http://minio:9000\",
-    \"region\":\"auto\",
-    \"accessKeyId\":\"${MK_USER}\",
-    \"secretAccessKey\":\"${MK_PASS}\",
-    \"prefix\":\"exports/langfuse/\",
-    \"forcePathStyle\":true,
-    \"fileType\":\"PARQUET\",
-    \"exportFrequency\":\"hourly\",
-    \"exportMode\":\"FULL_HISTORY\",
-    \"enabled\":true
-  }" | jq '{type, bucketName, fileType, exportFrequency, exportMode, enabled}' \
-  || echo "  ⚠ Integration API fields can vary by version — confirm against your API reference."
+put_integration() {  # $1 = fileType. Captures body to /tmp/lf_blob.json, echoes HTTP code.
+  curl -s -o /tmp/lf_blob.json -w '%{http_code}' -u "${ORG_PK}:${ORG_SK}" \
+    -X PUT "${HOST}/api/public/integrations/blob-storage" -H "Content-Type: application/json" -d "{
+      \"projectId\":\"${PROJECT_ID}\",\"type\":\"S3_COMPATIBLE\",\"bucketName\":\"${BUCKET}\",
+      \"endpoint\":\"http://minio:9000\",\"region\":\"auto\",\"accessKeyId\":\"${MK_USER}\",
+      \"secretAccessKey\":\"${MK_PASS}\",\"prefix\":\"exports/langfuse/\",\"forcePathStyle\":true,
+      \"fileType\":\"$1\",\"exportFrequency\":\"hourly\",\"exportMode\":\"FULL_HISTORY\",\"enabled\":true}"
+}
+
+echo "▶ PUT /api/public/integrations/blob-storage → try Parquet first…"
+code=$(put_integration PARQUET)
+if [[ "$code" == "200" ]]; then
+  echo "  ✅ Parquet scheduled export configured:"
+  jq '{type, bucketName, fileType, exportFrequency, exportMode, enabled}' /tmp/lf_blob.json
+else
+  echo "  ⚠ HTTP ${code}: this Langfuse version rejected fileType=PARQUET on the integration API —"
+  jq -c '.error // .message' /tmp/lf_blob.json 2>/dev/null | sed 's/^/     /'
+  echo "  ↳ Scheduled *Parquet* blob-storage export is newer than some pinned images; the"
+  echo "    published OpenAPI spec can be ahead of your running version. Falling back to JSONL"
+  echo "    for the scheduled job — ClickHouse still writes TRUE Parquet in Part B below."
+  code=$(put_integration JSONL)
+  if [[ "$code" == "200" ]]; then
+    echo "  ✅ JSONL scheduled export configured (upgrade the image to schedule Parquet):"
+    jq '{type, bucketName, fileType, exportFrequency, exportMode, enabled}' /tmp/lf_blob.json
+  else
+    echo "  ⚠ HTTP ${code} again — confirm fields against your version's API reference:"
+    cat /tmp/lf_blob.json
+  fi
+fi
 
 cat <<'EOF'
   ↳ Langfuse's worker will now, on schedule (every 20 min / hourly / daily /

@@ -263,14 +263,18 @@ Verified **end-to-end on 2026-06-25** against **Langfuse v3.197.1** (Docker Comp
 | `06` RBAC/SCIM | org + project + 2 SCIM users + project-level role override, all via API |
 | `07` audit/retention | 14-day retention set (`retentionDays: 14`); audit log shows every lab-06 action |
 
-Labs **08–11 were authored 2026-07-26** against the same Langfuse v3 line + current EE docs, but are **not yet re-run end-to-end** here (they need your license key and a running stack). API/env contracts were pulled from the official docs and the published OpenAPI spec; the ClickHouse portions (masking proof SQL, `s3()` Parquet round-trip) use standard functions. Run them with your key and confirm — field names on the blob-storage integration API in particular can shift across versions.
+Labs **08–11 were verified end-to-end on 2026-07-26** (Langfuse v3.197.1, ClickHouse 25.11.2.24, SDK 3.7.0, Docker 29.6.2) with a real enterprise license key. Full captured console output for the whole 01→11 run is in **[lab-output.md](lab-output.md)** (blog-ready).
 
-| Step | What to expect |
+| Step | Result |
 |---|---|
-| `08` data masking | leak counts all `0`, masked-row count `> 0`, payloads show `[REDACTED_*]` |
-| `09` protected prompts | v1→v2 label move; prompt rows in Postgres; prompt actions in the audit log |
-| `10` governance | `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` present in the container env |
-| `11` parquet export | integration accepted; `rows_in_parquet` matches active `traces`; schema re-inferred |
+| `08` data masking | leak counts all `0` in `traces`+`observations`; **24 rows** carry `[REDACTED_*]`; sidecar logged **84 redactions** |
+| `09` protected prompts | v1→v2 label move (v1 `labels={}`); prompt rows in Postgres; 2 `create prompt` audit rows |
+| `10` governance | all `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` confirmed in the container env |
+| `11` parquet export | CH `s3()` round-trip **93 == 93**; integration API on v3.197.1 accepts `JSON/CSV/JSONL` only (not `PARQUET`) → JSONL fallback; ClickHouse writes true Parquet in Part B |
+
+> **Version-drift finding (lab 11):** the published OpenAPI spec lists `fileType: PARQUET` for the blob-storage integration, but the pinned **v3.197.1** image rejects it with HTTP 400 (`JSON`/`CSV`/`JSONL` only) — scheduled-Parquet export is a newer release. Validate the API surface against your *running* image, not just the docs. The lab script tries `PARQUET`, then falls back to `JSONL`.
+>
+> **Portability note (lab 08):** the driver auto-detects the Python interpreter (prefers `.venv/bin/python`, falls back to `python3`), so it runs on macOS where bare `python` doesn't exist.
 
 Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables are `ReplacingMergeTree`, so analytics read with `FINAL` + `WHERE is_deleted = 0` to avoid double-counting un-merged row versions; **(2)** the SDK's `input_tokens`/`output_tokens` are normalized to the Map keys `input`/`output`/`total` in ClickHouse (the queries use `greatest()` over both spellings). The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
 
@@ -563,14 +567,18 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 | `06` RBAC/SCIM | 조직 + 프로젝트 + SCIM 사용자 2명 + 프로젝트 단위 역할 오버라이드, 전부 API로 |
 | `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그에 lab 06의 모든 동작 기록됨 |
 
-랩 **08–11은 2026-07-26에 작성**되었으며, 동일한 Langfuse v3 라인 + 최신 EE 문서를 기준으로 만들었으나 **아직 여기서 end-to-end 재실행은 하지 않았습니다**(라이선스 키와 기동 중인 스택이 필요). API/env 계약은 공식 문서와 공개 OpenAPI 스펙에서 가져왔고, ClickHouse 부분(마스킹 증명 SQL, `s3()` Parquet 라운드트립)은 표준 함수를 사용합니다. 본인 키로 실행해 확인하세요 — 특히 blob-storage 통합 API의 필드명은 버전 간 바뀔 수 있습니다.
+랩 **08–11은 2026-07-26에 end-to-end 검증**했습니다(Langfuse v3.197.1, ClickHouse 25.11.2.24, SDK 3.7.0, Docker 29.6.2, 실제 엔터프라이즈 라이선스 키). 01→11 전체 실행의 콘솔 출력 원본은 **[lab-output.md](lab-output.md)** 에 있습니다(블로그용).
 
-| 단계 | 기대 결과 |
+| 단계 | 결과 |
 |---|---|
-| `08` 데이터 마스킹 | leak 카운트 전부 `0`, 마스킹 행 수 `> 0`, 페이로드에 `[REDACTED_*]` |
-| `09` 보호된 프롬프트 | v1→v2 라벨 이동; 프롬프트 행이 Postgres에; 프롬프트 동작이 감사 로그에 |
-| `10` 거버넌스 | 컨테이너 env에 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 존재 |
-| `11` parquet 반출 | 통합 수락; `rows_in_parquet`가 활성 `traces`와 일치; 스키마 재추론 |
+| `08` 데이터 마스킹 | `traces`+`observations` leak 카운트 전부 `0`; **24행**에 `[REDACTED_*]`; 사이드카 로그 **84 redactions** |
+| `09` 보호된 프롬프트 | v1→v2 라벨 이동(v1 `labels={}`); 프롬프트 행 Postgres에; `create prompt` 감사 2건 |
+| `10` 거버넌스 | 컨테이너 env에 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
+| `11` parquet 반출 | CH `s3()` 라운드트립 **93 == 93**; v3.197.1 통합 API는 `JSON/CSV/JSONL`만 허용(`PARQUET` 미지원) → JSONL 폴백; Part B에서 ClickHouse가 진짜 Parquet 기록 |
+
+> **버전 드리프트 발견(랩 11):** 공개 OpenAPI 스펙엔 blob-storage 통합의 `fileType: PARQUET`가 있으나 고정 이미지 **v3.197.1**은 HTTP 400으로 거부(`JSON`/`CSV`/`JSONL`만) — 스케줄 Parquet 반출은 더 최신 릴리스. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 검증할 것. 스크립트는 `PARQUET` 시도 후 `JSONL`로 폴백.
+>
+> **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지(`​.venv/bin/python` 우선, `python3` 폴백)하므로 bare `python`이 없는 macOS에서도 실행됩니다.
 
 런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다. **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
 

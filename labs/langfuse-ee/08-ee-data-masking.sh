@@ -24,6 +24,12 @@ fi
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.ee.yml -f docker-compose.masking.yml)
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 
+# Pick a Python interpreter: prefer the workshop venv, then python3, then python.
+PY="python"
+if [[ -x .venv/bin/python ]]; then PY=".venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then PY="python3"
+fi
+
 echo "▶ Bringing up the masking sidecar + wiring the worker to it…"
 "${COMPOSE[@]}" up -d
 
@@ -36,9 +42,10 @@ done
 echo " ready."
 
 echo "▶ Sending PII-laden traces (secrets embedded in input/output/metadata)…"
-if ! python 08-generate-pii-traces.py "${1:-12}"; then
-  echo "✗ generator failed. Activate the venv and install the SDK:"
-  echo "    python -m venv .venv && source .venv/bin/activate && pip install 'langfuse>=3'"
+echo "  (using interpreter: ${PY})"
+if ! "$PY" 08-generate-pii-traces.py "${1:-12}"; then
+  echo "✗ generator failed. Create the venv and install the SDK:"
+  echo "    python3 -m venv .venv && ./.venv/bin/pip install 'langfuse>=3'"
   exit 1
 fi
 

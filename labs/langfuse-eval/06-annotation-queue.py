@@ -58,12 +58,14 @@ def main() -> None:
     queue_id = ensure_queue(QUEUE_NAME, [quality_id, correct_id])
     print(f"✓ queue '{QUEUE_NAME}' = {queue_id}")
 
-    # 3) Enqueue recent SEED traces (name=support-request), not experiment traces —
-    #    so the human scores co-occur with the seed user-feedback scores (lab 07 §5).
-    traces = api("GET", "/api/public/traces?name=support-request&limit=8").get("data", [])
-    if not traces:
-        raise SystemExit("✗ No support-request traces found — run `python 01-seed-traces.py` first.")
-    trace_ids = [t["id"] for t in traces]
+    # 3) Enqueue traces that already carry user feedback (a `user-thumbs` score),
+    #    so the human-review scores co-occur with them for the cross-signal analysis
+    #    in lab 07 §5. We select by SCORE, not by trace name: on a shared stack other
+    #    labs may reuse the same trace name, which would misalign the join.
+    scored = api("GET", "/api/public/v2/scores?name=user-thumbs&limit=25").get("data", [])
+    trace_ids = list(dict.fromkeys(s["traceId"] for s in scored if s.get("traceId")))[:8]
+    if not trace_ids:
+        raise SystemExit("✗ No user-thumbs scores found — run `python 01-seed-traces.py` first.")
     for tid in trace_ids:
         api("POST", f"/api/public/annotation-queues/{queue_id}/items",
             {"objectId": tid, "objectType": "TRACE"})

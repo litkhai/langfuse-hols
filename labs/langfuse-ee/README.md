@@ -578,7 +578,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 
 > **버전 드리프트 발견(랩 11):** 공개 OpenAPI 스펙엔 blob-storage 통합의 `fileType: PARQUET`가 있으나 고정 이미지 **v3.197.1**은 HTTP 400으로 거부(`JSON`/`CSV`/`JSONL`만) — 스케줄 Parquet 반출은 더 최신 릴리스. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 검증할 것. 스크립트는 `PARQUET` 시도 후 `JSONL`로 폴백.
 >
-> **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지(`​.venv/bin/python` 우선, `python3` 폴백)하므로 bare `python`이 없는 macOS에서도 실행됩니다.
+> **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지(`.venv/bin/python` 우선, `python3` 폴백)하므로 bare `python`이 없는 macOS에서도 실행됩니다.
 
 런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다. **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
 

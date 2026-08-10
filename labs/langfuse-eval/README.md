@@ -167,7 +167,7 @@ at ingestion → demo scores are written unbound. **(3)** scores ingest asynchro
 - [Evaluation overview](https://langfuse.com/docs/evaluation/overview) · [LLM-as-a-judge](https://langfuse.com/docs/evaluation/evaluation-methods/llm-as-a-judge) · [Annotation queues](https://langfuse.com/docs/evaluation/evaluation-methods/annotation-queues)
 
 ### 📝 License
-MIT License
+[MIT](../../LICENSE) — same as the rest of the repository.
 
 ### 👤 Author
 Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
@@ -338,7 +338,7 @@ ClickHouse `dataset_run_id`를 채우지 **않음** → 랩 04가 trace에 varia
 - [Evaluation 개요](https://langfuse.com/docs/evaluation/overview) · [LLM-as-a-judge](https://langfuse.com/docs/evaluation/evaluation-methods/llm-as-a-judge) · [Annotation queues](https://langfuse.com/docs/evaluation/evaluation-methods/annotation-queues)
 
 ### 📝 라이선스
-MIT License
+[MIT](../../LICENSE) — same as the rest of the repository.
 
 ### 👤 작성자
 Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com

@@ -293,7 +293,7 @@ Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables
 
 ### 📝 License
 
-MIT License
+[MIT](../../LICENSE) — same as the rest of the repository.
 
 ### 👤 Author
 
@@ -597,7 +597,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 
 ### 📝 라이선스
 
-MIT License
+[MIT](../../LICENSE) — same as the rest of the repository.
 
 ### 👤 작성자
 

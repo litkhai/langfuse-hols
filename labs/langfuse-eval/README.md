@@ -10,7 +10,7 @@ A hands-on tour of Langfuse's **product features for LLM quality** — prompt
 management, datasets, experiments, LLM-as-a-judge, and human annotation — then a
 look at how every quality signal lands in the **ClickHouse** backend.
 
-This is the sibling of [`usecase/langfuse-ee/`](../langfuse-ee/README.md). Where that
+This is the sibling of [`labs/langfuse-ee/`](../langfuse-ee/README.md). Where that
 lab covers *self-hosting + the ClickHouse backend + Enterprise governance*, this one
 answers a different question: **once Langfuse is running, how do you actually use it
 to measure and improve LLM quality?**
@@ -53,7 +53,7 @@ langfuse-eval/
 
 ### ✅ Prerequisites
 
-- **The stack from the sibling lab must be running.** From `usecase/langfuse-ee/`:
+- **The stack from the sibling lab must be running.** From `labs/langfuse-ee/`:
   ```bash
   ./01-up.sh          # brings up web/worker/postgres/clickhouse/redis/minio
   ```
@@ -64,7 +64,7 @@ langfuse-eval/
 ### 🚀 Quick start (offline — no LLM key needed)
 
 ```bash
-cd usecase/langfuse-eval
+cd labs/langfuse-eval
 python -m venv .venv && source .venv/bin/activate
 pip install "langfuse>=3" openai
 
@@ -175,7 +175,7 @@ Created: 2026-07-26
 
 ---
 
-**Happy Evaluating! 🎯** — for the deployment/governance side, see [`usecase/langfuse-ee/`](../langfuse-ee/README.md).
+**Happy Evaluating! 🎯** — for the deployment/governance side, see [`labs/langfuse-ee/`](../langfuse-ee/README.md).
 
 ---
 
@@ -185,7 +185,7 @@ Langfuse의 **LLM 품질 관리 제품 기능** — 프롬프트 관리, 데이�
 LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 품질 신호가 **ClickHouse**
 백엔드에 어떻게 쌓이는지까지 보는 실습입니다.
 
-이 랩은 [`usecase/langfuse-ee/`](../langfuse-ee/README.md)의 자매 랩입니다. 그 랩이
+이 랩은 [`labs/langfuse-ee/`](../langfuse-ee/README.md)의 자매 랩입니다. 그 랩이
 *self-hosting + ClickHouse 백엔드 + Enterprise governance* 를 다뤘다면, 이 랩은 다른
 질문에 답합니다: **Langfuse를 띄운 뒤, 실제로 LLM 품질을 측정하고 개선하려면 어떻게
 쓰는가?**
@@ -228,7 +228,7 @@ langfuse-eval/
 
 ### ✅ 사전 준비물
 
-- **자매 랩의 스택이 실행 중이어야 합니다.** `usecase/langfuse-ee/` 에서:
+- **자매 랩의 스택이 실행 중이어야 합니다.** `labs/langfuse-ee/` 에서:
   ```bash
   ./01-up.sh          # web/worker/postgres/clickhouse/redis/minio 기동
   ```
@@ -239,7 +239,7 @@ langfuse-eval/
 ### 🚀 빠른 시작 (오프라인 — LLM 키 불필요)
 
 ```bash
-cd usecase/langfuse-eval
+cd labs/langfuse-eval
 python -m venv .venv && source .venv/bin/activate
 pip install "langfuse>=3" openai
 
@@ -346,4 +346,4 @@ Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
 
 ---
 
-**Happy Evaluating! 🎯** — 배포/거버넌스 측면은 [`usecase/langfuse-ee/`](../langfuse-ee/README.md) 참고.
+**Happy Evaluating! 🎯** — 배포/거버넌스 측면은 [`labs/langfuse-ee/`](../langfuse-ee/README.md) 참고.

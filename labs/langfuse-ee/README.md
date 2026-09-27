@@ -80,7 +80,7 @@ langfuse-ee/
 ### 🚀 Quick Start (OSS track)
 
 ```bash
-cd usecase/langfuse-ee
+cd labs/langfuse-ee
 cp .env.example .env            # edit the # CHANGEME secrets for anything non-local
 
 # 1) Deploy. First boot runs Postgres + ClickHouse migrations (~2-3 min).
@@ -384,7 +384,7 @@ langfuse-ee/
 ### 🚀 빠른 시작 (OSS 트랙)
 
 ```bash
-cd usecase/langfuse-ee
+cd labs/langfuse-ee
 cp .env.example .env            # 로컬 외 용도면 # CHANGEME 시크릿을 수정
 
 # 1) 배포. 첫 기동 시 Postgres + ClickHouse 마이그레이션 (~2-3분)

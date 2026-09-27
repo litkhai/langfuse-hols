@@ -1,14 +1,14 @@
-# Design — `usecase/langfuse-eval/` : The Langfuse Quality Loop
+# Design — `labs/langfuse-eval/` : The Langfuse Quality Loop
 
 > 상태: **구현 완료 · 2026-07-26 end-to-end 검증** — 최신/권위 있는 검증 결과는 [README.md](README.md) 참조. (이 문서는 설계 근거 기록용으로 유지)
 > 작성일: 2026-07-25 · 작성자: Ken Lee (ClickHouse SA)
-> 자매 랩: [`usecase/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
+> 자매 랩: [`labs/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
 
 ---
 
 ## 1. 목적 & 포지셔닝
 
-기존 `usecase/langfuse-ee/` 랩은 **"self-host 배포 → 관측(observability) → ClickHouse 백엔드 → EE governance(RBAC/SCIM/Audit/Retention)"** 를 다룬다.
+기존 `labs/langfuse-ee/` 랩은 **"self-host 배포 → 관측(observability) → ClickHouse 백엔드 → EE governance(RBAC/SCIM/Audit/Retention)"** 를 다룬다.
 빠진 축은 **Langfuse가 관측 플랫폼을 넘어 제공하는 "LLM 품질 관리 제품 기능"** 이다.
 
 이 랩은 그 빈틈을 채운다. 하나의 서사로 Langfuse **제품 기능**을 꿴다:
@@ -16,7 +16,7 @@
 > **프롬프트를 버전 관리하고 → 골든 데이터셋을 만들고 → 실험으로 버전/모델을 비교하고 → 자동·휴먼 평가로 점수를 매기고 → 그 점수가 ClickHouse에 어떻게 쌓여 분석되는지 본다.**
 
 ### 기존 랩과의 관계
-- **스택 재사용**: 새 컨테이너를 띄우지 않는다. `usecase/langfuse-ee/`의 실행 중인 스택(같은 `.env`, 같은 포트 3000)을 그대로 쓴다. README 상단에 "먼저 자매 랩의 `01-up.sh`로 스택을 올려라"를 명시.
+- **스택 재사용**: 새 컨테이너를 띄우지 않는다. `labs/langfuse-ee/`의 실행 중인 스택(같은 `.env`, 같은 포트 3000)을 그대로 쓴다. README 상단에 "먼저 자매 랩의 `01-up.sh`로 스택을 올려라"를 명시.
 - **관측 vs 품질**: 관측(trace가 어떻게 흐르나)은 기존 랩, 품질(그 trace를 어떻게 평가/개선하나)은 이 랩. 디렉터리를 분리해 서사가 섞이지 않게 한다.
 
 ### 라이선스 (검증 완료)
@@ -52,7 +52,7 @@ Langfuse 라이선스 페이지 기준, 이 랩이 다루는 기능은 **전부 
 ## 3. 파일 구조 (제안)
 
 ```
-usecase/langfuse-eval/
+labs/langfuse-eval/
 ├── README.md                    # 한/영 bilingual (기존 랩 골격 재사용)
 ├── DESIGN.md                    # 이 문서 (검토 후 삭제 or docs/로 이동)
 ├── .env.example                 # 자매 랩 .env 재사용 + 평가용 키 추가 (§8)

@@ -24,6 +24,8 @@ Self-hosting Langfuse on ClickHouse (OSS and Enterprise tracks) and Langfuse's e
 
 ### ✅ Repository checks
 
+Current state and what still needs a re-run: [STATUS.md](STATUS.md).
+
 ```bash
 git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
@@ -57,6 +59,8 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 | [litkhai/llmops-in-a-box](https://github.com/litkhai/llmops-in-a-box) | LLMOps 스택 올인원 |
 
 ### ✅ 저장소 검사
+
+현재 상태와 재실행이 필요한 항목: [STATUS.md](STATUS.md).
 
 ```bash
 git config core.hooksPath .githooks

@@ -11,10 +11,9 @@ GitHub secret scanning and push protection are on.
 
 2 labs in the README tables; 0 single-language.
 
-## Re-verification notes
+## Open work
 
-Not re-run; update a README's verification line only after a real end-to-end run.
+Tracked as issues — [all open](https://github.com/litkhai/langfuse-hols/issues) · [needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify):
 
-| What | Note |
-|------|------|
-| `labs/langfuse-ee`, `labs/langfuse-eval` | Last verified 2026-07-26 (Langfuse v3.197.1 / SDK 3.7.0 / CH 25.11), before the move; `cd` paths in docs changed since, scripts did not. |
+- [Re-run both labs from labs/](https://github.com/litkhai/langfuse-hols/issues/1)
+- [Link with the ClickHouse-only Langfuse lab in clickhouse-hols](https://github.com/litkhai/langfuse-hols/issues/2)

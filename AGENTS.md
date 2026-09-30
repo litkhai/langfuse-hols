@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> Harness: khai-harness core@e7019b5 · context public · bilingual yes
+> Harness: khai-harness core@fd3f7f6 · context public · bilingual yes
 
 Instructions for coding agents working in this repository.
 
@@ -35,7 +35,7 @@ split. The original locations:
 | `usecase/langfuse-ee/` | `labs/langfuse-ee/` |
 | `usecase/langfuse-eval/` | `labs/langfuse-eval/` |
 
-<!-- harness:core start — khai-harness core@e7019b5 · context public · 손으로 고치지 마세요 -->
+<!-- harness:core start — khai-harness core@fd3f7f6 · context public · 손으로 고치지 마세요 -->
 **Context: public.** Public sources only — nothing from company connectors, internal hosts, internal wikis or
 private repositories, and no link to them. gitleaks must pass before every commit. Claims name what was run.
 
@@ -87,6 +87,7 @@ or `STATUS.md`. Labels: `re-verify` (changed but not re-run), `enhancement`, `do
 The lead gives the implementer one issue at a time with the design and the files to touch; the
 implementer does not change the design or the docs' claims on its own. Only a real end-to-end
 run updates a verification claim, whichever model ran it.
+A repository whose `AGENTS.md` has its own model-roles table uses that table instead (models differ between personal and company work).
 
 ### Bilingual docs
 <!-- from: clickhouse-hols AGENTS.md "Bilingual parity" -->

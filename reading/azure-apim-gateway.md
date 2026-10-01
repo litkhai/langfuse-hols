@@ -35,25 +35,6 @@ redirect to the `llm-*` pages; use the new names.
 
 ### Three ways into Langfuse
 
-```mermaid
-flowchart TB
-  subgraph A["A · application instrumentation, APIM as telemetry egress"]
-    direction LR
-    a1["service<br/>SDK or OTel"] -->|model call| a2["APIM model API"] --> a3["model"]
-    a1 -->|"OTLP over HTTP"| a4["APIM OTLP API"] -->|"adds Langfuse auth header"| a5["Langfuse"]
-  end
-  subgraph B["B · spans derived from gateway logs"]
-    direction LR
-    b1["service"] -->|model call| b2["APIM model API"] --> b3["model"]
-    b2 -.->|"GatewayLlmLogs via diagnostic setting"| b4["Event Hubs"] --> b5["transform you own"] -->|OTLP| b6["Langfuse"]
-  end
-  subgraph C["C · LLM proxy behind APIM"]
-    direction LR
-    c1["service"] -->|model call| c2["APIM"] --> c3["LiteLLM proxy"] --> c4["model"]
-    c3 -.->|"langfuse_otel callback"| c6["Langfuse"]
-  end
-```
-
 | | A — instrument, forward through APIM | B — derive from gateway logs | C — LLM proxy behind APIM |
 |---|---|---|---|
 | Application change | yes, per service | none | none |
@@ -61,6 +42,12 @@ flowchart TB
 | Evaluations link to production traces | yes | only as far as the flat span allows | per call |
 | Who owns the moving part | the services | the transform (your code) | the proxy (on the request path) |
 | Documented by Langfuse | **yes** — the APIM integration page | no | yes — the LiteLLM page |
+
+```mermaid
+flowchart LR
+  a1["service<br/>SDK or OTel"] -->|model call| a2["APIM model API"] --> a3["model"]
+  a1 -->|"OTLP over HTTP"| a4["APIM OTLP API"] -->|"adds Langfuse auth header"| a5["Langfuse"]
+```
 
 **A — application instrumentation, APIM as the telemetry egress point.** This is the pattern
 Langfuse documents for APIM. Services export OpenTelemetry to an APIM-managed URL, and an APIM
@@ -79,6 +66,12 @@ so services never hold Langfuse keys and all telemetry leaves through one approv
 - For a self-hosted Langfuse, point the APIM backend at your own instance instead of Langfuse
   Cloud. Langfuse's APIM FAQ states (as of July 2026) that there is no APIM-specific plugin,
   policy or exporter; this forwarding is the supported path.
+
+```mermaid
+flowchart LR
+  b1["service"] -->|model call| b2["APIM model API"] --> b3["model"]
+  b2 -.->|"GatewayLlmLogs<br/>diagnostic setting"| b4["Event Hubs"] --> b5["transform<br/>you own"] -->|OTLP| b6["Langfuse"]
+```
 
 **B — spans derived from APIM's LLM log.** For teams that have not instrumented yet.
 `ApiManagementGatewayLlmLog` rows carry prompt, completion and total tokens, model name,
@@ -101,6 +94,12 @@ deployment name, optionally the request and response messages, a sequence number
   producer — the server no longer propagates them for OpenTelemetry input by default. The
   transform is the producer here, so it must set them on each span, using the attribute
   mapping in Langfuse's OpenTelemetry docs, and send `x-langfuse-ingestion-version: 4`.
+
+```mermaid
+flowchart LR
+  c1["service"] -->|model call| c2["APIM"] --> c3["LiteLLM proxy"] --> c4["model"]
+  c3 -.->|"langfuse_otel callback"| c5["Langfuse"]
+```
 
 **C — an LLM proxy behind APIM.** LiteLLM with Langfuse's recommended `langfuse_otel`
 callback, configured with `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
@@ -328,8 +327,6 @@ Read on 2026-10-01.
 
 ### Langfuse로 들어오는 세 가지 경로
 
-다이어그램은 위 영어 섹션과 같습니다.
-
 | | A — 계측 후 APIM 경유 전달 | B — 게이트웨이 로그에서 유도 | C — APIM 뒤 LLM 프록시 |
 |---|---|---|---|
 | 애플리케이션 변경 | 서비스마다 필요 | 없음 | 없음 |
@@ -337,6 +334,12 @@ Read on 2026-10-01.
 | 평가가 운영 트레이스에 연결 | 됨 | 평평한 스팬이 허용하는 만큼만 | 호출 단위 |
 | 움직이는 부품의 소유자 | 각 서비스 | 변환기(직접 작성한 코드) | 프록시(요청 경로 위) |
 | Langfuse 문서화 | **있음** — APIM 연동 페이지 | 없음 | 있음 — LiteLLM 페이지 |
+
+```mermaid
+flowchart LR
+  a1["service<br/>SDK or OTel"] -->|model call| a2["APIM model API"] --> a3["model"]
+  a1 -->|"OTLP over HTTP"| a4["APIM OTLP API"] -->|"adds Langfuse auth header"| a5["Langfuse"]
+```
 
 **A — 애플리케이션 계측, APIM을 텔레메트리 출구로.** Langfuse가 APIM에 대해 문서화한
 패턴입니다. 서비스가 APIM이 관리하는 URL로 OpenTelemetry를 내보내고, APIM API가 게이트웨이에서
@@ -355,6 +358,12 @@ Read on 2026-10-01.
 - 셀프호스팅 Langfuse라면 APIM 백엔드를 Langfuse Cloud 대신 자체 인스턴스로 지정합니다.
   Langfuse APIM FAQ는 (2026년 7월 기준) APIM 전용 플러그인·정책·익스포터가 없으며 이 전달 방식이
   지원 경로라고 밝힙니다.
+
+```mermaid
+flowchart LR
+  b1["service"] -->|model call| b2["APIM model API"] --> b3["model"]
+  b2 -.->|"GatewayLlmLogs<br/>diagnostic setting"| b4["Event Hubs"] --> b5["transform<br/>you own"] -->|OTLP| b6["Langfuse"]
+```
 
 **B — APIM LLM 로그에서 스팬 유도.** 아직 계측하지 않은 팀을 위한 경로입니다.
 `ApiManagementGatewayLlmLog` 행에는 prompt·completion·total 토큰, 모델명, 배포명, 선택적으로
@@ -376,6 +385,12 @@ Read on 2026-10-01.
   서버는 OpenTelemetry 입력에 대해 이를 더 이상 전파하지 않습니다. 여기서는 변환기가 생산자이므로,
   Langfuse OpenTelemetry 문서의 속성 매핑에 따라 각 스팬에 이를 설정하고
   `x-langfuse-ingestion-version: 4`를 보내야 합니다.
+
+```mermaid
+flowchart LR
+  c1["service"] -->|model call| c2["APIM"] --> c3["LiteLLM proxy"] --> c4["model"]
+  c3 -.->|"langfuse_otel callback"| c5["Langfuse"]
+```
 
 **C — APIM 뒤의 LLM 프록시.** LiteLLM에 Langfuse가 권장하는 `langfuse_otel` 콜백을 쓰고,
 `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_OTEL_HOST`로 설정합니다. 이 프리셋의

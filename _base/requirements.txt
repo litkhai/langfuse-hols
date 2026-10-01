@@ -1,0 +1,10 @@
+# Python dependencies of the labs (both labs, and _base/bin/seed_traces.py).
+# Install into a virtual environment (Python 3.10 or newer; langfuse 4.x needs it):
+#   python3.12 -m venv .venv && .venv/bin/pip install -r _base/requirements.txt
+#
+# Exact pins, resolved from PyPI on 2026-10-02 and installed together on Python 3.12.
+# The two Anthropic packages are only used when ANTHROPIC_API_KEY is set (real model
+# calls); without it the labs run fully offline and never import them.
+langfuse==4.16.0
+anthropic==1.11.0
+opentelemetry-instrumentation-anthropic==0.62.4

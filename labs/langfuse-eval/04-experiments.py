@@ -13,13 +13,13 @@ Docs: https://langfuse.com/docs/evaluation/experiments/experiments-via-sdk
 import os
 import re
 
-from langfuse import Evaluation
+from langfuse import Evaluation, propagate_attributes
 
-from _common import client, generate_answer
+from _common import client, generate_answer, use_anthropic
 
 DATASET_NAME = os.environ.get("DATASET_NAME", "support-golden-qa")
 PROMPT_NAME = os.environ.get("PROMPT_NAME", "support-system")
-MODEL = "gpt-4o-mini"
+MODEL = "claude-haiku-4-5"
 
 lf = client()
 
@@ -56,31 +56,44 @@ def make_task(prompt_obj, variant: str):
 
     def task(*, item, **kwargs):
         question = item.input["question"]
-        # Tag the auto-created experiment trace with its variant so ClickHouse can
-        # reconstruct the v1-vs-v2 A/B by joining scores → traces (lab 07 §4).
-        lf.update_current_trace(tags=[f"variant:{variant}", "eval-experiment"],
-                                metadata={"variant": variant})
+        # With ANTHROPIC_API_KEY the instrumented Anthropic client creates the
+        # GENERATION itself (model, real tokens, cost), so we do not wrap it; the
+        # prompt LINK is propagated onto it with propagate_attributes(prompt=...).
+        if use_anthropic():
+            with propagate_attributes(prompt=prompt_obj):
+                return generate_answer(system_prompt=system_prompt, question=question,
+                                       expected=item.expected_output, variant=variant, model=MODEL)
         # Offline: wrap in a generation so the trace carries model + usage + the
-        # prompt LINK. With OPENAI_API_KEY the drop-in wrapper self-traces, so we
-        # avoid double-instrumenting.
-        if os.environ.get("OPENAI_API_KEY"):
-            return generate_answer(system_prompt=system_prompt, question=question,
-                                   expected=item.expected_output, variant=variant, model=MODEL)
+        # prompt LINK. Usage keys are `input`/`output` so Langfuse can price them.
         with lf.start_as_current_observation(
-            as_type="generation", name="answer-generation", model=MODEL,
-            prompt=prompt_obj,
+            as_type="generation", name="answer-generation", model=MODEL, prompt=prompt_obj,
             input=[{"role": "system", "content": system_prompt},
                    {"role": "user", "content": question}],
         ) as gen:
             answer = generate_answer(system_prompt=system_prompt, question=question,
                                      expected=item.expected_output, variant=variant, model=MODEL)
             gen.update(output=answer, usage_details={
-                "input_tokens": (len(system_prompt) + len(question)) // 4,
-                "output_tokens": max(1, len(answer) // 4),
+                "input": (len(system_prompt) + len(question)) // 4,
+                "output": max(1, len(answer) // 4),
             })
         return answer
 
     return task
+
+
+def run(dataset, name: str, description: str, prompt_obj, variant: str):
+    """Run one experiment, tagging every observation of every item with its variant.
+
+    Tag the experiment traces with their variant so ClickHouse can reconstruct the
+    v1-vs-v2 A/B by joining scores → events (lab 07 §4). SDK v4: propagate_attributes()
+    replaces update_current_trace(). It wraps run_experiment() rather than the task, so
+    the attributes also reach the root `experiment-item-run` observation (the row the
+    trace is identified by); wrapped inside the task they would start one level lower.
+    """
+    with propagate_attributes(tags=[f"variant:{variant}", "eval-experiment"],
+                              metadata={"variant": variant}):
+        return dataset.run_experiment(name=name, description=description,
+                                      task=make_task(prompt_obj, variant), evaluators=EVALUATORS)
 
 
 def main() -> None:
@@ -89,14 +102,10 @@ def main() -> None:
     prompt_v2 = lf.get_prompt(PROMPT_NAME, label="production")  # guard-railed (v2)
 
     print(f"Running experiments over '{DATASET_NAME}' "
-          f"({'REAL OpenAI' if os.environ.get('OPENAI_API_KEY') else 'offline / simulated'})…\n")
+          f"({'REAL Anthropic ' + MODEL if use_anthropic() else 'offline / simulated'})…\n")
 
-    res_v1 = dataset.run_experiment(
-        name="prompt-v1", description="Terse v1 system prompt",
-        task=make_task(prompt_v1, "v1"), evaluators=EVALUATORS)
-    res_v2 = dataset.run_experiment(
-        name="prompt-v2", description="Guard-railed v2 system prompt",
-        task=make_task(prompt_v2, "v2"), evaluators=EVALUATORS)
+    res_v1 = run(dataset, "prompt-v1", "Terse v1 system prompt", prompt_v1, "v1")
+    res_v2 = run(dataset, "prompt-v2", "Guard-railed v2 system prompt", prompt_v2, "v2")
 
     lf.flush()
 
@@ -106,7 +115,7 @@ def main() -> None:
     print(res_v2.format())
     print("\n✓ Two runs created. UI → Datasets →", DATASET_NAME,
           "→ Runs: compare prompt-v1 vs prompt-v2 side by side.")
-    print("  Tip: swap MODEL in make_task to also compare models on the same dataset.")
+    print("  Tip: swap MODEL to also compare models on the same dataset.")
 
 
 if __name__ == "__main__":

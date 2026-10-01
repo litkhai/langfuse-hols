@@ -58,8 +58,8 @@ cat <<EOT
 
   Next (from the repository root):
     _base/bin/check.sh                      # readiness: containers, migrations, keys
-    python3 -m venv .venv && source .venv/bin/activate
-    pip install "langfuse>=3" openai
+    python3.12 -m venv .venv && source .venv/bin/activate     # Python 3.10+
+    pip install -r _base/requirements.txt
     python _base/bin/seed_traces.py         # or labs/langfuse-ee/02-generate-traces.py
 ────────────────────────────────────────────────────────────
 EOT

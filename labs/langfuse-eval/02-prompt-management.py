@@ -22,7 +22,7 @@ import os
 from _common import client
 
 PROMPT_NAME = os.environ.get("PROMPT_NAME", "support-system")
-CONFIG = {"model": "gpt-4o-mini", "temperature": 0.2}
+CONFIG = {"model": "claude-haiku-4-5", "temperature": 0.2}
 
 
 def main() -> None:
@@ -85,7 +85,7 @@ def main() -> None:
     ) as gen:
         gen.update(
             output="Create new keys in Project Settings then API Keys, then revoke the old ones.",
-            usage_details={"input_tokens": 42, "output_tokens": 18, "total_tokens": 60},
+            usage_details={"input": 42, "output": 18},   # keys Langfuse can price (it derives the total)
         )
     lf.flush()
 

@@ -7,14 +7,14 @@
 #        org key  ─► SCIM: provision users ─► assign org roles
 #        org key  ─► assign a PROJECT-LEVEL role that overrides the org role  (EE)
 #
-# Requires: EE active (run 05 first), `jq`, and ADMIN_API_KEY set in .env.
+# Requires: EE active (run 05 first), `jq`, and ADMIN_API_KEY set in _base/.env.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
-. "$(dirname "$0")/_env.sh"; load_env
 
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
-ADMIN="Authorization: Bearer ${ADMIN_API_KEY:?set ADMIN_API_KEY in .env}"
+ADMIN="Authorization: Bearer ${ADMIN_API_KEY:?set ADMIN_API_KEY in _base/.env}"
 
 echo "════ 1. Create an organization (Instance Management API, Bearer auth) ════"
 ORG=$(curl -fsS -X POST "${HOST}/api/admin/organizations" \

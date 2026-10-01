@@ -8,14 +8,14 @@
 #   B) Audit Logs              — immutable who/what/when records of every config
 #                                change, stored in Postgres. We read them back.
 #
-# Requires: EE active (run 05, then 06), `jq`, ADMIN_API_KEY in .env.
+# Requires: EE active (run 05, then 06), `jq`, ADMIN_API_KEY in _base/.env.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
-. "$(dirname "$0")/_env.sh"; load_env
 
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
-ADMIN="Authorization: Bearer ${ADMIN_API_KEY:?set ADMIN_API_KEY in .env}"
+ADMIN="Authorization: Bearer ${ADMIN_API_KEY:?set ADMIN_API_KEY in _base/.env}"
 ORG_ID="${LANGFUSE_INIT_ORG_ID:-ch-workshop}"
 PROJECT_ID="${LANGFUSE_INIT_PROJECT_ID:-llm-observability}"
 RETENTION_DAYS="${1:-14}"
@@ -46,7 +46,7 @@ EOF
 echo
 echo "════════════════ B) Audit Logs ════════════════"
 echo "▶ Audit logs are stored in Postgres. Discovering the table…"
-PSQL=(docker compose exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -P pager=off)
+PSQL=(lf_compose -- exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -P pager=off)
 
 AUDIT_TBL=$("${PSQL[@]}" -tAc \
   "SELECT table_name FROM information_schema.tables WHERE table_name ILIKE 'audit%' LIMIT 1;" | tr -d '[:space:]')

@@ -2,8 +2,8 @@
 """99-cleanup.py — remove what THIS lab created (best-effort).
 
 Deletes only the lab's own artifacts (prompts, dataset, annotation queue, score
-configs). It does NOT touch the Docker stack — that belongs to the sibling lab
-(`../langfuse-ee/99-cleanup.sh`).
+configs). It does NOT touch the Docker stack — that is shared with the other
+labs and lives in `_base/` (stop it with `_base/bin/down.sh`).
 
 Some Langfuse resources have no stable DELETE endpoint across versions, so this
 is best-effort: it attempts each delete and, on failure, prints the manual UI
@@ -47,7 +47,7 @@ def main() -> None:
     print(f"\n  Manual (no stable DELETE API):")
     print(f"    • dataset '{DATASET_NAME}'  → UI → Datasets → … → Delete")
     print(f"    • score configs (answer-quality, factually-correct) → UI → Settings → Scores")
-    print("\n  The Docker stack is untouched — stop it via ../langfuse-ee/99-cleanup.sh")
+    print("\n  The Docker stack is untouched — stop it via _base/bin/down.sh")
 
 
 if __name__ == "__main__":

@@ -4,20 +4,19 @@
 # Restarts langfuse-web + langfuse-worker with the EE overlay so the license key
 # (and ADMIN_API_KEY) are injected, then verifies the license took effect.
 #
-#   1. Put your key in .env:   LANGFUSE_EE_LICENSE_KEY=<your-key>
+#   1. Put your key in _base/.env:   LANGFUSE_EE_LICENSE_KEY=<your-key>
 #   2. ./05-ee-activate.sh
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 
-. "$(dirname "$0")/_env.sh"; load_env
-
 if [[ -z "${LANGFUSE_EE_LICENSE_KEY:-}" ]]; then
-  echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in .env. Paste your enterprise key first."
+  echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in _base/.env. Paste your enterprise key first."
   exit 1
 fi
 
 echo "▶ Re-deploying with the Enterprise overlay (license key + admin API)…"
-docker compose -f docker-compose.yml -f docker-compose.ee.yml up -d
+lf_compose ee -- up -d
 
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 echo "▶ Waiting for langfuse-web to come back…"
@@ -54,5 +53,5 @@ else
   echo "⚠ Admin API returned HTTP $code."
   echo "  • 401/403 → license key not recognized, or ADMIN_API_KEY mismatch."
   echo "  • Check activation in the logs:"
-  echo "      docker compose logs langfuse-web | grep -i -E 'license|entitlement'"
+  echo "      docker logs langfuse-hols-langfuse-web-1 2>&1 | grep -i -E 'license|entitlement'"
 fi

@@ -8,7 +8,7 @@
 -- the traces from 02-generate-traces.py landed.
 --
 -- Run (from the host, against the workshop container):
---   docker compose exec -T clickhouse clickhouse-client \
+--   docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
 --     -u clickhouse --password clickhouse --multiquery < 03-clickhouse-explore.sql
 --
 -- NOTE: the ClickHouse schema is an internal implementation detail of Langfuse,

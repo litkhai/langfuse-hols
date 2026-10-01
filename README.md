@@ -15,6 +15,14 @@ Self-hosting Langfuse on ClickHouse (OSS and Enterprise tracks) and Langfuse's e
 | [labs/langfuse-ee](labs/langfuse-ee/) | Self-hosting Langfuse on ClickHouse (OSS + Enterprise) |
 | [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
 
+### 📖 Reading (`reading/`)
+
+Background pages, not labs: nothing in them is run.
+
+| Page | What it covers |
+|---|---|
+| [Langfuse behind an Azure API Management AI gateway](reading/azure-apim-gateway.md) | Getting traces into Langfuse when every model call goes through APIM; Entra ID; where ClickHouse runs on Azure |
+
 ### 🔗 Related repositories
 
 | Repository | What it is |
@@ -50,6 +58,14 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 |-----|----------------|
 | [labs/langfuse-ee](labs/langfuse-ee/) | ClickHouse 기반 Langfuse 자체 호스팅 (OSS + Enterprise) |
 | [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
+
+### 📖 읽기 자료 (`reading/`)
+
+실습이 아닌 배경 문서입니다. 실행하는 내용은 없습니다.
+
+| 페이지 | 내용 |
+|---|---|
+| [Azure API Management AI 게이트웨이 뒤의 Langfuse](reading/azure-apim-gateway.md) | 모든 모델 호출이 APIM을 거칠 때 Langfuse로 트레이스를 넣는 방법, Entra ID, Azure에서 ClickHouse 운영 위치 |
 
 ### 🔗 관련 저장소
 

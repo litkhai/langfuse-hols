@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# 11-ee-parquet-export.sh — export ClickHouse-backed traces to Parquet on object
+# 11-ee-parquet-export.sh — export ClickHouse-backed observations to Parquet on object
 # storage, and read them back. The enterprise data-platform / archival story.
 #
 #   A) Langfuse feature : configure a SCHEDULED blob-storage export (Parquet) via
-#                         the Org API, pointing at the workshop MinIO bucket.
+#                         the Org API, pointing at the workshop MinIO bucket. On v4 the
+#                         export source is the enriched observations ("OBSERVATIONS_V2");
+#                         the legacy traces/observations sources are rejected with HTTP 400.
 #   B) ClickHouse primitive that powers it: INSERT INTO FUNCTION s3(...) SELECT
-#                         ... 'Parquet', then read it back with s3(). Fully live
-#                         & verifiable — no waiting on the scheduler.
+#                         ... 'Parquet' from events_full, then read it back with s3().
+#                         Fully live & verifiable — no waiting on the scheduler.
 #   C) Pairs with lab 07 : archive-then-delete (export before retention deletes).
 #
 # Requires: stack up + EE active (run 05 first), jq, ADMIN_API_KEY in _base/.env.
@@ -36,24 +38,27 @@ put_integration() {  # $1 = fileType. Captures body to /tmp/lf_blob.json, echoes
       \"projectId\":\"${PROJECT_ID}\",\"type\":\"S3_COMPATIBLE\",\"bucketName\":\"${BUCKET}\",
       \"endpoint\":\"http://minio:9000\",\"region\":\"auto\",\"accessKeyId\":\"${MK_USER}\",
       \"secretAccessKey\":\"${MK_PASS}\",\"prefix\":\"exports/langfuse/\",\"forcePathStyle\":true,
-      \"fileType\":\"$1\",\"exportFrequency\":\"hourly\",\"exportMode\":\"FULL_HISTORY\",\"enabled\":true}"
+      \"fileType\":\"$1\",\"exportFrequency\":\"hourly\",\"exportMode\":\"FULL_HISTORY\",
+      \"exportSource\":\"OBSERVATIONS_V2\",\"enabled\":true}"
 }
 
 echo "▶ PUT /api/public/integrations/blob-storage → try Parquet first…"
 code=$(put_integration PARQUET)
 if [[ "$code" == "200" ]]; then
   echo "  ✅ Parquet scheduled export configured:"
-  jq '{type, bucketName, fileType, exportFrequency, exportMode, enabled}' /tmp/lf_blob.json
+  jq '{type, bucketName, fileType, exportSource, exportFrequency, exportMode, enabled}' /tmp/lf_blob.json
 else
-  echo "  ⚠ HTTP ${code}: this Langfuse version rejected fileType=PARQUET on the integration API —"
+  echo "  ⚠ HTTP ${code}: this Langfuse version rejected the integration request —"
   jq -c '.error // .message' /tmp/lf_blob.json 2>/dev/null | sed 's/^/     /'
-  echo "  ↳ Scheduled *Parquet* blob-storage export is newer than some pinned images; the"
-  echo "    published OpenAPI spec can be ahead of your running version. Falling back to JSONL"
-  echo "    for the scheduled job — ClickHouse still writes TRUE Parquet in Part B below."
+  echo "  ↳ Langfuse 4.48.0 accepts fileType=PARQUET with the OBSERVATIONS_V2 export source"
+  echo "    (measured 2026-10-02); the previous pin, v3.197.1, answered HTTP 400 (JSON/CSV/JSONL"
+  echo "    only). The published OpenAPI spec can be ahead of — or behind — your running image."
+  echo "    Falling back to JSONL for the scheduled job; ClickHouse still writes TRUE Parquet"
+  echo "    in Part B below."
   code=$(put_integration JSONL)
   if [[ "$code" == "200" ]]; then
-    echo "  ✅ JSONL scheduled export configured (upgrade the image to schedule Parquet):"
-    jq '{type, bucketName, fileType, exportFrequency, exportMode, enabled}' /tmp/lf_blob.json
+    echo "  ✅ JSONL scheduled export configured (use a newer image to schedule Parquet):"
+    jq '{type, bucketName, fileType, exportSource, exportFrequency, exportMode, enabled}' /tmp/lf_blob.json
   else
     echo "  ⚠ HTTP ${code} again — confirm fields against your version's API reference:"
     cat /tmp/lf_blob.json
@@ -62,27 +67,37 @@ fi
 
 cat <<'EOF'
   ↳ Langfuse's worker will now, on schedule (every 20 min / hourly / daily /
-    weekly), stream traces·observations·scores to Parquet in the bucket. That
-    scheduled job runs the SAME ClickHouse primitive Part B demonstrates live.
+    weekly), stream the enriched observations (and scores) to Parquet in the bucket.
+    That scheduled job runs the SAME ClickHouse primitive Part B demonstrates live.
+    (Per the API reference, Parquet observation exports omit the model-price columns
+    input_price / output_price / total_price.)
 EOF
 
 echo
 echo "════════════ B) The ClickHouse primitive, live (INSERT INTO FUNCTION s3 → read back) ════════════"
 CH=(lf_compose -- exec -T clickhouse clickhouse-client
     -u "${CLICKHOUSE_USER:-clickhouse}" --password "${CLICKHOUSE_PASSWORD:-clickhouse}")
-S3="http://minio:9000/${BUCKET}/exports/manual/traces.parquet"
+S3="http://minio:9000/${BUCKET}/exports/manual/events_full.parquet"
 
 echo "▶ ClickHouse version (Parquet export failures surface reliably on >= 25.11):"
 "${CH[@]}" -q "SELECT version();"
 
-echo "▶ Writing active traces to Parquet on MinIO…"
+echo "▶ Writing active observations (events_full) to Parquet on MinIO…"
 "${CH[@]}" -q "INSERT INTO FUNCTION s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet')
-  SELECT * FROM default.traces FINAL WHERE is_deleted = 0
+  SELECT * FROM default.events_full FINAL WHERE is_deleted = 0
   SETTINGS s3_truncate_on_insert = 1;"
 
 echo "▶ Reading the Parquet back from MinIO (round-trip proof):"
-"${CH[@]}" -q "SELECT count() AS rows_in_parquet
-  FROM s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet');"
+rows_src=$("${CH[@]}" -q "SELECT count() FROM default.events_full FINAL WHERE is_deleted = 0;")
+rows_pq=$("${CH[@]}" -q "SELECT count()
+  FROM s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet');")
+echo "  rows in events_full (FINAL, active) = ${rows_src}"
+echo "  rows read back from the Parquet     = ${rows_pq}"
+if [[ "$rows_src" != "$rows_pq" || "$rows_src" == "0" ]]; then
+  echo "✗ Round trip FAILED: the Parquet file does not hold the rows that were written."
+  exit 1
+fi
+echo "  ✅ ${rows_src} == ${rows_pq}"
 
 echo "▶ Schema ClickHouse inferred from the exported Parquet (first 15 columns):"
 "${CH[@]}" -q "DESCRIBE TABLE s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet')
@@ -92,7 +107,7 @@ cat <<EOF
 
 ════════════ C) Archive-then-delete (pairs with lab 07) ════════════
 The safe pattern behind a data-retention policy:
-  1. lab 11 → export/archive traces to Parquet on object storage (this script)
+  1. lab 11 → export/archive observations to Parquet on object storage (this script)
   2. lab 07 → set a retention window; the nightly worker deletes old rows from CH
 The Parquet archive outlives the ClickHouse rows and stays queryable by
 ClickHouse (s3()/file()), DuckDB, Athena, Spark, …

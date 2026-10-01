@@ -13,11 +13,22 @@
 #    redis            queue (BullMQ) + API-key/prompt cache
 #    minio            S3-compatible blob store: raw events, media, batch exports
 #
-#  Secrets are read from `.env` (see .env.example). Defaults let it boot as-is.
+#  Shared by every lab in this repository. It lives in `_base/`, so all lab scripts
+#  start it with `-f _base/docker-compose.yml` first, then optional overlays
+#  (docker-compose.ee.yml · .masking.yml · .governance.yml) — see _base/README.md.
+#  The project name below is fixed, so container names do not depend on the
+#  directory the stack was started from (e.g. `langfuse-hols-clickhouse-1`).
+#
+#  Secrets are read from `_base/.env` (see _base/.env.example) — compose takes
+#  `.env` from the directory of the FIRST -f file. Defaults let it boot as-is.
+#  Image versions float until pinned (#6); override with LANGFUSE_VERSION,
+#  CLICKHOUSE_VERSION, REDIS_VERSION, POSTGRES_VERSION (see .env.example).
 # ─────────────────────────────────────────────────────────────────────────────
+name: langfuse-hols
+
 services:
   langfuse-worker:
-    image: docker.io/langfuse/langfuse-worker:3   # pin to a digest/exact version in prod
+    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:-3}   # pin to a digest/exact version in prod
     restart: always
     depends_on: &langfuse-depends-on
       postgres:
@@ -74,7 +85,7 @@ services:
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
 
   langfuse-web:
-    image: docker.io/langfuse/langfuse:3        # pin to a digest/exact version in prod
+    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:-3}        # pin to a digest/exact version in prod
     restart: always
     depends_on: *langfuse-depends-on
     ports:
@@ -95,7 +106,7 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
 
   clickhouse:
-    image: docker.io/clickhouse/clickhouse-server   # Langfuse requires ClickHouse >= 24.3; pin a version in prod
+    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-latest}   # Langfuse requires ClickHouse >= 24.3; pin a version in prod
     restart: always
     user: "101:101"
     environment:
@@ -136,7 +147,7 @@ services:
       start_period: 1s
 
   redis:
-    image: docker.io/redis:7
+    image: docker.io/redis:${REDIS_VERSION:-7}
     restart: always
     command: >
       --requirepass ${REDIS_AUTH:-myredissecret}

@@ -39,8 +39,8 @@ lets you run cross-cutting quality analytics the UI doesn't offer.
 ```
 langfuse-eval/
 ├── README.md                   # this file
-├── _common.py                  # shared: .env loader, client, REST helper, the Q&A KB
-├── 01-seed-traces.py           # reuse the sibling generator to get traces to evaluate
+├── _common.py                  # shared: _base/.env loader, client, REST helper, the Q&A KB
+├── 01-seed-traces.py           # seed traces to evaluate with the shared generator (_base/bin/seed_traces.py)
 ├── 02-prompt-management.py     # versions, labels (production/latest), compile, prompt→trace link
 ├── 03-datasets.py              # a golden test set (input + expected_output), idempotent
 ├── 04-experiments.py           # run_experiment: prompt v1 vs v2 + code evaluators
@@ -53,13 +53,14 @@ langfuse-eval/
 
 ### ✅ Prerequisites
 
-- **The stack from the sibling lab must be running.** From `labs/langfuse-ee/`:
+- **The shared stack in [`_base/`](../../_base/README.md) must be running.** From the repository root:
   ```bash
-  ./01-up.sh          # brings up web/worker/postgres/clickhouse/redis/minio
+  _base/bin/up.sh      # brings up web/worker/postgres/clickhouse/redis/minio (creates _base/.env from the template on first run)
+  _base/bin/check.sh   # optional: containers healthy, migrations finished, SDK keys valid
   ```
-  This lab reuses that stack and its `.env` credentials (already copied here).
+  This lab uses that stack and its `_base/.env` credentials — the same ones the `langfuse-ee` lab uses (its `01-up.sh` runs the same script).
 - **Python 3.9+** and `pip install "langfuse>=3" openai`.
-- *(optional)* `OPENAI_API_KEY` in `.env` for real generation + managed LLM-as-a-judge.
+- *(optional)* `OPENAI_API_KEY` in `_base/.env` for real generation + managed LLM-as-a-judge.
 
 ### 🚀 Quick start (offline — no LLM key needed)
 
@@ -76,7 +77,7 @@ python 05-llm-as-a-judge.py        # add an LLM-judge score (offline rubric by d
 python 06-annotation-queue.py      # create the human-review queue + demo scores
 
 # Explore how every score lands in ClickHouse:
-docker exec -i langfuse-ee-clickhouse-1 clickhouse-client \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
 
@@ -214,8 +215,8 @@ SQL로 할 수 있습니다.
 ```
 langfuse-eval/
 ├── README.md                   # 이 문서
-├── _common.py                  # 공통: .env 로더, 클라이언트, REST 헬퍼, Q&A 지식베이스
-├── 01-seed-traces.py           # 자매 랩 생성기를 재사용해 평가 대상 trace 확보
+├── _common.py                  # 공통: _base/.env 로더, 클라이언트, REST 헬퍼, Q&A 지식베이스
+├── 01-seed-traces.py           # 공유 생성기(_base/bin/seed_traces.py)로 평가 대상 trace 확보
 ├── 02-prompt-management.py     # 버전·라벨(production/latest)·compile·프롬프트→trace 링크
 ├── 03-datasets.py              # 골든 테스트셋(input + expected_output), 멱등
 ├── 04-experiments.py           # run_experiment: 프롬프트 v1 vs v2 + 코드 평가자
@@ -228,13 +229,14 @@ langfuse-eval/
 
 ### ✅ 사전 준비물
 
-- **자매 랩의 스택이 실행 중이어야 합니다.** `labs/langfuse-ee/` 에서:
+- **[`_base/`](../../_base/README.md)의 공유 스택이 실행 중이어야 합니다.** 저장소 루트에서:
   ```bash
-  ./01-up.sh          # web/worker/postgres/clickhouse/redis/minio 기동
+  _base/bin/up.sh      # web/worker/postgres/clickhouse/redis/minio 기동 (첫 실행 시 템플릿에서 _base/.env 생성)
+  _base/bin/check.sh   # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
   ```
-  이 랩은 그 스택과 `.env` 자격증명을 재사용합니다(이미 여기로 복사됨).
+  이 랩은 그 스택과 `_base/.env` 자격증명을 사용합니다 — `langfuse-ee` 랩이 쓰는 것과 같으며, 그 랩의 `01-up.sh`도 같은 스크립트를 실행합니다.
 - **Python 3.9+** 와 `pip install "langfuse>=3" openai`.
-- *(선택)* `.env`의 `OPENAI_API_KEY` — 실제 생성 + managed LLM-as-a-judge용.
+- *(선택)* `_base/.env`의 `OPENAI_API_KEY` — 실제 생성 + managed LLM-as-a-judge용.
 
 ### 🚀 빠른 시작 (오프라인 — LLM 키 불필요)
 
@@ -251,7 +253,7 @@ python 05-llm-as-a-judge.py        # LLM 판정 스코어 추가(기본 오프�
 python 06-annotation-queue.py      # 휴먼 검수 큐 + 데모 스코어 생성
 
 # 모든 스코어가 ClickHouse에 어떻게 쌓이는지 탐색:
-docker exec -i langfuse-ee-clickhouse-1 clickhouse-client \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
 

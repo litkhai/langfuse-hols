@@ -9,14 +9,14 @@
 #                         & verifiable — no waiting on the scheduler.
 #   C) Pairs with lab 07 : archive-then-delete (export before retention deletes).
 #
-# Requires: stack up + EE active (run 05 first), jq, ADMIN_API_KEY in .env.
+# Requires: stack up + EE active (run 05 first), jq, ADMIN_API_KEY in _base/.env.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
-. "$(dirname "$0")/_env.sh"; load_env
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
-ADMIN="Authorization: Bearer ${ADMIN_API_KEY:?set ADMIN_API_KEY in .env}"
+ADMIN="Authorization: Bearer ${ADMIN_API_KEY:?set ADMIN_API_KEY in _base/.env}"
 ORG_ID="${LANGFUSE_INIT_ORG_ID:-ch-workshop}"
 PROJECT_ID="${LANGFUSE_INIT_PROJECT_ID:-llm-observability}"
 BUCKET="${LANGFUSE_S3_BATCH_EXPORT_BUCKET:-langfuse}"
@@ -68,7 +68,7 @@ EOF
 
 echo
 echo "════════════ B) The ClickHouse primitive, live (INSERT INTO FUNCTION s3 → read back) ════════════"
-CH=(docker compose exec -T clickhouse clickhouse-client
+CH=(lf_compose -- exec -T clickhouse clickhouse-client
     -u "${CLICKHOUSE_USER:-clickhouse}" --password "${CLICKHOUSE_PASSWORD:-clickhouse}")
 S3="http://minio:9000/${BUCKET}/exports/manual/traces.parquet"
 

@@ -8,7 +8,7 @@
 -- append-only events, conditional aggregation, quantiles, and Map columns.
 --
 -- Run:
---   docker compose exec -T clickhouse clickhouse-client \
+--   docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
 --     -u clickhouse --password clickhouse --multiquery < 04-clickhouse-analytics.sql
 --
 -- ── TWO THINGS THAT MAKE THESE QUERIES CORRECT ──────────────────────────────

@@ -9,8 +9,8 @@
 -- Langfuse tables are ReplacingMergeTree → read with FINAL + WHERE is_deleted = 0
 -- to avoid double-counting un-merged row versions (learned in the sibling lab).
 --
--- Run against the SAME stack as the langfuse-ee lab:
---   docker compose -f ../langfuse-ee/docker-compose.yml exec -T clickhouse \
+-- Run against the shared stack in _base/ (container name is fixed by its compose project):
+--   docker exec -i langfuse-hols-clickhouse-1 \
 --     clickhouse-client -u clickhouse --password clickhouse --multiquery \
 --     < 07-scores-in-clickhouse.sql
 -- ─────────────────────────────────────────────────────────────────────────────

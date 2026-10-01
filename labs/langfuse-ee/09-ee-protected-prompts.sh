@@ -15,15 +15,15 @@
 # `production` label, nor delete the prompt — only ADMIN/OWNER can. (EE-gated.)
 #
 # Requires: stack up (EE active for the protection capstone), jq, and the project
-# keys in .env (LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY).
+# keys in _base/.env (LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY).
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
-. "$(dirname "$0")/_env.sh"; load_env
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
-PK="${LANGFUSE_PUBLIC_KEY:?set LANGFUSE_PUBLIC_KEY in .env}"
-SK="${LANGFUSE_SECRET_KEY:?set LANGFUSE_SECRET_KEY in .env}"
+PK="${LANGFUSE_PUBLIC_KEY:?set LANGFUSE_PUBLIC_KEY in _base/.env}"
+SK="${LANGFUSE_SECRET_KEY:?set LANGFUSE_SECRET_KEY in _base/.env}"
 pcurl() { curl -fsS -u "${PK}:${SK}" "$@"; }   # project-scoped Basic auth
 NAME="support-system-prompt"
 
@@ -49,7 +49,7 @@ echo "════ 3. Resolve the current production prompt (what an app fetches
 pcurl "${HOST}/api/public/v2/prompts/${NAME}?label=production" | jq '{name, version, labels, prompt}'
 
 echo "════ 4. Prompts are OLTP → stored in POSTGRES, not ClickHouse ════"
-PSQL=(docker compose exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -P pager=off)
+PSQL=(lf_compose -- exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -P pager=off)
 "${PSQL[@]}" -c "SELECT version, labels, created_at FROM prompts WHERE name = '${NAME}' ORDER BY version;" \
   || echo "  (the prompts table name can vary by version — list with '\\dt')"
 

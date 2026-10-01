@@ -6,17 +6,17 @@
 # Both are env-var driven (EE-gated) and injected via docker-compose.governance.yml.
 # We redeploy langfuse-web, then PROVE the vars are live inside the container.
 #
-# Requires: EE active (license key in .env).
+# Requires: EE active (license key in _base/.env).
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
-. "$(dirname "$0")/_env.sh"; load_env
 
 if [[ -z "${LANGFUSE_EE_LICENSE_KEY:-}" ]]; then
-  echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in .env — these are EE features."
+  echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in _base/.env — these are EE features."
   exit 1
 fi
 
-COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.ee.yml -f docker-compose.governance.yml)
+COMPOSE=(lf_compose ee governance --)
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 
 echo "▶ Redeploying langfuse-web with the governance overlay…"
@@ -46,6 +46,6 @@ cat <<EOF
        everyone else no longer sees the 'New Organization' action.
        (Existing orgs and their members are unaffected.)
 
-Tune any value in .env (LANGFUSE_UI_* / LANGFUSE_ALLOWED_ORGANIZATION_CREATORS),
+Tune any value in _base/.env (LANGFUSE_UI_* / LANGFUSE_ALLOWED_ORGANIZATION_CREATORS),
 then re-run this script to roll it out.
 EOF

@@ -15,6 +15,8 @@ Self-hosting Langfuse on ClickHouse (OSS and Enterprise tracks) and Langfuse's e
 | [labs/langfuse-ee](labs/langfuse-ee/) | Self-hosting Langfuse on ClickHouse (OSS + Enterprise) |
 | [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
 
+Both labs run on the shared stack in [`_base/`](_base/).
+
 ### 📖 Reading (`reading/`)
 
 Background pages, not labs: nothing in them is run.
@@ -38,6 +40,8 @@ Current state and what still needs a re-run: [STATUS.md](STATUS.md).
 git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
 ./.github/scripts/check_syntax.sh
+./.github/scripts/check_compose.sh   # merges every compose overlay set; needs docker compose
+./.github/scripts/check_sql.sh       # parses the .sql files in the ClickHouse image; needs docker
 ```
 
 ### 📝 License
@@ -58,6 +62,8 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 |-----|----------------|
 | [labs/langfuse-ee](labs/langfuse-ee/) | ClickHouse 기반 Langfuse 자체 호스팅 (OSS + Enterprise) |
 | [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
+
+두 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다.
 
 ### 📖 읽기 자료 (`reading/`)
 
@@ -82,6 +88,8 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
 ./.github/scripts/check_syntax.sh
+./.github/scripts/check_compose.sh   # compose 오버레이 조합을 모두 병합; docker compose 필요
+./.github/scripts/check_sql.sh       # ClickHouse 이미지로 .sql 파일을 파싱; docker 필요
 ```
 
 ### 📝 라이선스

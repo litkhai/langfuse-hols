@@ -10,18 +10,18 @@
 # Masking happens in the ingestion pipeline BEFORE persistence, so ClickHouse is
 # the source of truth for "did the secret leak?". This is the SA payoff.
 #
-# Requires: EE active (license key in .env), the langfuse SDK installed
+# Requires: EE active (license key in _base/.env), the langfuse SDK installed
 # (pip install "langfuse>=3"), `jq` optional.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
-. "$(dirname "$0")/_env.sh"; load_env
 
 if [[ -z "${LANGFUSE_EE_LICENSE_KEY:-}" ]]; then
-  echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in .env — data masking is an EE feature."
+  echo "✗ LANGFUSE_EE_LICENSE_KEY is empty in _base/.env — data masking is an EE feature."
   exit 1
 fi
 
-COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.ee.yml -f docker-compose.masking.yml)
+COMPOSE=(lf_compose ee masking --)
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 
 # Pick a Python interpreter: prefer the workshop venv, then python3, then python.
@@ -68,6 +68,6 @@ Notes:
   • Masking only applies to the OTLP endpoint (/api/public/otel = SDK v3+).
   • FAIL_CLOSED=true (see docker-compose.masking.yml): if the callback errors,
     the event is DROPPED rather than stored unmasked — the secure default.
-  • Tail the sidecar to watch redactions:  docker compose logs -f masking
+  • Tail the sidecar to watch redactions:  docker logs -f langfuse-hols-masking-1
   • Teardown removes the sidecar too:      ./99-cleanup.sh
 EOF

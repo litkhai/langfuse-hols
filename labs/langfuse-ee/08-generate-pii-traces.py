@@ -3,7 +3,7 @@
 so we can prove server-side data masking works (lab 08).
 
 Each trace deliberately embeds four sentinel secrets in the model input/output
-and in trace metadata. With the masking sidecar active (docker-compose.masking.yml),
+and in trace metadata. With the masking sidecar active (_base/docker-compose.masking.yml),
 Langfuse's worker redacts them on ingestion BEFORE writing to ClickHouse — so the
 raw sentinels must NOT appear in the traces / observations tables.
 
@@ -43,7 +43,9 @@ def _load_dotenv(path: str) -> None:
             os.environ.setdefault(key, val)
 
 
-_load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+# The stack (and its .env) is shared by every lab: ../../_base/.env
+_load_dotenv(os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "_base", ".env")))
 
 from langfuse import Langfuse, get_client
 
@@ -74,7 +76,7 @@ def main():
     lf = get_client()
 
     if not lf.auth_check():
-        print("✗ Auth check failed — verify LANGFUSE_HOST / keys in .env and that the stack is up.")
+        print("✗ Auth check failed — verify LANGFUSE_HOST / keys in _base/.env and that the stack is up.")
         sys.exit(1)
     print(f"✓ Connected. Sending {N_TRACES} PII-laden traces to the OTLP endpoint…")
 
@@ -114,7 +116,7 @@ def main():
     # CRITICAL: flush the async buffer before the script exits.
     lf.flush()
     print("✓ Sent. Give the worker a few seconds to ingest + mask, then run:")
-    print("    docker compose exec -T clickhouse clickhouse-client -u clickhouse \\")
+    print("    docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse \\")
     print("      --password clickhouse --multiquery < 08-verify-masking.sql")
 
 

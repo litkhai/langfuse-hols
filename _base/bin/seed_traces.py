@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-02-generate-traces.py — push realistic LLM traces into self-hosted Langfuse.
+seed_traces.py — push realistic LLM traces into self-hosted Langfuse.
 
 Simulates a customer-support RAG assistant. Each trace is one user turn and
 contains a nested observation tree:
@@ -16,20 +16,23 @@ Langfuse stores every trace / observation / score in ClickHouse — labs 03 and 
 then query that backend directly.
 
 Runs FULLY OFFLINE by default (no LLM API needed): responses and token counts
-are simulated. Set OPENAI_API_KEY in .env to make real OpenAI calls instead.
+are simulated. Set OPENAI_API_KEY in _base/.env to make real OpenAI calls instead.
 
-Usage:
+Shared by the labs: langfuse-ee calls it as `02-generate-traces.py`, langfuse-eval
+as `01-seed-traces.py`; both just forward their argv here.
+
+Usage (from the repository root):
     pip install "langfuse>=3" openai
-    python 02-generate-traces.py            # 40 traces
-    python 02-generate-traces.py 200        # 200 traces
+    python _base/bin/seed_traces.py            # 40 traces
+    python _base/bin/seed_traces.py 200        # 200 traces
 """
 import os
 import sys
 import time
 import random
 
-# Load .env from this directory so LANGFUSE_* / OPENAI_API_KEY are available
-# (the same file docker-compose reads). No external dependency required.
+# Load _base/.env (this file lives in _base/bin/) so LANGFUSE_* / OPENAI_API_KEY
+# are available (the same file docker-compose reads). No external dependency.
 def _load_dotenv(path: str) -> None:
     if not os.path.exists(path):
         return
@@ -43,7 +46,8 @@ def _load_dotenv(path: str) -> None:
             os.environ.setdefault(key, val)
 
 
-_load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_load_dotenv(os.path.join(_BASE_DIR, ".env"))
 
 from langfuse import Langfuse, get_client
 
@@ -104,7 +108,7 @@ def main():
     lf = get_client()
 
     if not lf.auth_check():
-        print("✗ Auth check failed — verify LANGFUSE_HOST / keys in .env and that the stack is up.")
+        print("✗ Auth check failed — verify LANGFUSE_HOST / keys in _base/.env and that the stack is up.")
         sys.exit(1)
     print(f"✓ Connected. Generating {N_TRACES} traces "
           f"({'REAL OpenAI calls' if USE_OPENAI else 'offline / simulated'})…")

@@ -59,7 +59,7 @@ api() { curl -sS -u "$AUTH" -H 'Content-Type: application/json' -X "$1" "$H$2" -
 # 1) the Anthropic LLM connection
 jq -n --arg k "$(grep '^ANTHROPIC_API_KEY=' _base/.env | cut -d= -f2-)" \
   '{provider:"anthropic", adapter:"anthropic", secretKey:$k, withDefaultModels:true}' \
-  | api PUT /api/public/llm-connections | jq '{provider, adapter, displaySecretKey}'
+  | api PUT /api/public/llm-connections | jq '{id, provider, adapter, withDefaultModels}'
 
 # 2) the evaluator: judge the root observation's input and output, score 0..1
 EVALUATOR=$(jq -n '{

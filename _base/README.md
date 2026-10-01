@@ -54,6 +54,8 @@ lf_compose ee masking -- up -d        # = docker compose -f _base/docker-compose
 lf_compose -- exec -T postgres psql …  # base only
 ```
 
+CI merges each of the overlay sets above with `docker compose config` and asserts what the merge contains (the right variables on the right service, the masking mount, the six services); run [`check_compose.sh`](../.github/scripts/check_compose.sh) to do the same locally.
+
 ### One `.env`
 
 There is exactly one env file: `_base/.env` (gitignored, mode 600). `bin/up.sh` creates it from `.env.example` on first run; to do it by hand:
@@ -158,6 +160,8 @@ _base/
 lf_compose ee masking -- up -d        # = docker compose -f _base/docker-compose.yml -f _base/docker-compose.ee.yml -f _base/docker-compose.masking.yml up -d
 lf_compose -- exec -T postgres psql …  # 베이스만
 ```
+
+CI는 위의 오버레이 조합마다 `docker compose config`로 병합하고, 병합 결과가 담아야 할 것(올바른 서비스의 올바른 변수, 마스킹 마운트, 서비스 6개)을 검사합니다. 로컬에서는 [`check_compose.sh`](../.github/scripts/check_compose.sh)로 같은 검사를 할 수 있습니다.
 
 ### `.env`는 하나
 

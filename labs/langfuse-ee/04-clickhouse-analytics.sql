@@ -11,27 +11,33 @@
 --   docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
 --     -u clickhouse --password clickhouse --multiquery < 04-clickhouse-analytics.sql
 --
--- ── TWO THINGS THAT MAKE THESE QUERIES CORRECT ──────────────────────────────
--- 1) ReplacingMergeTree: Langfuse re-ingests a row every time a trace/observation
---    is updated (e.g. a span gets its output after creation). Until a background
---    merge collapses them, BOTH versions are on disk. We therefore read with
---    `FINAL` (collapse to the newest version) and `WHERE is_deleted = 0` (drop
---    soft-deletes). Without FINAL you double-count and see half-populated rows.
--- 2) Map keys: the SDK sends usage as input_tokens/output_tokens, but Langfuse
---    normalizes them to the keys `input` / `output` / `total`. We use greatest()
---    over both spellings so the queries work regardless of SDK version.
+-- ── THREE THINGS THAT MAKE THESE QUERIES CORRECT ────────────────────────────
+-- 0) THE v4 LESSON — NO JOINS: Langfuse v4 keeps one wide row per observation in
+--    `events_core` (and the full-payload twin `events_full`), and repeats the trace
+--    attributes (trace_name, user_id, session_id, tags, metadata, environment) on
+--    EVERY row. The v3 questions "join traces to observations to get the user / the
+--    tier" disappear: filter or group by the column on the observation row itself.
+--    The trace is just the root row (`is_app_root`). Scores stay in their own table
+--    and join on scores.trace_id = events_core.trace_id.
+-- 1) ReplacingMergeTree: a row sent again with the same sort key is stored twice until
+--    a background merge collapses it. We therefore read with `FINAL` (collapse to the
+--    newest version) and `WHERE is_deleted = 0` (drop soft-deletes). Without FINAL
+--    you can double-count.
+-- 2) Cost and tokens: Langfuse prices a generation only when the usage keys match the
+--    model's price keys — send `input` / `output` (it derives `total`). Sum the
+--    `total_cost` column; `usage_details` and `cost_details` are Maps keyed by
+--    `input` / `output` / `total` (plus cache keys on some models).
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── 1) Spend & token usage by model (the bread-and-butter cost report) ───────
 SELECT
     provided_model_name                                                     AS model,
     count()                                                                 AS calls,
-    sum(greatest(usage_details['input_tokens'],  usage_details['input']))   AS input_tokens,
-    sum(greatest(usage_details['output_tokens'], usage_details['output']))  AS output_tokens,
-    round(sum(cost_details['input'] + cost_details['output']), 6)           AS total_cost_usd,
-    round(sum(cost_details['input'] + cost_details['output'])
-            / nullIf(count(), 0), 6)                                        AS avg_cost_per_call
-FROM default.observations FINAL
+    sum(usage_details['input'])                                             AS input_tokens,
+    sum(usage_details['output'])                                            AS output_tokens,
+    round(sum(total_cost), 6)                                               AS total_cost_usd,
+    round(sum(total_cost) / nullIf(count(), 0), 6)                          AS avg_cost_per_call
+FROM default.events_core FINAL
 WHERE type = 'GENERATION' AND is_deleted = 0
 GROUP BY model
 ORDER BY total_cost_usd DESC;
@@ -44,7 +50,7 @@ SELECT
     quantile(0.50)(dateDiff('millisecond', start_time, end_time))  AS p50_ms,
     quantile(0.95)(dateDiff('millisecond', start_time, end_time))  AS p95_ms,
     quantile(0.99)(dateDiff('millisecond', start_time, end_time))  AS p99_ms
-FROM default.observations FINAL
+FROM default.events_core FINAL
 WHERE type = 'GENERATION' AND is_deleted = 0 AND end_time > start_time
 GROUP BY model
 ORDER BY p95_ms DESC;
@@ -55,31 +61,46 @@ SELECT
     count()                                              AS calls,
     countIf(level = 'ERROR')                             AS errors,
     round(100.0 * countIf(level = 'ERROR') / count(), 2) AS error_pct
-FROM default.observations FINAL
+FROM default.events_core FINAL
 WHERE type = 'GENERATION' AND is_deleted = 0
 GROUP BY model
 ORDER BY error_pct DESC;
 
--- ── 4) Cost & quality by customer tier — joins traces (tags/metadata) to cost ─
---    Tags were set as ['env:…','feature:…','tier:…']; pull the tier back out.
-WITH trace_tier AS (
-    SELECT
-        id AS trace_id,
-        arrayFirst(t -> t LIKE 'tier:%', tags) AS tier_tag
-    FROM default.traces FINAL
-    WHERE is_deleted = 0
-)
+-- ── 4) Cost by customer tier — NO join: the tier rides on every observation row ─
+--    The generator set it as metadata (`tier`), which v4 stores as two parallel
+--    arrays: metadata_names / metadata_values. indexOf() finds the position; a missing
+--    key gives index 0 and therefore ''. (The same value is also in `tags`, as
+--    'tier:<x>' — arrayFirst(t -> t LIKE 'tier:%', tags) pulls it out of there.)
+--    In v3 this needed traces JOIN observations; here the GENERATION rows know their tier.
 SELECT
-    replaceOne(tt.tier_tag, 'tier:', '')                       AS tier,
-    count(DISTINCT o.trace_id)                                 AS traces,
-    round(sum(o.cost_details['input'] + o.cost_details['output']), 6) AS cost_usd,
-    round(sum(o.cost_details['input'] + o.cost_details['output'])
-            / nullIf(count(DISTINCT o.trace_id), 0), 6)        AS cost_per_trace
-FROM default.observations AS o FINAL
-INNER JOIN trace_tier AS tt ON tt.trace_id = o.trace_id
-WHERE o.type = 'GENERATION' AND o.is_deleted = 0 AND tt.tier_tag != ''
+    metadata_values[indexOf(metadata_names, 'tier')]                  AS tier,
+    count(DISTINCT trace_id)                                          AS traces,
+    round(sum(total_cost), 6)                                         AS cost_usd,
+    round(sum(total_cost) / nullIf(count(DISTINCT trace_id), 0), 6)   AS cost_per_trace
+FROM default.events_core FINAL
+WHERE type = 'GENERATION' AND is_deleted = 0 AND tier != ''
 GROUP BY tier
 ORDER BY cost_usd DESC;
+
+-- ── 4b) …and quality by tier — the one join v4 still needs: scores → events ──
+--    A score row points at its trace with scores.trace_id; take the tier from the
+--    trace's ROOT row (is_app_root) so each trace counts once.
+SELECT
+    t.tier                              AS tier,
+    count()                             AS votes,
+    round(100.0 * avg(s.value), 1)      AS thumbs_up_pct
+FROM (
+    SELECT trace_id, metadata_values[indexOf(metadata_names, 'tier')] AS tier
+    FROM default.events_core FINAL
+    WHERE is_deleted = 0 AND is_app_root AND tier != ''
+) AS t
+INNER JOIN (
+    SELECT trace_id, value
+    FROM default.scores FINAL
+    WHERE is_deleted = 0 AND name = 'user-thumbs'
+) AS s ON s.trace_id = t.trace_id
+GROUP BY tier
+ORDER BY tier;
 
 -- ── 5) User satisfaction from scores — thumbs-up rate + grounding ────────────
 SELECT
@@ -91,29 +112,27 @@ FROM default.scores FINAL
 WHERE is_deleted = 0;
 
 -- ── 6) Per-user spend & engagement leaderboard (cost attribution) ────────────
+--    One pass over events_core, no join: user_id is on every row. A request is a
+--    root row (is_app_root); cost is the sum over the GENERATION rows.
 SELECT
-    t.user_id,
-    count(DISTINCT t.session_id)                               AS sessions,
-    count(DISTINCT t.id)                                       AS requests,
-    round(sum(o.cost_details['input'] + o.cost_details['output']), 6) AS cost_usd
-FROM default.traces AS t FINAL
-INNER JOIN default.observations AS o FINAL
-    ON o.trace_id = t.id AND o.type = 'GENERATION' AND o.is_deleted = 0
-WHERE t.is_deleted = 0
-GROUP BY t.user_id
+    user_id,
+    uniqExact(session_id)                                      AS sessions,
+    countIf(is_app_root)                                       AS requests,
+    round(sumIf(total_cost, type = 'GENERATION'), 6)           AS cost_usd
+FROM default.events_core FINAL
+WHERE is_deleted = 0 AND user_id != ''
+GROUP BY user_id
 ORDER BY cost_usd DESC
 LIMIT 10;
 
 -- ── 7) Daily trend — traces, unique users, spend (time-series over partitions)
 SELECT
-    toDate(t.timestamp)                                       AS day,
-    count(DISTINCT t.id)                                      AS traces,
-    uniqExact(t.user_id)                                      AS users,
-    round(sum(o.cost_details['input'] + o.cost_details['output']), 6) AS cost_usd
-FROM default.traces AS t FINAL
-LEFT JOIN default.observations AS o FINAL
-    ON o.trace_id = t.id AND o.type = 'GENERATION' AND o.is_deleted = 0
-WHERE t.is_deleted = 0
+    toDate(start_time)                                         AS day,
+    countIf(is_app_root)                                       AS traces,
+    uniqExactIf(user_id, user_id != '')                        AS users,
+    round(sumIf(total_cost, type = 'GENERATION'), 6)           AS cost_usd
+FROM default.events_core FINAL
+WHERE is_deleted = 0
 GROUP BY day
 ORDER BY day;
 
@@ -122,8 +141,8 @@ SELECT
     turns,
     count()             AS sessions
 FROM (
-    SELECT session_id, count(DISTINCT id) AS turns
-    FROM default.traces FINAL
+    SELECT session_id, countIf(is_app_root) AS turns
+    FROM default.events_core FINAL
     WHERE is_deleted = 0 AND session_id != ''
     GROUP BY session_id
 )

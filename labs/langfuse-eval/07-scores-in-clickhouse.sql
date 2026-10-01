@@ -9,6 +9,11 @@
 -- Langfuse tables are ReplacingMergeTree → read with FINAL + WHERE is_deleted = 0
 -- to avoid double-counting un-merged row versions (learned in the sibling lab).
 --
+-- Langfuse v4: scores stay in `scores`, but there is no `traces` table to join them to
+-- any more. A trace is the ROOT ROW of `events_core` (is_app_root), and the trace
+-- attributes — tags, user, session, metadata — sit on every event row. A score points at
+-- its trace with scores.trace_id = events_core.trace_id.
+--
 -- Run against the shared stack in _base/ (container name is fixed by its compose project):
 --   docker exec -i langfuse-hols-clickhouse-1 \
 --     clickhouse-client -u clickhouse --password clickhouse --multiquery \
@@ -57,18 +62,23 @@ ORDER BY name;
 
 SELECT '── 4) Experiment A/B: avg score per metric, split by prompt variant ──' AS section;
 -- Evaluator scores don't carry the dataset-run id in ClickHouse, but lab 04 tags
--- each experiment trace with its variant — so a scores → traces JOIN reconstructs
--- the prompt-v1 vs prompt-v2 comparison right here in ClickHouse.
+-- each experiment trace with its variant (propagate_attributes around run_experiment,
+-- so the tag is on the root row) — a scores → root-row JOIN reconstructs the
+-- prompt-v1 vs prompt-v2 comparison right here in ClickHouse.
+-- (v4 also stamps experiment_id / experiment_name on every event row — another key.)
 SELECT
-    multiIf(has(t.tags, 'variant:v1'), 'prompt-v1',
-            has(t.tags, 'variant:v2'), 'prompt-v2', 'other') AS variant,
+    multiIf(has(e.tags, 'variant:v1'), 'prompt-v1',
+            has(e.tags, 'variant:v2'), 'prompt-v2', 'other') AS variant,
     s.name                    AS metric,
     count()                   AS n,
     round(avg(s.value), 3)    AS avg_value
 FROM scores AS s FINAL
-INNER JOIN traces AS t FINAL ON s.trace_id = t.id
-WHERE s.is_deleted = 0 AND t.is_deleted = 0
-  AND has(t.tags, 'eval-experiment')
+INNER JOIN (
+    SELECT trace_id, tags
+    FROM events_core FINAL
+    WHERE is_deleted = 0 AND is_app_root AND has(tags, 'eval-experiment')
+) AS e ON s.trace_id = e.trace_id
+WHERE s.is_deleted = 0
   AND s.name IN ('keyword-recall', 'answered', 'llm-judge-correctness')
 GROUP BY variant, metric
 ORDER BY metric, variant;
@@ -102,5 +112,5 @@ ORDER BY day;
 -- NOTE: per-trace HUMAN vs LLM-JUDGE agreement needs both on the SAME traces.
 -- Offline, the judge scores dataset-experiment traces while humans review seed
 -- traces. To align them, run a MANAGED LLM-as-a-judge evaluator on production
--- traces (see 05-llm-as-a-judge.md) — those scores (source='EVAL') then sit on
+-- observations (see 05-llm-as-a-judge.md) — those scores (source='EVAL') then sit on
 -- the same traces your annotators review (source='ANNOTATION').

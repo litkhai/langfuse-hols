@@ -26,6 +26,24 @@ jobs:
       - name: Parse-check tracked files
         run: ./.github/scripts/check_syntax.sh
 
+  compose:
+    name: compose overlay merge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Merge every overlay set and assert what it must contain
+        # No image is pulled and nothing starts: `docker compose config` only resolves the merge.
+        run: ./.github/scripts/check_compose.sh
+
+  sql:
+    name: SQL parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every tracked .sql file with clickhouse format
+        # Pulls the ClickHouse image the base compose resolves. Syntax only, not names.
+        run: ./.github/scripts/check_sql.sh
+
   secrets:
     name: secret scan
     runs-on: ubuntu-latest

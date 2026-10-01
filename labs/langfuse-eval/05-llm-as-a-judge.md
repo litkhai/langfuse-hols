@@ -20,7 +20,7 @@ This is OSS (no license key), but it needs a judge model configured.
 1. **Add a judge model** — UI → **Settings → LLM Connections** → add an OpenAI or
    Anthropic key. The model **must support structured output** (e.g. `gpt-4o-mini`,
    `gpt-4o`) — the judge returns structured verdicts.
-2. That key lives in Langfuse (Postgres, encrypted), *not* in this lab's `.env`.
+2. That key lives in Langfuse (Postgres, encrypted), *not* in `_base/.env`.
 
 ### Create a managed evaluator (UI — recommended)
 1. UI → **Evaluators** (a.k.a. Evaluation → LLM-as-a-judge) → **+ New evaluator**.
@@ -41,7 +41,7 @@ contract before scripting against it:
 
 ```bash
 export LANGFUSE_HOST=http://localhost:3000
-export LANGFUSE_PUBLIC_KEY=pk-lf-...   # from this lab's .env
+export LANGFUSE_PUBLIC_KEY=pk-lf-...   # from _base/.env
 export LANGFUSE_SECRET_KEY=sk-lf-...
 npx langfuse-cli api __schema | grep -i eval     # find eval resources
 npx langfuse-cli api <resource> --help           # inspect actions/args
@@ -66,7 +66,7 @@ Toxicity · Helpfulness** (+ Ragas) — 를 판정 모델로 실행해, 매칭�
 ### 최초 설정 (self-hosted)
 1. **판정 모델 등록** — UI → **Settings → LLM Connections** 에서 OpenAI/Anthropic 키 추가.
    **structured output 지원 모델** 필수(`gpt-4o-mini`, `gpt-4o` 등).
-2. 이 키는 Langfuse(Postgres, 암호화)에 저장되며 이 랩의 `.env`가 아닙니다.
+2. 이 키는 Langfuse(Postgres, 암호화)에 저장되며 `_base/.env`가 아닙니다.
 
 ### 관리형 평가자 생성 (UI 권장)
 1. UI → **Evaluators** → **+ New evaluator**.

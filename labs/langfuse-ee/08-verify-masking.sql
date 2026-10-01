@@ -8,7 +8,7 @@
 -- and the [REDACTED_*] placeholders must be PRESENT.
 --
 -- Run:
---   docker compose exec -T clickhouse clickhouse-client \
+--   docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
 --     -u clickhouse --password clickhouse --multiquery < 08-verify-masking.sql
 -- ════════════════════════════════════════════════════════════════════════════
 

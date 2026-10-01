@@ -18,8 +18,7 @@ Differences from the core repository:
 
 ## Rules for this repository
 
-- `labs/langfuse-eval` imports the trace generator from `labs/langfuse-ee` and shares its
-  compose stack. They are siblings on purpose — never move one without the other.
+- Both labs run on the shared stack in `_base/` (decision D8, #7). Lab-specific code stays in its lab; anything a second lab needs moves to `_base/`.
 - Verification lines name Langfuse, the Python SDK and ClickHouse versions
   (e.g. *Langfuse v3.197.1 / SDK 3.7.0 / CH 25.11*).
 - `labs/langfuse-ee/08-generate-pii-traces.py` fabricates PII on purpose and is allowlisted

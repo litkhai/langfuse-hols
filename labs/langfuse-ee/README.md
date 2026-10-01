@@ -48,26 +48,33 @@ Most Langfuse tutorials stop at "send a trace to Langfuse Cloud." This one is fo
 ```
 langfuse-ee/
 ├── README.md                    # This file
-├── .env.example                 # Secrets, headless-init, EE license key, SDK keys
-├── docker-compose.yml           # OSS stack: web · worker · postgres · clickhouse · redis · minio
-├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
-├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
-├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
-├── 01-up.sh                     # Bring the stack up, wait for health, print credentials
-├── 02-generate-traces.py        # Python SDK v3+: nested spans/generations, sessions, scores
+├── 01-up.sh                     # Wrapper → _base/bin/up.sh: stack up, wait for health, print credentials
+├── 02-generate-traces.py        # Wrapper → _base/bin/seed_traces.py: nested spans/generations, sessions, scores
 ├── 03-clickhouse-explore.sql    # Discover the traces/observations/scores tables in ClickHouse
 ├── 04-clickhouse-analytics.sql  # Cost / latency / quality analytics straight on ClickHouse
 ├── 05-ee-activate.sh            # Restart with the license key, verify EE is active
 ├── 06-ee-rbac-scim.sh           # Org/project provisioning, SCIM users, project-level RBAC
 ├── 07-ee-audit-retention.sh     # Data-retention policy + read the audit log
 ├── 08-ee-data-masking.sh        # Server-side masking, PROVEN absent in ClickHouse
-│   ├── masking_service.py       #   ↳ tiny stdlib masking-callback sidecar
 │   ├── 08-generate-pii-traces.py#   ↳ send traces containing sentinel secrets/PII
 │   └── 08-verify-masking.sql    #   ↳ ClickHouse proof: raw secrets gone, [REDACTED_*] present
 ├── 09-ee-protected-prompts.sh   # Versioned prompts + deployment labels + protected labels
 ├── 10-ee-instance-governance.sh # UI customization + organization-creators allowlist
 ├── 11-ee-parquet-export.sh      # Blob-storage Parquet export + ClickHouse s3() round-trip
-└── 99-cleanup.sh                # Tear the stack down (--purge to wipe volumes)
+└── 99-cleanup.sh                # Wrapper → _base/bin/down.sh: tear the stack down (--purge to wipe volumes)
+```
+
+The stack itself is **shared with the other labs** and lives in [`_base/`](../../_base/README.md) — compose file, EE / masking / governance overlays, the masking sidecar, `.env.example`, and `bin/up.sh` · `bin/check.sh` · `bin/down.sh`:
+
+```
+_base/
+├── .env.example                 # Secrets, headless-init, EE license key, SDK keys (copy to _base/.env)
+├── docker-compose.yml           # OSS stack: web · worker · postgres · clickhouse · redis · minio
+├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
+├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
+├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
+├── masking/masking_service.py   # Lab 08: tiny stdlib masking-callback sidecar
+└── bin/                         # up.sh · check.sh · down.sh · seed_traces.py
 ```
 
 ### ✅ Prerequisites
@@ -80,12 +87,14 @@ langfuse-ee/
 ### 🚀 Quick Start (OSS track)
 
 ```bash
+# from the repository root
+cp _base/.env.example _base/.env   # edit the # CHANGEME secrets for anything non-local
 cd labs/langfuse-ee
-cp .env.example .env            # edit the # CHANGEME secrets for anything non-local
 
 # 1) Deploy. First boot runs Postgres + ClickHouse migrations (~2-3 min).
 ./01-up.sh
 #    → http://localhost:3000  (login: admin@example.com / workshop-admin-pw)
+../../_base/bin/check.sh     # optional: containers healthy, migrations finished, SDK keys valid
 
 # 2) Push ~40 realistic traces (runs fully offline; no LLM key needed)
 python -m venv .venv && source .venv/bin/activate
@@ -93,19 +102,21 @@ pip install "langfuse>=3" openai
 python 02-generate-traces.py
 
 # 3) Explore Langfuse's ClickHouse backend
-docker compose exec -T clickhouse clickhouse-client -u clickhouse --password clickhouse \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
   --multiquery < 03-clickhouse-explore.sql
 
 # 4) Run LLM-observability analytics directly on ClickHouse
-docker compose exec -T clickhouse clickhouse-client -u clickhouse --password clickhouse \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
   --multiquery < 04-clickhouse-analytics.sql
 ```
+
+> The container name is fixed by the compose project name (`langfuse-hols`, set in `_base/docker-compose.yml`), so it no longer depends on the directory the stack was started from.
 
 ### 🏢 Enterprise Track
 
 ```bash
-# Put your key in .env:   LANGFUSE_EE_LICENSE_KEY=<your-key>
-#                         ADMIN_API_KEY=<any-strong-random-string>
+# Put your key in _base/.env:   LANGFUSE_EE_LICENSE_KEY=<your-key>
+#                               ADMIN_API_KEY=<any-strong-random-string>
 
 ./05-ee-activate.sh          # redeploy with the EE overlay; verify license is active
 ./06-ee-rbac-scim.sh         # create org → org key → project → SCIM users → RBAC roles
@@ -139,7 +150,7 @@ Every Enterprise entitlement listed on the [Langfuse license-key page](https://l
 
 #### 01 — Deploy the stack ([01-up.sh](01-up.sh))
 
-Brings up the six containers from [docker-compose.yml](docker-compose.yml) and blocks until `GET /api/public/health` returns OK. The compose file uses **headless initialization** (`LANGFUSE_INIT_*` in `.env`) to auto-create the first organization, project, user, and API keys on boot — so there are **no UI click-ops** before you can send data. Key things to notice: ClickHouse runs single-node (`CLICKHOUSE_CLUSTER_ENABLED=false`), all backends run in **UTC** (a hard Langfuse requirement), and MinIO provides S3-compatible blob storage.
+Brings up the six containers from [docker-compose.yml](../../_base/docker-compose.yml) (via the shared [`_base/bin/up.sh`](../../_base/bin/up.sh)) and blocks until `GET /api/public/health` returns OK. The compose file uses **headless initialization** (`LANGFUSE_INIT_*` in `_base/.env`) to auto-create the first organization, project, user, and API keys on boot — so there are **no UI click-ops** before you can send data. Key things to notice: ClickHouse runs single-node (`CLICKHOUSE_CLUSTER_ENABLED=false`), all backends run in **UTC** (a hard Langfuse requirement), and MinIO provides S3-compatible blob storage.
 
 #### 02 — Generate traces ([02-generate-traces.py](02-generate-traces.py))
 
@@ -180,7 +191,7 @@ The SA payoff: the same questions the Langfuse UI answers, expressed as plain Cl
 
 #### 05 — Activate Enterprise ([05-ee-activate.sh](05-ee-activate.sh))
 
-Redeploys `langfuse-web` + `langfuse-worker` with [docker-compose.ee.yml](docker-compose.ee.yml), which injects `LANGFUSE_EE_LICENSE_KEY` into **both** containers (plus `ADMIN_API_KEY`). It verifies activation by hitting the **Instance Management API** (`/api/admin/organizations`) — which only responds when a valid license is present.
+Redeploys `langfuse-web` + `langfuse-worker` with [docker-compose.ee.yml](../../_base/docker-compose.ee.yml), which injects `LANGFUSE_EE_LICENSE_KEY` into **both** containers (plus `ADMIN_API_KEY`). It verifies activation by hitting the **Instance Management API** (`/api/admin/organizations`) — which only responds when a valid license is present.
 
 #### 06 — RBAC & SCIM ([06-ee-rbac-scim.sh](06-ee-rbac-scim.sh))
 
@@ -202,7 +213,7 @@ Roles: `OWNER` (all) · `ADMIN` (settings + members) · `MEMBER` (view + create 
 
 #### 08 — Server-Side Data Masking ([08-ee-data-masking.sh](08-ee-data-masking.sh))
 
-The flagship **ClickHouse-verifiable** EE demo. A tiny masking-callback sidecar ([masking_service.py](masking_service.py), stdlib only) is wired to the worker via [docker-compose.masking.yml](docker-compose.masking.yml) as `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`. Langfuse POSTs each OTLP-ingested trace to it; the service redacts anything matching a secret/PII pattern (API keys, credit cards, e-mails, KR 주민등록번호) and returns the same structure — **before** the trace is persisted.
+The flagship **ClickHouse-verifiable** EE demo. A tiny masking-callback sidecar ([masking_service.py](../../_base/masking/masking_service.py), stdlib only) is wired to the worker via [docker-compose.masking.yml](../../_base/docker-compose.masking.yml) as `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`. Langfuse POSTs each OTLP-ingested trace to it; the service redacts anything matching a secret/PII pattern (API keys, credit cards, e-mails, KR 주민등록번호) and returns the same structure — **before** the trace is persisted.
 
 [08-generate-pii-traces.py](08-generate-pii-traces.py) sends traces containing four sentinel secrets, then [08-verify-masking.sql](08-verify-masking.sql) proves the payoff **directly on ClickHouse**:
 
@@ -221,7 +232,7 @@ Prompt governance. The script creates a versioned prompt, moves the `production`
 
 #### 10 — Instance Governance ([10-ee-instance-governance.sh](10-ee-instance-governance.sh))
 
-Two instance-level controls, both env-driven via [docker-compose.governance.yml](docker-compose.governance.yml): **UI Customization** (`LANGFUSE_UI_LOGO_*`, `LANGFUSE_UI_FEEDBACK/DOCUMENTATION/SUPPORT_HREF` — co-brand + point help links inward) and the **Organization-Creators allowlist** (`LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` — only listed emails may create new orgs). The script redeploys `langfuse-web`, then `exec … env | grep`s the running container to **prove the vars are live**, and prints a UI verification checklist.
+Two instance-level controls, both env-driven via [docker-compose.governance.yml](../../_base/docker-compose.governance.yml): **UI Customization** (`LANGFUSE_UI_LOGO_*`, `LANGFUSE_UI_FEEDBACK/DOCUMENTATION/SUPPORT_HREF` — co-brand + point help links inward) and the **Organization-Creators allowlist** (`LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` — only listed emails may create new orgs). The script redeploys `langfuse-web`, then `exec … env | grep`s the running container to **prove the vars are live**, and prints a UI verification checklist.
 
 #### 11 — Parquet Export ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
 
@@ -352,26 +363,33 @@ Langfuse v3는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사
 ```
 langfuse-ee/
 ├── README.md                    # 이 문서
-├── .env.example                 # 시크릿, headless-init, EE 라이선스 키, SDK 키
-├── docker-compose.yml           # OSS 스택: web · worker · postgres · clickhouse · redis · minio
-├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
-├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
-├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
-├── 01-up.sh                     # 스택 기동, 헬스 대기, 자격증명 출력
-├── 02-generate-traces.py        # Python SDK v3+: 중첩 span/generation, 세션, 스코어
+├── 01-up.sh                     # 래퍼 → _base/bin/up.sh: 스택 기동, 헬스 대기, 자격증명 출력
+├── 02-generate-traces.py        # 래퍼 → _base/bin/seed_traces.py: 중첩 span/generation, 세션, 스코어
 ├── 03-clickhouse-explore.sql    # ClickHouse의 traces/observations/scores 테이블 탐색
 ├── 04-clickhouse-analytics.sql  # ClickHouse에서 직접 비용/지연/품질 분석
 ├── 05-ee-activate.sh            # 라이선스 키로 재기동, EE 활성화 검증
 ├── 06-ee-rbac-scim.sh           # 조직/프로젝트 프로비저닝, SCIM 사용자, 프로젝트 단위 RBAC
 ├── 07-ee-audit-retention.sh     # 데이터 보존 정책 + 감사 로그 조회
 ├── 08-ee-data-masking.sh        # 서버측 마스킹 → ClickHouse에서 부재 증명
-│   ├── masking_service.py       #   ↳ stdlib 전용 초경량 마스킹 콜백 사이드카
 │   ├── 08-generate-pii-traces.py#   ↳ 센티넬 시크릿/PII가 든 trace 전송
 │   └── 08-verify-masking.sql    #   ↳ ClickHouse 증명: 원문 시크릿 부재, [REDACTED_*] 존재
 ├── 09-ee-protected-prompts.sh   # 버전 관리 프롬프트 + 배포 라벨 + 보호된 라벨
 ├── 10-ee-instance-governance.sh # UI 커스터마이징 + 조직 생성 허용목록
 ├── 11-ee-parquet-export.sh      # Blob 스토리지 Parquet 반출 + ClickHouse s3() 라운드트립
-└── 99-cleanup.sh                # 스택 종료 (--purge 로 볼륨까지 삭제)
+└── 99-cleanup.sh                # 래퍼 → _base/bin/down.sh: 스택 종료 (--purge 로 볼륨까지 삭제)
+```
+
+스택 자체는 **다른 랩과 공유**하며 [`_base/`](../../_base/README.md)에 있습니다 — compose 파일, EE / 마스킹 / 거버넌스 오버레이, 마스킹 사이드카, `.env.example`, 그리고 `bin/up.sh` · `bin/check.sh` · `bin/down.sh`:
+
+```
+_base/
+├── .env.example                 # 시크릿, headless-init, EE 라이선스 키, SDK 키 (_base/.env 로 복사)
+├── docker-compose.yml           # OSS 스택: web · worker · postgres · clickhouse · redis · minio
+├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
+├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
+├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
+├── masking/masking_service.py   # 랩 08: stdlib 전용 초경량 마스킹 콜백 사이드카
+└── bin/                         # up.sh · check.sh · down.sh · seed_traces.py
 ```
 
 ### ✅ 사전 준비물
@@ -384,12 +402,14 @@ langfuse-ee/
 ### 🚀 빠른 시작 (OSS 트랙)
 
 ```bash
+# 저장소 루트에서
+cp _base/.env.example _base/.env   # 로컬 외 용도면 # CHANGEME 시크릿을 수정
 cd labs/langfuse-ee
-cp .env.example .env            # 로컬 외 용도면 # CHANGEME 시크릿을 수정
 
 # 1) 배포. 첫 기동 시 Postgres + ClickHouse 마이그레이션 (~2-3분)
 ./01-up.sh
 #    → http://localhost:3000  (로그인: admin@example.com / workshop-admin-pw)
+../../_base/bin/check.sh     # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
 
 # 2) 현실적인 trace 약 40건 적재 (완전 오프라인; LLM 키 불필요)
 python -m venv .venv && source .venv/bin/activate
@@ -397,19 +417,21 @@ pip install "langfuse>=3" openai
 python 02-generate-traces.py
 
 # 3) Langfuse의 ClickHouse 백엔드 탐색
-docker compose exec -T clickhouse clickhouse-client -u clickhouse --password clickhouse \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
   --multiquery < 03-clickhouse-explore.sql
 
 # 4) ClickHouse에서 직접 LLM 관측 분석 실행
-docker compose exec -T clickhouse clickhouse-client -u clickhouse --password clickhouse \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
   --multiquery < 04-clickhouse-analytics.sql
 ```
+
+> 컨테이너 이름은 compose 프로젝트 이름(`langfuse-hols`, `_base/docker-compose.yml`에 고정)으로 정해지므로, 스택을 어느 디렉터리에서 띄웠는지에 더 이상 좌우되지 않습니다.
 
 ### 🏢 Enterprise 트랙
 
 ```bash
-# .env 에 키 입력:   LANGFUSE_EE_LICENSE_KEY=<발급받은 키>
-#                    ADMIN_API_KEY=<임의의 강한 랜덤 문자열>
+# _base/.env 에 키 입력:   LANGFUSE_EE_LICENSE_KEY=<발급받은 키>
+#                          ADMIN_API_KEY=<임의의 강한 랜덤 문자열>
 
 ./05-ee-activate.sh          # EE 오버레이로 재배포; 라이선스 활성 검증
 ./06-ee-rbac-scim.sh         # 조직 → 조직 키 → 프로젝트 → SCIM 사용자 → RBAC 역할
@@ -443,7 +465,7 @@ docker compose exec -T clickhouse clickhouse-client -u clickhouse --password cli
 
 #### 01 — 스택 배포
 
-[docker-compose.yml](docker-compose.yml)의 6개 컨테이너를 띄우고 `GET /api/public/health`가 OK를 반환할 때까지 대기합니다. compose 파일은 **headless 초기화**(`.env`의 `LANGFUSE_INIT_*`)로 최초 조직·프로젝트·사용자·API 키를 부팅 시 자동 생성하므로, 데이터 전송 전 **UI 클릭 작업이 전혀 필요 없습니다**. 주목할 점: ClickHouse는 단일 노드(`CLICKHOUSE_CLUSTER_ENABLED=false`), 모든 백엔드는 **UTC**(Langfuse 필수 요건), MinIO가 S3 호환 blob 스토리지를 제공.
+[docker-compose.yml](../../_base/docker-compose.yml)의 6개 컨테이너를 (공유 [`_base/bin/up.sh`](../../_base/bin/up.sh)로) 띄우고 `GET /api/public/health`가 OK를 반환할 때까지 대기합니다. compose 파일은 **headless 초기화**(`_base/.env`의 `LANGFUSE_INIT_*`)로 최초 조직·프로젝트·사용자·API 키를 부팅 시 자동 생성하므로, 데이터 전송 전 **UI 클릭 작업이 전혀 필요 없습니다**. 주목할 점: ClickHouse는 단일 노드(`CLICKHOUSE_CLUSTER_ENABLED=false`), 모든 백엔드는 **UTC**(Langfuse 필수 요건), MinIO가 S3 호환 blob 스토리지를 제공.
 
 #### 02 — Trace 생성
 
@@ -484,7 +506,7 @@ SA 관점의 핵심: Langfuse UI가 답하는 질문들을 순수 ClickHouse SQL
 
 #### 05 — Enterprise 활성화
 
-[docker-compose.ee.yml](docker-compose.ee.yml)로 `langfuse-web` + `langfuse-worker`를 재배포하여 `LANGFUSE_EE_LICENSE_KEY`를 **양쪽** 컨테이너에 주입합니다(+ `ADMIN_API_KEY`). 유효한 라이선스가 있을 때만 응답하는 **Instance Management API**(`/api/admin/organizations`)로 활성화를 검증합니다.
+[docker-compose.ee.yml](../../_base/docker-compose.ee.yml)로 `langfuse-web` + `langfuse-worker`를 재배포하여 `LANGFUSE_EE_LICENSE_KEY`를 **양쪽** 컨테이너에 주입합니다(+ `ADMIN_API_KEY`). 유효한 라이선스가 있을 때만 응답하는 **Instance Management API**(`/api/admin/organizations`)로 활성화를 검증합니다.
 
 #### 06 — RBAC & SCIM
 
@@ -506,7 +528,7 @@ ADMIN_API_KEY → 조직 생성 → 조직 범위 API 키 발급
 
 #### 08 — 서버측 데이터 마스킹 ([08-ee-data-masking.sh](08-ee-data-masking.sh))
 
-**ClickHouse로 검증 가능한** 핵심 EE 데모입니다. 초경량 마스킹 콜백 사이드카([masking_service.py](masking_service.py), stdlib 전용)를 [docker-compose.masking.yml](docker-compose.masking.yml)로 worker의 `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`에 연결합니다. Langfuse는 OTLP로 인제스트된 각 trace를 콜백에 POST하고, 콜백은 시크릿/PII 패턴(API 키, 신용카드, 이메일, 주민등록번호)을 리댁션한 뒤 동일 구조로 반환합니다 — **저장 이전에** 일어납니다.
+**ClickHouse로 검증 가능한** 핵심 EE 데모입니다. 초경량 마스킹 콜백 사이드카([masking_service.py](../../_base/masking/masking_service.py), stdlib 전용)를 [docker-compose.masking.yml](../../_base/docker-compose.masking.yml)로 worker의 `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`에 연결합니다. Langfuse는 OTLP로 인제스트된 각 trace를 콜백에 POST하고, 콜백은 시크릿/PII 패턴(API 키, 신용카드, 이메일, 주민등록번호)을 리댁션한 뒤 동일 구조로 반환합니다 — **저장 이전에** 일어납니다.
 
 [08-generate-pii-traces.py](08-generate-pii-traces.py)가 4개 센티넬 시크릿이 든 trace를 보내고, [08-verify-masking.sql](08-verify-masking.sql)이 **ClickHouse에서 직접** 결과를 증명합니다:
 
@@ -525,7 +547,7 @@ countIf(position(toString(input), '[REDACTED_') > 0)  AS masked_observation_rows
 
 #### 10 — 인스턴스 거버넌스 ([10-ee-instance-governance.sh](10-ee-instance-governance.sh))
 
-두 가지 인스턴스 레벨 제어를 [docker-compose.governance.yml](docker-compose.governance.yml)로 env 주입: **UI 커스터마이징**(`LANGFUSE_UI_LOGO_*`, `LANGFUSE_UI_FEEDBACK/DOCUMENTATION/SUPPORT_HREF` — 코브랜딩 + 도움말 링크 내부화)과 **조직 생성 허용목록**(`LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` — 목록의 이메일만 새 조직 생성 가능). 스크립트는 `langfuse-web`를 재배포한 뒤 실행 중 컨테이너에 `exec … env | grep`으로 **변수가 실제 주입되었음을 증명**하고, UI 검증 체크리스트를 출력합니다.
+두 가지 인스턴스 레벨 제어를 [docker-compose.governance.yml](../../_base/docker-compose.governance.yml)로 env 주입: **UI 커스터마이징**(`LANGFUSE_UI_LOGO_*`, `LANGFUSE_UI_FEEDBACK/DOCUMENTATION/SUPPORT_HREF` — 코브랜딩 + 도움말 링크 내부화)과 **조직 생성 허용목록**(`LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` — 목록의 이메일만 새 조직 생성 가능). 스크립트는 `langfuse-web`를 재배포한 뒤 실행 중 컨테이너에 `exec … env | grep`으로 **변수가 실제 주입되었음을 증명**하고, UI 검증 체크리스트를 출력합니다.
 
 #### 11 — Parquet 반출 ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
 

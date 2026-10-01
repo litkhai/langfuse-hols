@@ -19,9 +19,12 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-# ── .env loading (same file docker-compose / the sibling lab read) ────────────
+# ── .env loading (_base/.env: the one file docker-compose and every lab read) ─
+BASE_ENV = os.path.normpath(os.path.join(HERE, "..", "..", "_base", ".env"))
+
+
 def load_env(path: str | None = None) -> None:
-    path = path or os.path.join(HERE, ".env")
+    path = path or BASE_ENV
     if not os.path.exists(path):
         return
     with open(path) as fh:
@@ -49,8 +52,8 @@ def client():
     lf = get_client()
     if not lf.auth_check():
         raise SystemExit(
-            "✗ Auth check failed — is the Langfuse stack up (sibling lab "
-            "`../langfuse-ee/01-up.sh`) and are LANGFUSE_* keys set in .env?"
+            "✗ Auth check failed — is the Langfuse stack up (`_base/bin/up.sh`, "
+            "check with `_base/bin/check.sh`) and are LANGFUSE_* keys set in _base/.env?"
         )
     return lf
 

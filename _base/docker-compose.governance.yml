@@ -3,10 +3,11 @@
 #
 #  Both controls are env-var driven and license-gated. Injected into langfuse-web.
 #  Layer on top of base + EE (10-ee-instance-governance.sh does this):
-#    docker compose -f docker-compose.yml -f docker-compose.ee.yml \
-#                   -f docker-compose.governance.yml up -d
+#    docker compose -f _base/docker-compose.yml -f _base/docker-compose.ee.yml \
+#                   -f _base/docker-compose.governance.yml up -d
+#  or, from a lab script:  lf_compose ee governance -- up -d      (see _base/lib/env.sh)
 #
-#  Every value has a workshop default and is overridable from .env.
+#  Every value has a workshop default and is overridable from _base/.env.
 #  Docs: https://langfuse.com/self-hosting/administration/ui-customization
 #        https://langfuse.com/self-hosting/administration/organization-creators
 # ─────────────────────────────────────────────────────────────────────────────

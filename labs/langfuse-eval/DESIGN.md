@@ -3,6 +3,7 @@
 > 상태: **구현 완료 · 2026-07-26 end-to-end 검증** — 최신/권위 있는 검증 결과는 [README.md](README.md) 참조. (이 문서는 설계 근거 기록용으로 유지)
 > 작성일: 2026-07-25 · 작성자: Ken Lee (ClickHouse SA)
 > 자매 랩: [`labs/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
+> 참고(#7): 스택·`.env`·trace 생성기는 두 랩이 공유하는 [`_base/`](../../_base/README.md)로 옮겨졌다. 아래 본문의 해당 경로는 현재 위치로 고쳐 두었다.
 
 ---
 
@@ -16,7 +17,7 @@
 > **프롬프트를 버전 관리하고 → 골든 데이터셋을 만들고 → 실험으로 버전/모델을 비교하고 → 자동·휴먼 평가로 점수를 매기고 → 그 점수가 ClickHouse에 어떻게 쌓여 분석되는지 본다.**
 
 ### 기존 랩과의 관계
-- **스택 재사용**: 새 컨테이너를 띄우지 않는다. `labs/langfuse-ee/`의 실행 중인 스택(같은 `.env`, 같은 포트 3000)을 그대로 쓴다. README 상단에 "먼저 자매 랩의 `01-up.sh`로 스택을 올려라"를 명시.
+- **스택 재사용**: 새 컨테이너를 띄우지 않는다. 공유 스택 [`_base/`](../../_base/README.md)(같은 `_base/.env`, 같은 포트 3000)을 그대로 쓴다. README 상단에 "먼저 `_base/bin/up.sh`로 스택을 올려라"를 명시.
 - **관측 vs 품질**: 관측(trace가 어떻게 흐르나)은 기존 랩, 품질(그 trace를 어떻게 평가/개선하나)은 이 랩. 디렉터리를 분리해 서사가 섞이지 않게 한다.
 
 ### 라이선스 (검증 완료)
@@ -55,9 +56,8 @@ Langfuse 라이선스 페이지 기준, 이 랩이 다루는 기능은 **전부 
 labs/langfuse-eval/
 ├── README.md                    # 한/영 bilingual (기존 랩 골격 재사용)
 ├── DESIGN.md                    # 이 문서 (검토 후 삭제 or docs/로 이동)
-├── .env.example                 # 자매 랩 .env 재사용 + 평가용 키 추가 (§8)
-├── _env.sh                      # 자매 랩에서 복사 (자격증명 로딩 헬퍼)
-├── 01-seed-traces.py            # 기존 02-generate-traces.py 재사용 래퍼 — 평가 대상 trace 확보
+│   (.env.example / _env.sh 는 두지 않는다 — 공유 스택의 _base/.env.example · _base/lib/env.sh 사용, 평가용 키는 _base/.env.example 에 병합 (§6))
+├── 01-seed-traces.py            # 공유 생성기 _base/bin/seed_traces.py 재사용 래퍼 — 평가 대상 trace 확보
 ├── 02-prompt-management.py      # 프롬프트 생성·버전·라벨·compile·generation 링크
 ├── 03-datasets.py               # 골든 테스트셋 구축 (input + expected_output)
 ├── 04-experiments.py            # run_experiment: prompt/model 비교 + code evaluator, run 비교 출력
@@ -76,12 +76,12 @@ labs/langfuse-eval/
 각 스크립트는 **(a) 무엇을 하는가 · (b) 핵심 SDK/API · (c) 무엇이 생기나 · (d) 관찰 포인트(UI + ClickHouse) · (e) 검증 기준** 을 따른다.
 
 ### 01 — Seed traces (`01-seed-traces.py`)
-- **(a)** 평가 대상이 될 trace를 확보. 기존 [`../langfuse-ee/02-generate-traces.py`](../langfuse-ee/02-generate-traces.py)를 import/재사용하는 얇은 래퍼. 기본 40건.
+- **(a)** 평가 대상이 될 trace를 확보. 공유 생성기 [`../../_base/bin/seed_traces.py`](../../_base/bin/seed_traces.py)(langfuse-ee의 `02-generate-traces.py`와 같은 스크립트)를 재사용하는 얇은 래퍼. 기본 40건.
 - **(b)** 기존 로직 그대로 (`start_as_current_observation`, `create_score`, `flush`).
 - **(c)** `traces`/`observations`/`scores`(source=API) 행.
 - **(d)** UI → Tracing. 이후 06 annotation, 05 production-trace 평가의 입력.
 - **(e)** `auth_check()` 통과 + N건 적재 확인.
-- **재사용 판단**: 코드 복제 대신 `sys.path`로 자매 랩 모듈 import. ⚠️ 구현 시: 상대 import 경로 안정성 확인, 안 되면 최소 복제.
+- **재사용 판단**: 코드 복제 대신 공유 생성기(`_base/bin/seed_traces.py`)를 subprocess로 호출. 경로는 `__file__` 기준.
 
 ### 02 — Prompt Management (`02-prompt-management.py`)
 - **(a)** 프롬프트를 코드에서 분리해 Langfuse에 저장·버전·배포. support-assistant 시스템 프롬프트를 **v1(간결) → v2(가드레일 강화)** 로 진화시키고 라벨로 배포 제어.
@@ -191,7 +191,7 @@ labs/langfuse-eval/
 - **(c)/(d)/(e)** 기존 랩 04 스타일: 모든 쿼리가 실행되고 수치가 타당.
 
 ### 99 — Cleanup (`99-cleanup.py`)
-- 이 랩이 만든 것만 삭제(프롬프트·데이터셋·큐·score config). **스택은 안 내린다**(자매 랩 소관). ⚠️ 삭제 API 지원 범위 확인 — 미지원이면 "UI에서 삭제" 안내.
+- 이 랩이 만든 것만 삭제(프롬프트·데이터셋·큐·score config). **스택은 안 내린다**(공유 스택 `_base/` 소관 — `_base/bin/down.sh`). ⚠️ 삭제 API 지원 범위 확인 — 미지원이면 "UI에서 삭제" 안내.
 
 ---
 
@@ -213,7 +213,7 @@ labs/langfuse-eval/
 
 ## 6. `.env` 추가 항목 (§8)
 
-자매 랩 `.env`를 그대로 상속(같은 `LANGFUSE_HOST`/`PUBLIC_KEY`/`SECRET_KEY`). 추가:
+공유 스택의 `_base/.env`를 그대로 사용(같은 `LANGFUSE_HOST`/`PUBLIC_KEY`/`SECRET_KEY`). 추가분은 `_base/.env.example`에 병합되어 있다:
 
 ```bash
 # ── 이 랩 전용 (전부 선택) ──────────────────────────────────
@@ -229,7 +229,7 @@ PROMPT_NAME=support-system
 
 ## 7. README 구조 (bilingual, 기존 랩 골격 재사용)
 
-`[English](#english) | [한국어](#한국어)` 이중 구성. 섹션: 목적 → 서사(Quality Loop 다이어그램) → 파일 구조 → 사전 준비(자매 랩 스택 먼저) → Quick Start → 랩 워크스루(02~07) → 하이브리드 평가 설명 → Gotchas → 검증 상태 표 → 추가 자료 → MIT/Author.
+`[English](#english) | [한국어](#한국어)` 이중 구성. 섹션: 목적 → 서사(Quality Loop 다이어그램) → 파일 구조 → 사전 준비(공유 스택 `_base/` 먼저) → Quick Start → 랩 워크스루(02~07) → 하이브리드 평가 설명 → Gotchas → 검증 상태 표 → 추가 자료 → MIT/Author.
 
 Gotchas 후보:
 - datasets/프롬프트는 **Postgres**, scores/traces는 **ClickHouse** (기존 랩 "두 DB" 규칙의 확장).

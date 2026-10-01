@@ -8,7 +8,7 @@
 
 A hands-on, end-to-end workshop for **self-hosting [Langfuse](https://langfuse.com)** — the open-source LLM observability platform — and then looking *under the hood* at the **ClickHouse backend** that powers it.
 
-Langfuse v3 stores all of its OLTP state (users, orgs, projects, prompts, the audit log) in **Postgres**, but every **trace, observation, and score** lands in **ClickHouse**. That makes Langfuse a real, production-grade ClickHouse application you can stand up in minutes — and a great way to *feel* why ClickHouse is the right OLAP engine for high-volume, append-only LLM telemetry.
+Langfuse stores all of its OLTP state (users, orgs, projects, prompts, the audit log) in **Postgres**, but every **observation and score** lands in **ClickHouse**. The stack here is pinned to **Langfuse v4**, whose data model is *observations-first*: one wide row per observation in `events_full` / `events_core` (a trace is just its root observation, with user, session, tags and metadata repeated on every row), plus `scores`. That makes Langfuse a real, production-grade ClickHouse application you can stand up in minutes — and a great way to *feel* why ClickHouse is the right OLAP engine for high-volume, append-only LLM telemetry.
 
 The workshop has two tracks:
 
@@ -37,8 +37,8 @@ Most Langfuse tutorials stop at "send a trace to Langfuse Cloud." This one is fo
       ┌──────────┐      ┌────────────┐       ┌─────────┐     ┌──────────┐
       │ Postgres │      │ ClickHouse │       │  Redis  │     │  MinIO   │
       │  OLTP    │      │   OLAP     │       │ queue + │     │  S3 blob │
-      │ users,   │      │ traces,    │       │  cache  │     │ raw events│
-      │ orgs,    │      │ observations│      └─────────┘     │ media,    │
+      │ users,   │      │ events_full│       │  cache  │     │ raw events│
+      │ orgs,    │      │ events_core│       └─────────┘     │ media,    │
       │ audit_log│      │ scores     │ ◄── labs 03 & 04      │ exports   │
       └──────────┘      └────────────┘                      └──────────┘
 ```
@@ -50,14 +50,14 @@ langfuse-ee/
 ├── README.md                    # This file
 ├── 01-up.sh                     # Wrapper → _base/bin/up.sh: stack up, wait for health, print credentials
 ├── 02-generate-traces.py        # Wrapper → _base/bin/seed_traces.py: nested spans/generations, sessions, scores
-├── 03-clickhouse-explore.sql    # Discover the traces/observations/scores tables in ClickHouse
+├── 03-clickhouse-explore.sql    # Discover the events_full/events_core/scores tables in ClickHouse
 ├── 04-clickhouse-analytics.sql  # Cost / latency / quality analytics straight on ClickHouse
 ├── 05-ee-activate.sh            # Restart with the license key, verify EE is active
 ├── 06-ee-rbac-scim.sh           # Org/project provisioning, SCIM users, project-level RBAC
 ├── 07-ee-audit-retention.sh     # Data-retention policy + read the audit log
 ├── 08-ee-data-masking.sh        # Server-side masking, PROVEN absent in ClickHouse
 │   ├── 08-generate-pii-traces.py#   ↳ send traces containing sentinel secrets/PII
-│   └── 08-verify-masking.sql    #   ↳ ClickHouse proof: raw secrets gone, [REDACTED_*] present
+│   └── 08-verify-masking.sql    #   ↳ ClickHouse proof in events_full: raw secrets gone, [REDACTED_*] present, a PASS/FAIL verdict row
 ├── 09-ee-protected-prompts.sh   # Versioned prompts + deployment labels + protected labels
 ├── 10-ee-instance-governance.sh # UI customization + organization-creators allowlist
 ├── 11-ee-parquet-export.sh      # Blob-storage Parquet export + ClickHouse s3() round-trip
@@ -69,7 +69,8 @@ The stack itself is **shared with the other labs** and lives in [`_base/`](../..
 ```
 _base/
 ├── .env.example                 # Secrets, headless-init, EE license key, SDK keys (copy to _base/.env)
-├── docker-compose.yml           # OSS stack: web · worker · postgres · clickhouse · redis · minio
+├── requirements.txt             # Pinned Python deps: langfuse, anthropic, opentelemetry-instrumentation-anthropic
+├── docker-compose.yml           # OSS stack (pinned images): web · worker · postgres · clickhouse · redis · minio
 ├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
 ├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
 ├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
@@ -80,7 +81,8 @@ _base/
 ### ✅ Prerequisites
 
 - **Docker + Docker Compose** (Docker Desktop on Mac/Windows). Give it ≥ 4 CPU / 16 GiB.
-- **Python 3.9+** for lab 02.
+- **Python 3.10+** for lab 02 and the SDK scripts (Langfuse Python SDK v4 requires it; on macOS the system `python3` is older — use e.g. `python3.12`). Install the pinned packages with `pip install -r _base/requirements.txt`.
+- *(optional)* an **Anthropic API key** (`ANTHROPIC_API_KEY` in `_base/.env`) to make lab 02 and the eval lab call a real model (`claude-haiku-4-5`) instead of the offline simulation.
 - **`jq`** and **`curl`** for the enterprise scripts (05–07).
 - An **enterprise license key** for labs 05–07 (the OSS track needs nothing extra).
 
@@ -96,9 +98,9 @@ cd labs/langfuse-ee
 #    → http://localhost:3000  (login: admin@example.com / workshop-admin-pw)
 ../../_base/bin/check.sh     # optional: containers healthy, migrations finished, SDK keys valid
 
-# 2) Push ~40 realistic traces (runs fully offline; no LLM key needed)
-python -m venv .venv && source .venv/bin/activate
-pip install "langfuse>=3" openai
+# 2) Push ~40 realistic traces (runs fully offline; an Anthropic key is optional)
+python3.12 -m venv ../../.venv && source ../../.venv/bin/activate    # Python 3.10+
+pip install -r ../../_base/requirements.txt
 python 02-generate-traces.py
 
 # 3) Explore Langfuse's ClickHouse backend
@@ -154,26 +156,29 @@ Brings up the six containers from [docker-compose.yml](../../_base/docker-compos
 
 #### 02 — Generate traces ([02-generate-traces.py](02-generate-traces.py))
 
-Uses the **Langfuse Python SDK (v3+, OpenTelemetry-native)** to simulate a customer-support RAG assistant. Each trace is a nested observation tree:
+Uses the **Langfuse Python SDK (v4, OpenTelemetry-native)** to simulate a customer-support RAG assistant. Each trace is a nested observation tree:
 
 ```python
-with lf.start_as_current_observation(as_type="span", name="support-request") as root:
-    lf.update_current_trace(user_id=..., session_id=..., tags=[...])     # trace metadata
-    with lf.start_as_current_observation(as_type="span", name="retrieve-context"): ...
-    with lf.start_as_current_observation(as_type="generation",
-                                         name="answer-generation", model="gpt-4o") as gen:
-        gen.update(output=..., usage_details={"input_tokens": ..., "output_tokens": ...})
+with lf.start_as_current_observation(as_type="span", name="support-request",
+                                     input={"question": ...}) as root:
+    with propagate_attributes(trace_name="support-request", user_id=..., session_id=...,
+                              tags=[...], metadata={"tier": ...}):          # on EVERY observation below
+        with lf.start_as_current_observation(as_type="span", name="retrieve-context"): ...
+        with lf.start_as_current_observation(as_type="generation",
+                                             name="answer-generation", model="gpt-4o") as gen:
+            gen.update(output=..., usage_details={"input": ..., "output": ...})
+    root.update(output=...)
 lf.create_score(name="user-thumbs", value=1, data_type="BOOLEAN", trace_id=...)
 lf.flush()   # critical in short scripts — sends the async buffer before exit
 ```
 
-It varies model, user, session, tags (`env`/`feature`/`tier`), token usage, latency, errors (~8%), and attaches scores. Cost is computed **automatically** by Langfuse from the model name + token usage. Runs offline by default; set `OPENAI_API_KEY` to make real calls via the drop-in `from langfuse.openai import openai`.
+SDK v4 replaced `update_current_trace()` with `propagate_attributes()`: the trace attributes are written onto every observation created inside the block (metadata is `dict[str, str]`, values ≤ 200 characters), and the trace input/output go on the root observation. It varies model, user, session, tags (`env`/`feature`/`tier`), token usage, latency, errors (~8%), and attaches scores. Cost is computed **automatically** by Langfuse from the model name + token usage — but only when the usage keys match the model's price keys, so the generator sends `input` / `output`, and only simulates models that have a price definition (`gpt-4o-mini`, `gpt-4o`, `claude-haiku-4-5`). Runs offline by default; set `ANTHROPIC_API_KEY` in `_base/.env` to make real calls with the official `anthropic` SDK, traced by `opentelemetry-instrumentation-anthropic` (the call shows up as a `GENERATION` with the model, tokens and cost).
 
 #### 03 — Explore the ClickHouse backend ([03-clickhouse-explore.sql](03-clickhouse-explore.sql))
 
-Pure discovery against the `default` database Langfuse migrated into: `SHOW TABLES`, `DESCRIBE traces/observations/scores`, engine + sort-key + partitioning, row counts, the full observation tree for one trace, and the monthly partition layout. **A trace is one row in `traces`; its steps are rows in `observations` linked by `trace_id`; scores live in `scores`.**
+Pure discovery against the `default` database Langfuse migrated into: `SHOW TABLES`, `DESCRIBE events_full/events_core/scores`, engine + sort-key + partitioning, row counts, the full observation tree for one trace, and the monthly partition layout. **There is no trace row any more: a trace is the root row (`is_app_root`) of `events_full` / `events_core`, its steps are the other rows with the same `trace_id`, and scores live in `scores`.** The v3 tables `traces` and `observations` still exist but stay empty — the lab prints their row counts (0) as the evidence that v4 writes elsewhere.
 
-> The ClickHouse schema is an internal Langfuse detail, **not a stable API** — column names can change across major versions. The `DESCRIBE` output is always the source of truth for your installed version.
+> The ClickHouse schema is an internal Langfuse detail, **not a stable API** — v3 → v4 moved everything from `traces` / `observations` to `events_full` / `events_core`, and column names can change again. The `DESCRIBE` output is always the source of truth for your installed version.
 
 #### 04 — Analytics on ClickHouse ([04-clickhouse-analytics.sql](04-clickhouse-analytics.sql))
 
@@ -181,13 +186,16 @@ The SA payoff: the same questions the Langfuse UI answers, expressed as plain Cl
 
 | Query | ClickHouse primitive |
 |---|---|
-| Spend & tokens by model | `sum()` over `Map` columns (`usage_details`, `cost_details`) |
+| Spend & tokens by model | `sum()` over `total_cost` and the `usage_details` `Map`, on `type = 'GENERATION'` rows |
 | Latency p50/p95/p99 per model | `quantile()` over `dateDiff('millisecond', start_time, end_time)` |
 | Error rate per model | `countIf(level = 'ERROR')` conditional aggregation |
-| Cost & quality by customer tier | `arrayFirst()` over `tags` + JOIN to observations |
+| Cost by customer tier | `metadata_values[indexOf(metadata_names, 'tier')]` — metadata is two parallel arrays; **no join** |
+| Quality by customer tier | the one remaining join: `scores.trace_id = events_core.trace_id` |
 | Thumbs-up rate / grounding | `sumIf`/`avgIf` over the `scores` table |
-| Per-user spend leaderboard | trace ↔ observation JOIN, cost attribution |
-| Daily trend / session depth | time bucketing + `uniqExact` |
+| Per-user spend leaderboard | one pass over `events_core` — `user_id` is on every row |
+| Daily trend / session depth | time bucketing + `uniqExactIf` / `countIf(is_app_root)` |
+
+The v4 lesson of this lab: the v3 queries joined `traces` to `observations` to learn the user or the tier of a generation. In v4 every observation row already carries them, so those joins disappear.
 
 #### 05 — Activate Enterprise ([05-ee-activate.sh](05-ee-activate.sh))
 
@@ -215,14 +223,17 @@ Roles: `OWNER` (all) · `ADMIN` (settings + members) · `MEMBER` (view + create 
 
 The flagship **ClickHouse-verifiable** EE demo. A tiny masking-callback sidecar ([masking_service.py](../../_base/masking/masking_service.py), stdlib only) is wired to the worker via [docker-compose.masking.yml](../../_base/docker-compose.masking.yml) as `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`. Langfuse POSTs each OTLP-ingested trace to it; the service redacts anything matching a secret/PII pattern (API keys, credit cards, e-mails, KR 주민등록번호) and returns the same structure — **before** the trace is persisted.
 
-[08-generate-pii-traces.py](08-generate-pii-traces.py) sends traces containing four sentinel secrets, then [08-verify-masking.sql](08-verify-masking.sql) proves the payoff **directly on ClickHouse**:
+[08-generate-pii-traces.py](08-generate-pii-traces.py) sends traces containing four sentinel secrets (in the input, the output and the metadata), then [08-verify-masking.sql](08-verify-masking.sql) proves the payoff **directly on ClickHouse**, in `events_full` — the table with the full, untruncated payloads:
 
 ```sql
--- want ALL ZERO: no raw secret reached the OLAP store
-countIf(position(toString(input), '0xDEADBEEF01') > 0 OR position(toString(output), '0xDEADBEEF01') > 0)  AS leaked_api_key
+-- want ALL ZERO: no raw secret reached the OLAP store (input, output or metadata)
+countIf(position(input, '0xDEADBEEF01') > 0 OR position(output, '0xDEADBEEF01') > 0
+     OR arrayExists(v -> position(v, '0xDEADBEEF01') > 0, metadata_values))  AS leaked_api_key
 -- want > 0: the redaction placeholders did land
-countIf(position(toString(input), '[REDACTED_') > 0)  AS masked_observation_rows
+countIf(position(input, '[REDACTED_') > 0 OR position(output, '[REDACTED_') > 0)  AS masked_payload_rows
 ```
+
+The file ends with one explicit **`verdict`** row — `PASS` only if the pii-demo rows landed **and** some of them carry a `[REDACTED_*]` placeholder **and** every leak count is `0`, otherwise `FAIL` — and `08-ee-data-masking.sh` exits `1` on `FAIL`. A "0 leaks" result proves nothing if the table is empty, so `./08-ee-data-masking.sh --selftest` is the positive control: it points the same SQL at an empty copy of `events_full` and requires the verdict to be `FAIL`.
 
 Key facts: masking applies **only** to the OTLP endpoint (`/api/public/otel` = SDK v3+); `FAIL_CLOSED=true` drops events if the callback errors (secure default); the callback body is an **OTLP Trace Request proto in JSON**, so the sidecar deep-walks the JSON and only rewrites string leaves.
 
@@ -236,15 +247,17 @@ Two instance-level controls, both env-driven via [docker-compose.governance.yml]
 
 #### 11 — Parquet Export ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
 
-The enterprise data-platform / archival story, in two parts. **(A)** Configure a scheduled **Parquet** blob-storage export via `PUT /api/public/integrations/blob-storage` (type `S3_COMPATIBLE`, pointed at the workshop MinIO). **(B)** Demonstrate the exact primitive that powers it, **live**, with ClickHouse — no waiting on the scheduler:
+The enterprise data-platform / archival story, in two parts. **(A)** Configure a scheduled **Parquet** blob-storage export via `PUT /api/public/integrations/blob-storage` (type `S3_COMPATIBLE`, pointed at the workshop MinIO). On v4 the integration's `exportSource` must be the enriched observations source, `OBSERVATIONS_V2`; the legacy `LEGACY_TRACES_OBSERVATIONS` source reads the empty v3 tables and the server rejects it with HTTP 400. **(B)** Demonstrate the exact primitive that powers it, **live**, with ClickHouse — no waiting on the scheduler:
 
 ```sql
-INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/events_full.parquet',
                         'minio', 'miniosecret', 'Parquet')
-  SELECT * FROM default.traces FINAL WHERE is_deleted = 0 SETTINGS s3_truncate_on_insert = 1;
-SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+  SELECT * FROM default.events_full FINAL WHERE is_deleted = 0 SETTINGS s3_truncate_on_insert = 1;
+SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.parquet',
                        'minio', 'miniosecret', 'Parquet');   -- read it right back
 ```
+
+The script prints the source and Parquet row counts side by side and exits `1` if they differ.
 
 Pairs with lab 07 as **archive-then-delete**: export before retention deletes. SA gotcha baked in — on self-hosted, **ClickHouse < 25.11** may not surface Parquet export failures (a run can "succeed" with an invalid file); upgrade to ≥ 25.11 or use CSV/JSON for reliable failure detection.
 
@@ -252,10 +265,12 @@ Pairs with lab 07 as **archive-then-delete**: export before retention deletes. S
 
 | | Note |
 |---|---|
-| **Two databases, two jobs** | Postgres = OLTP (users, orgs, prompts, **audit log**). ClickHouse = OLAP (**traces, observations, scores**). Don't look for traces in Postgres. |
+| **Two databases, two jobs** | Postgres = OLTP (users, orgs, prompts, **audit log**). ClickHouse = OLAP (**events_full / events_core, scores**). Don't look for traces in Postgres — and on v4 not in the `traces` table either. |
 | **UTC everywhere** | ClickHouse **and** Postgres must run in UTC, or queries return wrong/empty results. The compose file sets this. |
 | **`flush()` in scripts** | The SDK ships data asynchronously. A short script that exits without `lf.flush()` loses its traces. |
-| **Cost is derived** | You send `usage_details` (tokens); Langfuse computes cost from its model price table. Use model names it knows (`gpt-4o`, `claude-3-5-sonnet-…`). |
+| **Cost is derived** | You send `usage_details` (tokens); Langfuse computes cost from its model price table — but only when the usage keys match the model's price keys. Send `input` / `output`, and use model names it has a definition for (`gpt-4o`, `claude-haiku-4-5`). |
+| **Trace attributes are per observation** | SDK v4 has no `update_current_trace()`. Wrap the work in `propagate_attributes(...)`; metadata is `dict[str, str]`, values ≤ 200 characters. |
+| **Don't seed the global RNG** | `random.seed()` makes OpenTelemetry reuse the same trace and span ids on every run, and the duplicate rows survive `FINAL`. The generators use a private `random.Random`. |
 | **EE license on BOTH containers** | `LANGFUSE_EE_LICENSE_KEY` must be set on `langfuse-web` *and* `langfuse-worker`. The overlay does this. |
 | **CH schema ≠ API** | Query ClickHouse directly for labs/debugging, but treat the schema as unstable. For apps, use the Public API / SDK query helpers / Blob Storage Export. |
 | **`retention=0` = forever** | Minimum non-zero retention is 3 days. Pair retention with a Blob Storage Export if you must archive before deletion. |
@@ -300,7 +315,8 @@ Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables
 - [Server-Side Data Masking](https://langfuse.com/self-hosting/security/data-masking) · [Protected Prompt Labels](https://langfuse.com/docs/prompt-management/features/prompt-version-control)
 - [UI Customization](https://langfuse.com/self-hosting/administration/ui-customization) · [Organization Creators](https://langfuse.com/self-hosting/administration/organization-creators)
 - [Export to Blob Storage](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage) · [ClickHouse `s3` table function](https://clickhouse.com/docs/sql-reference/table-functions/s3)
-- [Python SDK](https://langfuse.com/docs/observability/sdk/overview)
+- [Python SDK](https://langfuse.com/docs/observability/sdk/overview) · [Python SDK v3 → v4](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4) · [Server v3 → v4](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4)
+- [Anthropic integration (OpenTelemetry)](https://langfuse.com/integrations/model-providers/anthropic)
 
 ### 📝 License
 
@@ -323,7 +339,7 @@ For questions, see the main [clickhouse-hols README](../../README.md).
 
 **[Langfuse](https://langfuse.com) self-hosting** — 오픈소스 LLM 관측가능성(observability) 플랫폼 — 을 직접 구축하고, 그 내부를 떠받치는 **ClickHouse 백엔드**까지 들여다보는 종단간 실습입니다.
 
-Langfuse v3는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사 로그)를 **Postgres**에 저장하지만, 모든 **trace·observation·score**는 **ClickHouse**에 적재됩니다. 즉 Langfuse는 몇 분 만에 띄울 수 있는 실전급 ClickHouse 애플리케이션이며, 고볼륨 append-only LLM 텔레메트리에 왜 ClickHouse가 적합한지를 직접 체감하기에 좋은 사례입니다.
+Langfuse는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사 로그)를 **Postgres**에 저장하지만, 모든 **observation과 score**는 **ClickHouse**에 적재됩니다. 이 스택은 **Langfuse v4**로 고정되어 있으며, v4의 데이터 모델은 *observation 우선*입니다. observation 하나가 `events_full` / `events_core`의 넓은 행 하나이고(trace는 곧 루트 observation이며 user·session·tags·metadata가 모든 행에 반복 저장됨), score는 `scores`에 저장됩니다. 즉 Langfuse는 몇 분 만에 띄울 수 있는 실전급 ClickHouse 애플리케이션이며, 고볼륨 append-only LLM 텔레메트리에 왜 ClickHouse가 적합한지를 직접 체감하기에 좋은 사례입니다.
 
 실습은 두 트랙으로 구성됩니다.
 
@@ -352,8 +368,8 @@ Langfuse v3는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사
       ┌──────────┐      ┌────────────┐       ┌─────────┐     ┌──────────┐
       │ Postgres │      │ ClickHouse │       │  Redis  │     │  MinIO   │
       │  OLTP    │      │   OLAP     │       │ 큐 +    │     │  S3 blob │
-      │ users,   │      │ traces,    │       │ 캐시    │     │ 원본이벤트│
-      │ orgs,    │      │ observations│      └─────────┘     │ 미디어,   │
+      │ users,   │      │ events_full│       │ 캐시    │     │ 원본이벤트│
+      │ orgs,    │      │ events_core│       └─────────┘     │ 미디어,   │
       │ audit_log│      │ scores     │ ◄── 랩 03 & 04        │ 익스포트  │
       └──────────┘      └────────────┘                      └──────────┘
 ```
@@ -365,14 +381,14 @@ langfuse-ee/
 ├── README.md                    # 이 문서
 ├── 01-up.sh                     # 래퍼 → _base/bin/up.sh: 스택 기동, 헬스 대기, 자격증명 출력
 ├── 02-generate-traces.py        # 래퍼 → _base/bin/seed_traces.py: 중첩 span/generation, 세션, 스코어
-├── 03-clickhouse-explore.sql    # ClickHouse의 traces/observations/scores 테이블 탐색
+├── 03-clickhouse-explore.sql    # ClickHouse의 events_full/events_core/scores 테이블 탐색
 ├── 04-clickhouse-analytics.sql  # ClickHouse에서 직접 비용/지연/품질 분석
 ├── 05-ee-activate.sh            # 라이선스 키로 재기동, EE 활성화 검증
 ├── 06-ee-rbac-scim.sh           # 조직/프로젝트 프로비저닝, SCIM 사용자, 프로젝트 단위 RBAC
 ├── 07-ee-audit-retention.sh     # 데이터 보존 정책 + 감사 로그 조회
 ├── 08-ee-data-masking.sh        # 서버측 마스킹 → ClickHouse에서 부재 증명
 │   ├── 08-generate-pii-traces.py#   ↳ 센티넬 시크릿/PII가 든 trace 전송
-│   └── 08-verify-masking.sql    #   ↳ ClickHouse 증명: 원문 시크릿 부재, [REDACTED_*] 존재
+│   └── 08-verify-masking.sql    #   ↳ events_full에서의 ClickHouse 증명: 원문 시크릿 부재, [REDACTED_*] 존재, PASS/FAIL 판정 행
 ├── 09-ee-protected-prompts.sh   # 버전 관리 프롬프트 + 배포 라벨 + 보호된 라벨
 ├── 10-ee-instance-governance.sh # UI 커스터마이징 + 조직 생성 허용목록
 ├── 11-ee-parquet-export.sh      # Blob 스토리지 Parquet 반출 + ClickHouse s3() 라운드트립
@@ -384,7 +400,8 @@ langfuse-ee/
 ```
 _base/
 ├── .env.example                 # 시크릿, headless-init, EE 라이선스 키, SDK 키 (_base/.env 로 복사)
-├── docker-compose.yml           # OSS 스택: web · worker · postgres · clickhouse · redis · minio
+├── requirements.txt             # 버전 고정 Python 의존성: langfuse, anthropic, opentelemetry-instrumentation-anthropic
+├── docker-compose.yml           # OSS 스택(이미지 버전 고정): web · worker · postgres · clickhouse · redis · minio
 ├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
 ├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
 ├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
@@ -395,7 +412,8 @@ _base/
 ### ✅ 사전 준비물
 
 - **Docker + Docker Compose** (Mac/Windows는 Docker Desktop). CPU 4코어 / 16 GiB 이상 권장.
-- 랩 02용 **Python 3.9+**.
+- 랩 02와 SDK 스크립트용 **Python 3.10+** (Langfuse Python SDK v4 요구사항. macOS 기본 `python3`는 더 낮으므로 `python3.12` 등을 사용). 고정된 패키지는 `pip install -r _base/requirements.txt`로 설치.
+- *(선택)* **Anthropic API 키**(`_base/.env`의 `ANTHROPIC_API_KEY`) — 랩 02와 eval 랩이 오프라인 시뮬레이션 대신 실제 모델(`claude-haiku-4-5`)을 호출합니다.
 - 엔터프라이즈 스크립트(05–07)용 **`jq`** 와 **`curl`**.
 - 랩 05–07용 **엔터프라이즈 라이선스 키** (OSS 트랙은 추가 준비물 없음).
 
@@ -411,9 +429,9 @@ cd labs/langfuse-ee
 #    → http://localhost:3000  (로그인: admin@example.com / workshop-admin-pw)
 ../../_base/bin/check.sh     # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
 
-# 2) 현실적인 trace 약 40건 적재 (완전 오프라인; LLM 키 불필요)
-python -m venv .venv && source .venv/bin/activate
-pip install "langfuse>=3" openai
+# 2) 현실적인 trace 약 40건 적재 (완전 오프라인; Anthropic 키는 선택)
+python3.12 -m venv ../../.venv && source ../../.venv/bin/activate    # Python 3.10+
+pip install -r ../../_base/requirements.txt
 python 02-generate-traces.py
 
 # 3) Langfuse의 ClickHouse 백엔드 탐색
@@ -469,26 +487,29 @@ docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --pass
 
 #### 02 — Trace 생성
 
-**Langfuse Python SDK (v3+, OpenTelemetry 네이티브)** 로 고객 지원 RAG 어시스턴트를 시뮬레이션합니다. 각 trace는 중첩 observation 트리입니다.
+**Langfuse Python SDK (v4, OpenTelemetry 네이티브)** 로 고객 지원 RAG 어시스턴트를 시뮬레이션합니다. 각 trace는 중첩 observation 트리입니다.
 
 ```python
-with lf.start_as_current_observation(as_type="span", name="support-request") as root:
-    lf.update_current_trace(user_id=..., session_id=..., tags=[...])     # trace 메타데이터
-    with lf.start_as_current_observation(as_type="span", name="retrieve-context"): ...
-    with lf.start_as_current_observation(as_type="generation",
-                                         name="answer-generation", model="gpt-4o") as gen:
-        gen.update(output=..., usage_details={"input_tokens": ..., "output_tokens": ...})
+with lf.start_as_current_observation(as_type="span", name="support-request",
+                                     input={"question": ...}) as root:
+    with propagate_attributes(trace_name="support-request", user_id=..., session_id=...,
+                              tags=[...], metadata={"tier": ...}):          # 아래 모든 observation에 기록됨
+        with lf.start_as_current_observation(as_type="span", name="retrieve-context"): ...
+        with lf.start_as_current_observation(as_type="generation",
+                                             name="answer-generation", model="gpt-4o") as gen:
+            gen.update(output=..., usage_details={"input": ..., "output": ...})
+    root.update(output=...)
 lf.create_score(name="user-thumbs", value=1, data_type="BOOLEAN", trace_id=...)
 lf.flush()   # 짧은 스크립트에서 필수 — 종료 전 비동기 버퍼 전송
 ```
 
-모델·사용자·세션·태그(`env`/`feature`/`tier`)·토큰 사용량·지연·오류(~8%)를 다양화하고 스코어를 부착합니다. 비용은 모델명 + 토큰 사용량으로부터 Langfuse가 **자동 계산**합니다. 기본은 오프라인이며, `OPENAI_API_KEY`를 설정하면 drop-in `from langfuse.openai import openai`로 실제 호출합니다.
+SDK v4는 `update_current_trace()`를 `propagate_attributes()`로 대체했습니다. trace 속성은 블록 안에서 생성되는 모든 observation에 기록되고(metadata는 `dict[str, str]`, 값은 200자 이하), trace의 input/output은 루트 observation에 둡니다. 모델·사용자·세션·태그(`env`/`feature`/`tier`)·토큰 사용량·지연·오류(~8%)를 다양화하고 스코어를 부착합니다. 비용은 모델명 + 토큰 사용량으로부터 Langfuse가 **자동 계산**하지만, usage 키가 모델 가격표의 키와 일치할 때만 계산됩니다. 그래서 생성기는 `input` / `output`을 보내고, 가격 정의가 있는 모델(`gpt-4o-mini`, `gpt-4o`, `claude-haiku-4-5`)만 시뮬레이션합니다. 기본은 오프라인이며, `_base/.env`에 `ANTHROPIC_API_KEY`를 설정하면 공식 `anthropic` SDK로 실제 호출하고 `opentelemetry-instrumentation-anthropic`이 추적합니다(호출은 모델·토큰·비용이 있는 `GENERATION`으로 나타남).
 
 #### 03 — ClickHouse 백엔드 탐색
 
-Langfuse가 마이그레이션한 `default` 데이터베이스에 대한 순수 탐색: `SHOW TABLES`, `DESCRIBE traces/observations/scores`, 엔진 + 정렬 키 + 파티셔닝, 행 수, 한 trace의 전체 observation 트리, 월별 파티션 레이아웃. **trace는 `traces`의 한 행이고, 그 단계들은 `trace_id`로 연결된 `observations`의 행이며, 스코어는 `scores`에 저장됩니다.**
+Langfuse가 마이그레이션한 `default` 데이터베이스에 대한 순수 탐색: `SHOW TABLES`, `DESCRIBE events_full/events_core/scores`, 엔진 + 정렬 키 + 파티셔닝, 행 수, 한 trace의 전체 observation 트리, 월별 파티션 레이아웃. **trace 행은 더 이상 없습니다. trace는 `events_full` / `events_core`의 루트 행(`is_app_root`)이고, 그 단계들은 같은 `trace_id`를 가진 나머지 행이며, 스코어는 `scores`에 저장됩니다.** v3 테이블 `traces`와 `observations`는 남아 있지만 비어 있으며, 랩이 그 행 수(0)를 출력해 v4가 다른 곳에 쓴다는 증거로 보여 줍니다.
 
-> ClickHouse 스키마는 Langfuse 내부 구현 세부사항이며 **안정적인 API가 아닙니다** — 메이저 버전 간 컬럼명이 바뀔 수 있습니다. 설치된 버전의 정답은 항상 `DESCRIBE` 출력입니다.
+> ClickHouse 스키마는 Langfuse 내부 구현 세부사항이며 **안정적인 API가 아닙니다** — v3 → v4에서 모든 것이 `traces` / `observations`에서 `events_full` / `events_core`로 옮겨졌고, 컬럼명은 다시 바뀔 수 있습니다. 설치된 버전의 정답은 항상 `DESCRIBE` 출력입니다.
 
 #### 04 — ClickHouse 분석
 
@@ -496,13 +517,16 @@ SA 관점의 핵심: Langfuse UI가 답하는 질문들을 순수 ClickHouse SQL
 
 | 쿼리 | ClickHouse 기능 |
 |---|---|
-| 모델별 비용·토큰 | `Map` 컬럼(`usage_details`, `cost_details`)에 대한 `sum()` |
+| 모델별 비용·토큰 | `type = 'GENERATION'` 행의 `total_cost`와 `usage_details` `Map`에 대한 `sum()` |
 | 모델별 지연 p50/p95/p99 | `dateDiff('millisecond', …)`에 대한 `quantile()` |
 | 모델별 오류율 | `countIf(level = 'ERROR')` 조건부 집계 |
-| 고객 등급별 비용·품질 | `tags`에 대한 `arrayFirst()` + observation JOIN |
+| 고객 등급별 비용 | `metadata_values[indexOf(metadata_names, 'tier')]` — metadata는 병렬 배열 두 개; **JOIN 없음** |
+| 고객 등급별 품질 | 남은 유일한 JOIN: `scores.trace_id = events_core.trace_id` |
 | 추천(thumbs-up)율 / 그라운딩 | `scores` 테이블의 `sumIf`/`avgIf` |
-| 사용자별 비용 리더보드 | trace ↔ observation JOIN, 비용 귀속 |
-| 일별 추이 / 세션 깊이 | 시간 버킷팅 + `uniqExact` |
+| 사용자별 비용 리더보드 | `events_core` 한 번 스캔 — `user_id`가 모든 행에 있음 |
+| 일별 추이 / 세션 깊이 | 시간 버킷팅 + `uniqExactIf` / `countIf(is_app_root)` |
+
+이 랩의 v4 교훈: v3 쿼리는 generation의 사용자·등급을 알기 위해 `traces`와 `observations`를 JOIN했습니다. v4에서는 모든 observation 행이 이미 그 값을 가지고 있어 JOIN이 사라집니다.
 
 #### 05 — Enterprise 활성화
 
@@ -530,14 +554,17 @@ ADMIN_API_KEY → 조직 생성 → 조직 범위 API 키 발급
 
 **ClickHouse로 검증 가능한** 핵심 EE 데모입니다. 초경량 마스킹 콜백 사이드카([masking_service.py](../../_base/masking/masking_service.py), stdlib 전용)를 [docker-compose.masking.yml](../../_base/docker-compose.masking.yml)로 worker의 `LANGFUSE_INGESTION_MASKING_CALLBACK_URL`에 연결합니다. Langfuse는 OTLP로 인제스트된 각 trace를 콜백에 POST하고, 콜백은 시크릿/PII 패턴(API 키, 신용카드, 이메일, 주민등록번호)을 리댁션한 뒤 동일 구조로 반환합니다 — **저장 이전에** 일어납니다.
 
-[08-generate-pii-traces.py](08-generate-pii-traces.py)가 4개 센티넬 시크릿이 든 trace를 보내고, [08-verify-masking.sql](08-verify-masking.sql)이 **ClickHouse에서 직접** 결과를 증명합니다:
+[08-generate-pii-traces.py](08-generate-pii-traces.py)가 4개 센티넬 시크릿이 든 trace(input·output·metadata에 포함)를 보내고, [08-verify-masking.sql](08-verify-masking.sql)이 **ClickHouse에서 직접**, 전체 페이로드가 잘리지 않고 들어 있는 `events_full`에서 결과를 증명합니다:
 
 ```sql
--- 전부 0이어야 함: 원문 시크릿이 OLAP 스토어에 도달하지 않음
-countIf(position(toString(input), '0xDEADBEEF01') > 0 OR position(toString(output), '0xDEADBEEF01') > 0)  AS leaked_api_key
+-- 전부 0이어야 함: 원문 시크릿이 OLAP 스토어에 도달하지 않음 (input, output, metadata)
+countIf(position(input, '0xDEADBEEF01') > 0 OR position(output, '0xDEADBEEF01') > 0
+     OR arrayExists(v -> position(v, '0xDEADBEEF01') > 0, metadata_values))  AS leaked_api_key
 -- 0보다 커야 함: 리댁션 placeholder는 안착
-countIf(position(toString(input), '[REDACTED_') > 0)  AS masked_observation_rows
+countIf(position(input, '[REDACTED_') > 0 OR position(output, '[REDACTED_') > 0)  AS masked_payload_rows
 ```
+
+파일은 명시적인 **`verdict`** 행 하나로 끝납니다. pii-demo 행이 적재되었고 **그중 일부가** `[REDACTED_*]` placeholder를 가지며 **모든 leak 카운트가 `0`일 때만** `PASS`, 아니면 `FAIL`이며, `08-ee-data-masking.sh`는 `FAIL`이면 `1`로 종료합니다. 테이블이 비어 있으면 "leak 0"은 아무것도 증명하지 못하므로, `./08-ee-data-masking.sh --selftest`가 양성 대조군입니다. 같은 SQL을 빈 `events_full` 복사본에 실행해 verdict가 `FAIL`이어야 통과합니다.
 
 핵심: 마스킹은 **OTLP 엔드포인트**(`/api/public/otel` = SDK v3+)에만 적용; `FAIL_CLOSED=true`면 콜백 오류 시 이벤트를 드롭(보안 기본값); 콜백 본문은 **OTLP Trace Request proto(JSON)** 이므로 사이드카는 JSON을 딥워크하며 문자열 리프만 재작성합니다.
 
@@ -551,15 +578,17 @@ countIf(position(toString(input), '[REDACTED_') > 0)  AS masked_observation_rows
 
 #### 11 — Parquet 반출 ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
 
-엔터프라이즈 데이터플랫폼/아카이브 스토리를 두 파트로. **(A)** `PUT /api/public/integrations/blob-storage`로 스케줄 **Parquet** blob 스토리지 반출 설정(type `S3_COMPATIBLE`, 워크숍 MinIO 지정). **(B)** 그것을 구동하는 바로 그 primitive를 ClickHouse로 **라이브** 시연 — 스케줄러를 기다리지 않음:
+엔터프라이즈 데이터플랫폼/아카이브 스토리를 두 파트로. **(A)** `PUT /api/public/integrations/blob-storage`로 스케줄 **Parquet** blob 스토리지 반출 설정(type `S3_COMPATIBLE`, 워크숍 MinIO 지정). v4에서 통합의 `exportSource`는 enriched observations 소스인 `OBSERVATIONS_V2`여야 합니다. 레거시 `LEGACY_TRACES_OBSERVATIONS` 소스는 비어 있는 v3 테이블을 읽으므로 서버가 HTTP 400으로 거부합니다. **(B)** 그것을 구동하는 바로 그 primitive를 ClickHouse로 **라이브** 시연 — 스케줄러를 기다리지 않음:
 
 ```sql
-INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/events_full.parquet',
                         'minio', 'miniosecret', 'Parquet')
-  SELECT * FROM default.traces FINAL WHERE is_deleted = 0 SETTINGS s3_truncate_on_insert = 1;
-SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet',
+  SELECT * FROM default.events_full FINAL WHERE is_deleted = 0 SETTINGS s3_truncate_on_insert = 1;
+SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.parquet',
                        'minio', 'miniosecret', 'Parquet');   -- 곧바로 다시 읽기
 ```
+
+스크립트는 원본 행 수와 Parquet 행 수를 나란히 출력하고, 다르면 `1`로 종료합니다.
 
 랩 07과 **archive-then-delete**로 짝을 이룸: 보존 삭제 전에 반출. SA 함정 반영 — self-hosted에서 **ClickHouse < 25.11**은 Parquet 반출 실패가 안 뜰 수 있음(불완전 파일인데 "성공"). ≥ 25.11로 업그레이드하거나 신뢰할 수 있는 실패 감지를 위해 CSV/JSON 사용.
 
@@ -567,10 +596,12 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 
 | | 노트 |
 |---|---|
-| **두 DB, 두 역할** | Postgres = OLTP(사용자·조직·프롬프트·**감사 로그**). ClickHouse = OLAP(**traces·observations·scores**). Postgres에서 trace를 찾지 말 것. |
+| **두 DB, 두 역할** | Postgres = OLTP(사용자·조직·프롬프트·**감사 로그**). ClickHouse = OLAP(**events_full / events_core, scores**). Postgres에서 trace를 찾지 말 것 — v4에서는 `traces` 테이블에서도 찾을 수 없음. |
 | **모든 곳에서 UTC** | ClickHouse **와** Postgres 모두 UTC여야 함. 아니면 쿼리가 틀리거나 빈 결과를 반환. compose가 설정함. |
 | **스크립트에서 `flush()`** | SDK는 비동기 전송. `lf.flush()` 없이 종료하는 짧은 스크립트는 trace를 잃음. |
-| **비용은 파생값** | `usage_details`(토큰)를 보내면 Langfuse가 모델 가격표로 비용 계산. 알려진 모델명 사용(`gpt-4o`, `claude-3-5-sonnet-…`). |
+| **비용은 파생값** | `usage_details`(토큰)를 보내면 Langfuse가 모델 가격표로 비용 계산 — 단, usage 키가 모델 가격표의 키와 일치할 때만. `input` / `output`을 보내고, 정의가 있는 모델명을 사용(`gpt-4o`, `claude-haiku-4-5`). |
+| **trace 속성은 observation 단위** | SDK v4에는 `update_current_trace()`가 없음. 작업을 `propagate_attributes(...)`로 감쌀 것. metadata는 `dict[str, str]`, 값은 200자 이하. |
+| **전역 RNG에 seed 금지** | `random.seed()`는 OpenTelemetry가 매 실행마다 같은 trace/span id를 쓰게 만들고, 중복 행은 `FINAL`로도 합쳐지지 않음. 생성기는 별도의 `random.Random`을 사용. |
 | **EE 라이선스는 양쪽 컨테이너에** | `LANGFUSE_EE_LICENSE_KEY`는 `langfuse-web`과 `langfuse-worker` 모두에 필요. 오버레이가 처리. |
 | **CH 스키마 ≠ API** | 랩/디버깅용으로 ClickHouse를 직접 조회하되 스키마는 불안정하다고 간주. 앱에서는 Public API / SDK query helper / Blob Storage Export 사용. |
 | **`retention=0` = 영구** | 0이 아닌 최소 보존은 3일. 삭제 전 보관이 필요하면 Blob Storage Export와 병행. |
@@ -615,7 +646,8 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 - [서버측 데이터 마스킹](https://langfuse.com/self-hosting/security/data-masking) · [보호된 프롬프트 라벨](https://langfuse.com/docs/prompt-management/features/prompt-version-control)
 - [UI 커스터마이징](https://langfuse.com/self-hosting/administration/ui-customization) · [Organization Creators](https://langfuse.com/self-hosting/administration/organization-creators)
 - [Blob 스토리지 반출](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage) · [ClickHouse `s3` 테이블 함수](https://clickhouse.com/docs/sql-reference/table-functions/s3)
-- [Python SDK](https://langfuse.com/docs/observability/sdk/overview)
+- [Python SDK](https://langfuse.com/docs/observability/sdk/overview) · [Python SDK v3 → v4](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4) · [서버 v3 → v4](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4)
+- [Anthropic 연동 (OpenTelemetry)](https://langfuse.com/integrations/model-providers/anthropic)
 
 ### 📝 라이선스
 

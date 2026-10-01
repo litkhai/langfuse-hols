@@ -33,8 +33,8 @@
 SELECT
     provided_model_name                                                     AS model,
     count()                                                                 AS calls,
-    sum(usage_details['input'])                                             AS input_tokens,
-    sum(usage_details['output'])                                            AS output_tokens,
+    sum(usage_details['input'])                                             AS tokens_in,
+    sum(usage_details['output'])                                            AS tokens_out,
     round(sum(total_cost), 6)                                               AS total_cost_usd,
     round(sum(total_cost) / nullIf(count(), 0), 6)                          AS avg_cost_per_call
 FROM default.events_core FINAL

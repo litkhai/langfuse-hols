@@ -15,6 +15,8 @@ Self-hosting Langfuse on ClickHouse (OSS and Enterprise tracks) and Langfuse's e
 | [labs/langfuse-ee](labs/langfuse-ee/) | Self-hosting Langfuse on ClickHouse (OSS + Enterprise) |
 | [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
 
+Both labs run on the shared stack in [`_base/`](_base/).
+
 ### 🔗 Related repositories
 
 | Repository | What it is |
@@ -50,6 +52,8 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 |-----|----------------|
 | [labs/langfuse-ee](labs/langfuse-ee/) | ClickHouse 기반 Langfuse 자체 호스팅 (OSS + Enterprise) |
 | [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
+
+두 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다.
 
 ### 🔗 관련 저장소
 

@@ -78,7 +78,7 @@ python 04-experiments.py           # compare prompt v1 vs v2 with code evaluator
 python 05-llm-as-a-judge.py        # add an LLM-judge score (offline rubric by default)
 python 06-annotation-queue.py      # create the human-review queue + demo scores
 
-# Explore how every score lands in ClickHouse:
+# Explore how every score lands in ClickHouse (scores ingest asynchronously — give 06 ~10 s):
 docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
@@ -262,7 +262,7 @@ python 04-experiments.py           # 코드 평가자로 프롬프트 v1 vs v2 �
 python 05-llm-as-a-judge.py        # LLM 판정 스코어 추가(기본 오프라인 rubric)
 python 06-annotation-queue.py      # 휴먼 검수 큐 + 데모 스코어 생성
 
-# 모든 스코어가 ClickHouse에 어떻게 쌓이는지 탐색:
+# 모든 스코어가 ClickHouse에 어떻게 쌓이는지 탐색 (스코어는 비동기 적재 — 06 이후 ~10초 대기):
 docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```

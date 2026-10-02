@@ -16,8 +16,10 @@ answers a different question: **once Langfuse is running, how do you actually us
 to measure and improve LLM quality?**
 
 > **Everything here is OSS (MIT) — no license key required.** The only optional
-> extra is an LLM API key, used for real answer generation and Langfuse's *managed*
-> LLM-as-a-judge; without it the lab runs fully offline with code evaluators.
+> extra is an Anthropic API key, used for real answer generation (`claude-haiku-4-5`),
+> the LLM judge and Langfuse's *managed* LLM-as-a-judge; without it the lab runs fully
+> offline with code evaluators. It runs on the **Langfuse v4** stack pinned in `_base/`,
+> where observations (not traces) are the unit stored in ClickHouse.
 
 ### 🔁 The quality loop
 
@@ -45,7 +47,7 @@ langfuse-eval/
 ├── 03-datasets.py              # a golden test set (input + expected_output), idempotent
 ├── 04-experiments.py           # run_experiment: prompt v1 vs v2 + code evaluators
 ├── 05-llm-as-a-judge.py        # hybrid judge (offline rubric / real LLM) as an evaluator
-├── 05-llm-as-a-judge.md        # guide: Langfuse's MANAGED evaluators (Hallucination/Toxicity/…)
+├── 05-llm-as-a-judge.md        # guide: Langfuse's MANAGED, observation-level evaluators (+ the API calls)
 ├── 06-annotation-queue.py      # score configs + queue + enqueue traces (human-in-the-loop)
 ├── 07-scores-in-clickhouse.sql # the payoff: every signal, unified, in ClickHouse
 └── 99-cleanup.py               # remove this lab's artifacts (best-effort; stack untouched)
@@ -59,15 +61,15 @@ langfuse-eval/
   _base/bin/check.sh   # optional: containers healthy, migrations finished, SDK keys valid
   ```
   This lab uses that stack and its `_base/.env` credentials — the same ones the `langfuse-ee` lab uses (its `01-up.sh` runs the same script).
-- **Python 3.9+** and `pip install "langfuse>=3" openai`.
-- *(optional)* `OPENAI_API_KEY` in `_base/.env` for real generation + managed LLM-as-a-judge.
+- **Python 3.10+** (Langfuse Python SDK v4 requires it) and `pip install -r _base/requirements.txt` — the packages are pinned there.
+- *(optional)* `ANTHROPIC_API_KEY` in `_base/.env` for real generation (`claude-haiku-4-5`) + the LLM judge. The real calls use the official `anthropic` SDK, traced by `opentelemetry-instrumentation-anthropic`.
 
 ### 🚀 Quick start (offline — no LLM key needed)
 
 ```bash
 cd labs/langfuse-eval
-python -m venv .venv && source .venv/bin/activate
-pip install "langfuse>=3" openai
+python3.12 -m venv ../../.venv && source ../../.venv/bin/activate   # Python 3.10+; one venv for both labs
+pip install -r ../../_base/requirements.txt
 
 python 01-seed-traces.py 20        # seed traces to evaluate
 python 02-prompt-management.py     # version + label + compile + link a prompt
@@ -76,7 +78,7 @@ python 04-experiments.py           # compare prompt v1 vs v2 with code evaluator
 python 05-llm-as-a-judge.py        # add an LLM-judge score (offline rubric by default)
 python 06-annotation-queue.py      # create the human-review queue + demo scores
 
-# Explore how every score lands in ClickHouse:
+# Explore how every score lands in ClickHouse (scores ingest asynchronously — give 06 ~10 s):
 docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
@@ -101,21 +103,26 @@ A dataset is a reusable set of test cases (`input` + `expected_output`). We prom
 auto-traces each run, and scores it. We run it twice — **prompt-v1 vs prompt-v2** —
 with three **code evaluators** (no LLM key): `keyword-recall`, `length-ok`,
 `answered`. Each experiment trace is tagged with its variant so ClickHouse can
-reconstruct the A/B (lab 07). Compare the two runs side by side in the UI.
+reconstruct the A/B (lab 07): SDK v4's `propagate_attributes()` wraps the
+`run_experiment()` call, which puts the tag on every observation of the trace,
+including the root one. Compare the two runs side by side in the UI.
 
 #### 05 — LLM-as-a-judge *(hybrid)*
 Use a model to grade the output. Runs an experiment whose evaluator is a judge:
-offline it uses a deterministic rubric; with `OPENAI_API_KEY` it makes a real
-grading call. For Langfuse's fully **managed** evaluators (pre-built Hallucination,
-Toxicity, Context-Relevance… that run continuously on production traces or dataset
-runs), see [05-llm-as-a-judge.md](05-llm-as-a-judge.md) — those need a judge model in
-the UI's *LLM Connections* and write `source = 'EVAL'`.
+offline it uses a deterministic rubric; with `ANTHROPIC_API_KEY` it makes a real
+grading call to Claude. For Langfuse's fully **managed** evaluators — **observation-level**
+evaluators plus a rule that run continuously on live observations (trace-level ones are
+*Legacy* and stop running in v4's `events_only` mode) — see
+[05-llm-as-a-judge.md](05-llm-as-a-judge.md): they need an Anthropic connection under
+*LLM Connections* (UI or API) and write `source = 'EVAL'`.
 
 #### 06 — Annotation queues
 Human-in-the-loop scoring. Create **score configs** (`answer-quality` categorical,
 `factually-correct` boolean), a **queue** bound to them, and enqueue seed traces for
-review. All via the Public REST API (Basic auth). A few demo review scores are
-written so lab 07 has data; **real** UI annotations arrive with `source = 'ANNOTATION'`.
+review. All via the Public REST API (Basic auth). On v4 the trace linkage comes from
+`GET /api/public/v3/scores?fields=subject` (the older score endpoints answer 404), and a trace
+is enqueued as an `OBSERVATION` item holding its root observation's id. A few demo review
+scores are written so lab 07 has data; **real** UI annotations arrive with `source = 'ANNOTATION'`.
 
 #### 07 — Scores in ClickHouse *(the SA payoff)*
 Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
@@ -124,7 +131,7 @@ Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
 | Unified model by `source`/`name` | every signal in one table (API / EVAL / ANNOTATION) |
 | Volume by `data_type` | numeric vs boolean vs categorical |
 | Numeric distribution (p50/p90) | per-metric spread |
-| **Experiment A/B by variant** | `scores → traces` join reconstructs v1 vs v2 |
+| **Experiment A/B by variant** | `scores → events_core` root-row join reconstructs v1 vs v2 |
 | Per-trace agreement | user-thumbs vs hallucination-check vs human review, same trace |
 | Daily trend | judged correctness over time |
 
@@ -135,10 +142,11 @@ Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
 | **Two databases** | Prompts + datasets + queues live in **Postgres**; traces + **scores** live in **ClickHouse**. |
 | **SDK scores are `source=API`** | Code/LLM-judge scores written via the SDK are `source=API`. Only Langfuse's **managed** evaluators write `EVAL`; UI annotations write `ANNOTATION`. |
 | **`config_id` is strict** | A score bound to a score config must match that config's exact `data_type`, or ingestion drops it. Demo scores here are unbound. |
-| **Run id not in ClickHouse** | Evaluator scores don't carry `dataset_run_id` in CH — tag experiment traces (lab 04 does) and join `scores → traces` to reconstruct an A/B. |
+| **Run id not in `scores`** | Evaluator scores don't carry `dataset_run_id` in CH — tag experiment traces (lab 04 does) and join `scores → events_core` root rows to reconstruct an A/B. (v4 also stamps `experiment_name` on every event row.) |
+| **Tags must reach the root row** | Attributes set *inside* the `run_experiment` task start one level below the root `experiment-item-run` row. Wrap the `run_experiment()` call in `propagate_attributes()` so the root carries them too. |
 | **Async ingestion** | Scores flow SDK → worker → ClickHouse asynchronously; allow a few seconds before querying `scores`. |
 | **`flush()` in scripts** | Short scripts must `flush()` before exit or lose buffered data. |
-| **Managed judge needs a key** | Managed LLM-as-a-judge requires a structured-output model configured in *LLM Connections*. |
+| **Managed judge needs a key** | Managed LLM-as-a-judge requires a structured-output model configured in *LLM Connections* (here the Anthropic adapter), and an **observation-level** evaluator: trace-level evaluators stop running in `events_only` mode. |
 
 ### 📝 Verification status
 
@@ -166,6 +174,7 @@ at ingestion → demo scores are written unbound. **(3)** scores ingest asynchro
 - [Prompt Management](https://langfuse.com/docs/prompt-management/overview)
 - [Datasets & Experiments](https://langfuse.com/docs/evaluation/experiments/experiments-via-sdk)
 - [Evaluation overview](https://langfuse.com/docs/evaluation/overview) · [LLM-as-a-judge](https://langfuse.com/docs/evaluation/evaluation-methods/llm-as-a-judge) · [Annotation queues](https://langfuse.com/docs/evaluation/evaluation-methods/annotation-queues)
+- [Python SDK v3 → v4](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4) · [Anthropic integration (OpenTelemetry)](https://langfuse.com/integrations/model-providers/anthropic) · [Upgrade trace-level evaluators](https://langfuse.com/faq/all/llm-as-a-judge-migration)
 
 ### 📝 License
 [MIT](../../LICENSE) — same as the rest of the repository.
@@ -192,8 +201,9 @@ LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 �
 쓰는가?**
 
 > **여기 나오는 기능은 전부 OSS(MIT) — 라이선스 키 불필요.** 유일한 선택 항목은 실제 답변
-> 생성과 Langfuse의 *managed* LLM-as-a-judge용 LLM API 키이며, 없으면 코드 평가자로
-> 완전 오프라인 실행됩니다.
+> 생성(`claude-haiku-4-5`)과 LLM 판정, Langfuse의 *managed* LLM-as-a-judge용 Anthropic API
+> 키이며, 없으면 코드 평가자로 완전 오프라인 실행됩니다. `_base/`에 고정된 **Langfuse v4**
+> 스택에서 실행되며, ClickHouse에 저장되는 단위는 trace가 아니라 observation입니다.
 
 ### 🔁 품질 루프
 
@@ -221,7 +231,7 @@ langfuse-eval/
 ├── 03-datasets.py              # 골든 테스트셋(input + expected_output), 멱등
 ├── 04-experiments.py           # run_experiment: 프롬프트 v1 vs v2 + 코드 평가자
 ├── 05-llm-as-a-judge.py        # 하이브리드 판정(오프라인 rubric / 실제 LLM)
-├── 05-llm-as-a-judge.md        # 가이드: Langfuse MANAGED 평가자(Hallucination/Toxicity/…)
+├── 05-llm-as-a-judge.md        # 가이드: Langfuse MANAGED, observation 수준 평가자(+ API 호출)
 ├── 06-annotation-queue.py      # score config + 큐 + trace 적재(휴먼 검수)
 ├── 07-scores-in-clickhouse.sql # 핵심: 모든 신호를 ClickHouse에서 통합 분석
 └── 99-cleanup.py               # 이 랩 산출물만 정리(best-effort; 스택은 그대로)
@@ -235,15 +245,15 @@ langfuse-eval/
   _base/bin/check.sh   # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
   ```
   이 랩은 그 스택과 `_base/.env` 자격증명을 사용합니다 — `langfuse-ee` 랩이 쓰는 것과 같으며, 그 랩의 `01-up.sh`도 같은 스크립트를 실행합니다.
-- **Python 3.9+** 와 `pip install "langfuse>=3" openai`.
-- *(선택)* `_base/.env`의 `OPENAI_API_KEY` — 실제 생성 + managed LLM-as-a-judge용.
+- **Python 3.10+** (Langfuse Python SDK v4 요구사항) 와 `pip install -r _base/requirements.txt` — 패키지는 그 파일에 고정되어 있습니다.
+- *(선택)* `_base/.env`의 `ANTHROPIC_API_KEY` — 실제 생성(`claude-haiku-4-5`) + LLM 판정용. 실제 호출은 공식 `anthropic` SDK를 쓰고 `opentelemetry-instrumentation-anthropic`이 추적합니다.
 
 ### 🚀 빠른 시작 (오프라인 — LLM 키 불필요)
 
 ```bash
 cd labs/langfuse-eval
-python -m venv .venv && source .venv/bin/activate
-pip install "langfuse>=3" openai
+python3.12 -m venv ../../.venv && source ../../.venv/bin/activate   # Python 3.10+; 두 랩이 venv 하나를 공유
+pip install -r ../../_base/requirements.txt
 
 python 01-seed-traces.py 20        # 평가 대상 trace 시드
 python 02-prompt-management.py     # 프롬프트 버전·라벨·compile·링크
@@ -252,7 +262,7 @@ python 04-experiments.py           # 코드 평가자로 프롬프트 v1 vs v2 �
 python 05-llm-as-a-judge.py        # LLM 판정 스코어 추가(기본 오프라인 rubric)
 python 06-annotation-queue.py      # 휴먼 검수 큐 + 데모 스코어 생성
 
-# 모든 스코어가 ClickHouse에 어떻게 쌓이는지 탐색:
+# 모든 스코어가 ClickHouse에 어떻게 쌓이는지 탐색 (스코어는 비동기 적재 — 06 이후 ~10초 대기):
 docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
@@ -274,21 +284,24 @@ UI가 해당 버전의 성능을 귀속시킬 수 있게 합니다. 프롬프트
 `dataset.run_experiment(name, task, evaluators=[…])` 는 모든 아이템에 task를 실행하고 각
 run을 자동 trace + 채점합니다. **프롬프트 v1 vs v2** 로 두 번 실행하며, LLM 키 없는 세 개의
 **코드 평가자**(`keyword-recall`, `length-ok`, `answered`)를 사용합니다. 각 실험 trace에
-variant 태그를 달아 ClickHouse에서 A/B를 재구성할 수 있게 합니다(랩 07). UI에서 두 run을
-나란히 비교하세요.
+variant 태그를 달아 ClickHouse에서 A/B를 재구성할 수 있게 합니다(랩 07). SDK v4의
+`propagate_attributes()`가 `run_experiment()` 호출을 감싸므로 태그가 루트를 포함한 trace의 모든
+observation에 기록됩니다. UI에서 두 run을 나란히 비교하세요.
 
 #### 05 — LLM-as-a-judge *(하이브리드)*
 모델로 출력을 채점. 판정자를 평가자로 쓰는 실험을 실행합니다: 오프라인에서는 결정적
-rubric, `OPENAI_API_KEY` 가 있으면 실제 채점 호출. Langfuse의 완전 **managed** 평가자(사전
-제작 Hallucination/Toxicity/Context-Relevance… 를 운영 trace/데이터셋 run에 상시 실행)는
-[05-llm-as-a-judge.md](05-llm-as-a-judge.md) 참고 — UI *LLM Connections* 의 판정 모델이
+rubric, `ANTHROPIC_API_KEY` 가 있으면 Claude에 실제 채점 호출. Langfuse의 완전 **managed**
+평가자 — 실시간 observation에 상시 실행되는 **observation 수준** evaluator와 rule (trace 수준은
+*Legacy*이며 v4의 `events_only` 모드에서는 실행되지 않음) — 는
+[05-llm-as-a-judge.md](05-llm-as-a-judge.md) 참고. *LLM Connections* 의 Anthropic connection(UI 또는 API)이
 필요하며 `source = 'EVAL'` 로 기록됩니다.
 
 #### 06 — 어노테이션 큐
 휴먼 검수. **score config**(`answer-quality` 범주형, `factually-correct` 불리언), 그에 묶인
 **큐** 를 만들고 시드 trace를 검수 대상으로 적재합니다. 전부 Public REST API(Basic auth).
-랩 07이 비지 않도록 데모 스코어 몇 개를 기록하며, **실제** UI 어노테이션은
-`source = 'ANNOTATION'` 으로 들어옵니다.
+v4에서 trace 연결 정보는 `GET /api/public/v3/scores?fields=subject`로 얻고(이전 score 엔드포인트는 404),
+trace는 루트 observation의 id를 담은 `OBSERVATION` 아이템으로 적재합니다. 랩 07이 비지 않도록 데모
+스코어 몇 개를 기록하며, **실제** UI 어노테이션은 `source = 'ANNOTATION'` 으로 들어옵니다.
 
 #### 07 — ClickHouse의 scores *(SA 관점의 핵심)*
 `scores` 테이블에 순수 SQL(`FINAL` + `is_deleted = 0`):
@@ -297,7 +310,7 @@ rubric, `OPENAI_API_KEY` 가 있으면 실제 채점 호출. Langfuse의 완전 
 | `source`/`name`별 통합 모델 | 한 테이블 안의 모든 신호(API / EVAL / ANNOTATION) |
 | `data_type`별 볼륨 | 수치 vs 불리언 vs 범주 |
 | 수치 분포(p50/p90) | 지표별 분포 |
-| **variant별 실험 A/B** | `scores → traces` 조인으로 v1 vs v2 재구성 |
+| **variant별 실험 A/B** | `scores → events_core` 루트 행 조인으로 v1 vs v2 재구성 |
 | trace별 신호 일치도 | 같은 trace의 user-thumbs vs hallucination-check vs 휴먼 검수 |
 | 일별 추이 | 시간에 따른 판정 정확도 |
 
@@ -308,10 +321,11 @@ rubric, `OPENAI_API_KEY` 가 있으면 실제 채점 호출. Langfuse의 완전 
 | **두 DB** | 프롬프트·데이터셋·큐는 **Postgres**, trace·**scores**는 **ClickHouse**. |
 | **SDK 스코어는 `source=API`** | SDK로 쓴 코드/LLM-judge 스코어는 `source=API`. **managed** 평가자만 `EVAL`, UI 어노테이션은 `ANNOTATION`. |
 | **`config_id`는 엄격** | config에 묶인 스코어는 그 config의 `data_type`과 정확히 일치해야 함. 아니면 적재 시 드롭. 이 랩의 데모 스코어는 미연결. |
-| **run id는 CH에 없음** | 평가자 스코어는 CH `dataset_run_id`를 채우지 않음 → 실험 trace에 태그(랩 04)하고 `scores → traces` 조인으로 A/B 재구성. |
+| **run id는 `scores`에 없음** | 평가자 스코어는 CH `dataset_run_id`를 채우지 않음 → 실험 trace에 태그(랩 04)하고 `scores → events_core` 루트 행 조인으로 A/B 재구성. (v4는 모든 이벤트 행에 `experiment_name`도 기록함.) |
+| **태그는 루트 행까지** | `run_experiment` task *안에서* 설정한 속성은 루트 `experiment-item-run` 행보다 한 단계 아래부터 적용됨. `run_experiment()` 호출을 `propagate_attributes()`로 감싸 루트에도 기록되게 할 것. |
 | **비동기 적재** | 스코어는 SDK → worker → ClickHouse 로 비동기 적재. `scores` 조회 전 몇 초 대기. |
 | **스크립트의 `flush()`** | 짧은 스크립트는 종료 전 `flush()` 없으면 버퍼 데이터 유실. |
-| **managed 판정은 키 필요** | managed LLM-as-a-judge는 *LLM Connections* 에 structured-output 모델 필요. |
+| **managed 판정은 키 필요** | managed LLM-as-a-judge는 *LLM Connections*(여기서는 Anthropic adapter)에 structured-output 모델과 **observation 수준** evaluator가 필요. trace 수준 evaluator는 `events_only` 모드에서 실행되지 않음. |
 
 ### 📝 검증 상태
 
@@ -338,6 +352,7 @@ ClickHouse `dataset_run_id`를 채우지 **않음** → 랩 04가 trace에 varia
 - [Prompt Management](https://langfuse.com/docs/prompt-management/overview)
 - [Datasets & Experiments](https://langfuse.com/docs/evaluation/experiments/experiments-via-sdk)
 - [Evaluation 개요](https://langfuse.com/docs/evaluation/overview) · [LLM-as-a-judge](https://langfuse.com/docs/evaluation/evaluation-methods/llm-as-a-judge) · [Annotation queues](https://langfuse.com/docs/evaluation/evaluation-methods/annotation-queues)
+- [Python SDK v3 → v4](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4) · [Anthropic 연동 (OpenTelemetry)](https://langfuse.com/integrations/model-providers/anthropic) · [trace 수준 evaluator 업그레이드](https://langfuse.com/faq/all/llm-as-a-judge-migration)
 
 ### 📝 라이선스
 [MIT](../../LICENSE) — same as the rest of the repository.

@@ -4,6 +4,7 @@
 > 작성일: 2026-07-25 · 작성자: Ken Lee (ClickHouse SA)
 > 자매 랩: [`labs/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
 > 참고(#7): 스택·`.env`·trace 생성기는 두 랩이 공유하는 [`_base/`](../../_base/README.md)로 옮겨졌다. 아래 본문의 해당 경로는 현재 위치로 고쳐 두었다.
+> 참고(#22): 이 설계는 Langfuse v3 / Python SDK v3 기준으로 쓰였다. 스택은 Langfuse v4(4.48.0)로 고정되었고 코드는 v4로 포팅되었다. observation이 ClickHouse `events_full` / `events_core`에 저장되고(trace는 루트 observation이며 trace 속성은 모든 행에 있음 — `traces`/`observations` 테이블은 비어 있음), `update_current_trace()`는 `propagate_attributes()`로 바뀌었으며, 실제 모델 호출은 OpenAI 대신 Anthropic(`claude-haiku-4-5`, 공식 `anthropic` SDK + OpenTelemetry 계측)이고, Python은 3.10+ (`pip install -r _base/requirements.txt`), managed evaluator는 observation 수준이다. 아래 본문은 설계 당시의 기록이며, 달라진 부분에는 `(#22)` 주석을 달았다.
 
 ---
 
@@ -158,7 +159,7 @@ labs/langfuse-eval/
   1. **오프라인 (기본, 키 불필요)** — 04의 evaluator 목록에 **in-code LLM-judge 흉내** evaluator 추가(결정적 rubric 기반 점수). 항상 실행/검증됨.
   2. **Managed (실 LLM 키 있을 때)** — Langfuse UI/API로 managed evaluator를 등록해 dataset run 또는 production trace를 자동 채점.
 - **(b)** managed 경로:
-  - 전제: Langfuse **LLM Connections**에 API 키 등록(OpenAI/Anthropic, structured-output 지원 모델 필수).
+  - 전제: Langfuse **LLM Connections**에 API 키 등록(OpenAI/Anthropic, structured-output 지원 모델 필수). (#22) 이 랩은 Anthropic connection을 쓰고, evaluator는 observation 수준이며 UI 대신 stable API(`PUT /api/public/llm-connections`, `POST /api/public/v2/evaluators`, `POST /api/public/v2/evaluation-rules`)로도 만들 수 있다 — [05-llm-as-a-judge.md](05-llm-as-a-judge.md).
   - 사전 제작 evaluator 라이브러리: **Hallucination · Context-Relevance · Toxicity · Helpfulness** (+ Ragas).
   - 타깃: (i) production traces(샘플링 %) 또는 (ii) offline dataset runs.
   - 변수 매핑: `{{input}}`/`{{output}}`/`{{ground_truth}}` → trace 필드.
@@ -218,9 +219,8 @@ labs/langfuse-eval/
 ```bash
 # ── 이 랩 전용 (전부 선택) ──────────────────────────────────
 # managed LLM-as-a-judge & 실제 답변 생성용. 없으면 오프라인 경로로 자동 폴백.
-OPENAI_API_KEY=            # 선택 — 있으면 04 실제 생성 + 05 managed judge
-# ANTHROPIC_API_KEY=       # 선택 — 대안 judge 모델
-EVAL_JUDGE_MODEL=gpt-4o-mini   # structured-output 지원 모델
+ANTHROPIC_API_KEY=         # 선택 — 있으면 04 실제 생성 + 05 LLM 판정 (#22: OpenAI 대신 Anthropic, claude-haiku-4-5)
+EVAL_JUDGE_MODEL=claude-haiku-4-5   # structured-output 지원 모델
 DATASET_NAME=support-golden-qa
 PROMPT_NAME=support-system
 ```

@@ -8,7 +8,8 @@ queue bound to them, and enqueue traces to review.
 This script (all via the Public REST API — no SDK helper for these):
   1. Ensures two score configs: `answer-quality` (categorical), `factually-correct` (boolean).
   2. Ensures a queue `human-review` bound to those configs.
-  3. Enqueues recent seed traces (from lab 01) for review.
+  3. Enqueues recent seed traces (from lab 01) for review. On Langfuse v4 a trace IS its
+     root observation, so each trace is enqueued as an OBSERVATION item (the root's id).
   4. Injects a few DEMO review scores so lab 07 has data to analyze.
 
      ⚠️ The demo scores are written via the SDK, so their `source` is `API`. Real
@@ -43,6 +44,18 @@ def ensure_queue(name, score_config_ids):
                 "scoreConfigIds": score_config_ids})["id"]
 
 
+def root_observation_id(trace_id):
+    """The root observation of a trace (Observations API v2, real-time on v4).
+
+    A v4 trace is its root observation (`isRootObservation`). The server resolves an
+    OBSERVATION queue item against the events table and answers 404 for an id it does
+    not know, so we enqueue the root's id instead of the bare trace id.
+    """
+    rows = api("GET", f"/api/public/v2/observations?traceId={trace_id}"
+                      "&isRootObservation=true&fields=core&limit=1").get("data", [])
+    return rows[0]["id"] if rows else None
+
+
 def main() -> None:
     lf = client()  # also validates auth
 
@@ -62,14 +75,26 @@ def main() -> None:
     #    so the human-review scores co-occur with them for the cross-signal analysis
     #    in lab 07 §5. We select by SCORE, not by trace name: on a shared stack other
     #    labs may reuse the same trace name, which would misalign the join.
-    scored = api("GET", "/api/public/v2/scores?name=user-thumbs&limit=25").get("data", [])
-    trace_ids = list(dict.fromkeys(s["traceId"] for s in scored if s.get("traceId")))[:8]
+    #    v4: /scores and /v2/scores answer 404; /v3/scores leaves out the trace linkage
+    #    unless you ask for the `subject` field group (kind + id of what a score is on).
+    scored = api("GET", "/api/public/v3/scores?name=user-thumbs&limit=25&fields=subject").get("data", [])
+    trace_ids = list(dict.fromkeys(
+        s["subject"]["id"] for s in scored if (s.get("subject") or {}).get("kind") == "trace"))[:8]
     if not trace_ids:
         raise SystemExit("✗ No user-thumbs scores found — run `python 01-seed-traces.py` first.")
+    enqueued = []
     for tid in trace_ids:
+        root_id = root_observation_id(tid)
+        if root_id is None:
+            continue   # the score can be visible before its observations — skip, do not guess
         api("POST", f"/api/public/annotation-queues/{queue_id}/items",
-            {"objectId": tid, "objectType": "TRACE"})
-    print(f"✓ enqueued {len(trace_ids)} traces for human review")
+            {"objectId": root_id, "objectType": "OBSERVATION"})
+        enqueued.append(tid)
+    if not enqueued:
+        raise SystemExit("✗ None of the scored traces has a root observation yet — wait a few "
+                         "seconds for ingestion and re-run.")
+    trace_ids = enqueued
+    print(f"✓ enqueued {len(trace_ids)} traces (as their root observations) for human review")
 
     # 4) Demo review scores (source=API; a real reviewer in the UI → source=ANNOTATION).
     #    We DON'T pass config_id here: a score bound to a config must match that

@@ -5,18 +5,18 @@ so we can prove server-side data masking works (lab 08).
 Each trace deliberately embeds four sentinel secrets in the model input/output
 and in trace metadata. With the masking sidecar active (_base/docker-compose.masking.yml),
 Langfuse's worker redacts them on ingestion BEFORE writing to ClickHouse — so the
-raw sentinels must NOT appear in the traces / observations tables.
+raw sentinels must NOT appear in the events_full table.
 
 08-verify-masking.sql then greps ClickHouse for these exact sentinels (expect 0)
 and for the [REDACTED_*] placeholders the sidecar leaves behind (expect > 0).
 
-The SDK v3 is OpenTelemetry-native and ships to /api/public/otel — the only
-ingestion path server-side masking applies to.
+The Python SDK (v3 and v4) is OpenTelemetry-native and ships to /api/public/otel —
+the only ingestion path server-side masking applies to.
 
-Usage:
-    pip install "langfuse>=3"
-    python 08-generate-pii-traces.py            # 12 traces
-    python 08-generate-pii-traces.py 40         # 40 traces
+Usage (Python 3.10+):
+    python3 -m venv .venv && .venv/bin/pip install -r ../../_base/requirements.txt
+    .venv/bin/python 08-generate-pii-traces.py            # 12 traces
+    .venv/bin/python 08-generate-pii-traces.py 40         # 40 traces
 """
 import os
 import sys
@@ -47,10 +47,12 @@ def _load_dotenv(path: str) -> None:
 _load_dotenv(os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "_base", ".env")))
 
-from langfuse import Langfuse, get_client
+from langfuse import Langfuse, get_client, propagate_attributes
 
 N_TRACES = int(sys.argv[1]) if len(sys.argv) > 1 else 12
-random.seed(7)
+# Private RNG: seeding the global `random` module would make OpenTelemetry reuse the same
+# trace/span ids on every run (duplicate rows in events_full that FINAL cannot merge).
+rng = random.Random(7)
 
 # Realistic-looking support turns where a user pastes sensitive data.
 QUESTIONS = [
@@ -69,7 +71,7 @@ ANSWERS = [
 
 def main():
     Langfuse(
-        host=os.environ.get("LANGFUSE_HOST", "http://localhost:3000"),
+        base_url=os.environ.get("LANGFUSE_HOST", "http://localhost:3000"),
         public_key=os.environ["LANGFUSE_PUBLIC_KEY"],
         secret_key=os.environ["LANGFUSE_SECRET_KEY"],
     )
@@ -84,31 +86,35 @@ def main():
         idx = t % len(QUESTIONS)
         question, answer = QUESTIONS[idx], ANSWERS[idx]
 
-        with lf.start_as_current_observation(as_type="span", name="support-request") as root:
-            lf.update_current_trace(
-                name="support-request",
+        # SDK v4: the root observation carries the trace input/output; the trace-level
+        # attributes (name, user, session, tags, metadata) are propagated to every
+        # observation inside propagate_attributes() instead of update_current_trace().
+        with lf.start_as_current_observation(as_type="span", name="support-request",
+                                             input={"question": question}) as root:
+            with propagate_attributes(
+                trace_name="support-request",
                 user_id=f"user_{t % 5:02d}",
                 session_id=f"pii_sess_{t // 4}",
-                input={"question": question},
                 tags=["pii-demo"],
                 # Secrets pasted into metadata too — masking must reach here as well.
+                # v4 metadata is dict[str, str] with values <= 200 characters.
                 metadata={"raw_email": SECRET_EMAIL, "raw_rrn": SECRET_RRN, "channel": "web"},
-            )
-            trace_id = lf.get_current_trace_id()
+            ):
+                trace_id = lf.get_current_trace_id()
 
-            with lf.start_as_current_observation(
-                as_type="generation", name="answer-generation", model="gpt-4o-mini",
-                input=[
-                    {"role": "system", "content": "You are a support assistant. Never echo secrets."},
-                    {"role": "user", "content": question},
-                ],
-            ) as gen:
-                time.sleep(random.uniform(0.05, 0.2))
-                gen.update(
-                    output=answer,
-                    usage_details={"input_tokens": 120, "output_tokens": 40, "total_tokens": 160},
-                    metadata={"leaked_key": SECRET_API_KEY},
-                )
+                with lf.start_as_current_observation(
+                    as_type="generation", name="answer-generation", model="gpt-4o-mini",
+                    input=[
+                        {"role": "system", "content": "You are a support assistant. Never echo secrets."},
+                        {"role": "user", "content": question},
+                    ],
+                ) as gen:
+                    time.sleep(rng.uniform(0.05, 0.2))
+                    gen.update(
+                        output=answer,
+                        usage_details={"input": 120, "output": 40},
+                        metadata={"leaked_key": SECRET_API_KEY},
+                    )
             root.update(output={"answer": answer})
 
         lf.create_score(name="pii-demo", trace_id=trace_id, value=1, data_type="BOOLEAN")
@@ -117,7 +123,7 @@ def main():
     lf.flush()
     print("✓ Sent. Give the worker a few seconds to ingest + mask, then run:")
     print("    docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse \\")
-    print("      --password clickhouse --multiquery < 08-verify-masking.sql")
+    print("      --password clickhouse --multiquery < 08-verify-masking.sql   (its last row is the verdict)")
 
 
 if __name__ == "__main__":

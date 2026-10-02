@@ -1,17 +1,22 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  Langfuse v3 self-hosted — workshop stack (single-node Docker Compose)
+#  Langfuse v4 self-hosted — workshop stack (single-node Docker Compose)
 #
 #  This is a lightly annotated copy of the upstream Langfuse docker-compose.yml
 #  (https://github.com/langfuse/langfuse/blob/main/docker-compose.yml) tuned for
 #  this workshop. It is NOT highly-available — for production use Kubernetes/Helm.
 #
-#  Architecture (v3 = "scale" architecture, 5 stateful backends):
+#  Architecture (v4 keeps the v3 "scale" architecture: 5 stateful backends):
 #    langfuse-web     UI + public API (Next.js)            :3000
 #    langfuse-worker  async ingestion / background jobs     :3030
 #    postgres         OLTP: users, orgs, projects, prompts, audit_log
-#    clickhouse       OLAP: traces, observations, scores   :8123 / :9000  ← labs 03/04
+#    clickhouse       OLAP: events_full / events_core / scores  :8123 / :9000  ← labs 03/04
 #    redis            queue (BullMQ) + API-key/prompt cache
 #    minio            S3-compatible blob store: raw events, media, batch exports
+#
+#  v4 data model: observations land in default.events_full / default.events_core
+#  (trace attributes sit on every observation row); the v3 traces / observations
+#  tables stay empty in the default events_only mode. scores still fills.
+#  ClickHouse: v4 requires >= 25.12 and recommends 26.4.
 #
 #  Shared by every lab in this repository. It lives in `_base/`, so all lab scripts
 #  start it with `-f _base/docker-compose.yml` first, then optional overlays
@@ -21,14 +26,16 @@
 #
 #  Secrets are read from `_base/.env` (see _base/.env.example) — compose takes
 #  `.env` from the directory of the FIRST -f file. Defaults let it boot as-is.
-#  Image versions float until pinned (#6); override with LANGFUSE_VERSION,
-#  CLICKHOUSE_VERSION, REDIS_VERSION, POSTGRES_VERSION (see .env.example).
+#  Image versions are pinned (#6): Langfuse 4.48.0, ClickHouse 26.8.15.10, Redis
+#  7.2.16, Postgres 17.11, MinIO by digest, the masking sidecar on python 3.12.14.
+#  Override with LANGFUSE_VERSION, CLICKHOUSE_VERSION, REDIS_VERSION,
+#  POSTGRES_VERSION (see .env.example).
 # ─────────────────────────────────────────────────────────────────────────────
 name: langfuse-hols
 
 services:
   langfuse-worker:
-    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:-3}   # pin to a digest/exact version in prod
+    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:-4.48.0}   # pinned (#6)
     restart: always
     depends_on: &langfuse-depends-on
       postgres:
@@ -85,7 +92,7 @@ services:
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
 
   langfuse-web:
-    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:-3}        # pin to a digest/exact version in prod
+    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:-4.48.0}        # pinned (#6)
     restart: always
     depends_on: *langfuse-depends-on
     ports:
@@ -106,7 +113,7 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
 
   clickhouse:
-    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-latest}   # Langfuse requires ClickHouse >= 24.3; pin a version in prod
+    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-26.8.15.10}   # Langfuse v4 requires ClickHouse >= 25.12 (26.4 recommended); pinned (#6)
     restart: always
     user: "101:101"
     environment:
@@ -127,7 +134,9 @@ services:
       start_period: 1s
 
   minio:
-    image: cgr.dev/chainguard/minio
+    # No version tag is published (only `latest` / `latest-dev`), so pinned by digest (#6):
+    # RELEASE.2026-09-22T19-25-18Z, resolved 2026-10-02 from the cgr.dev registry API.
+    image: cgr.dev/chainguard/minio@sha256:4692462f35d97d7e82c30371d82f057703c5d9489bcae726010594c812f2d285
     restart: always
     entrypoint: sh
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
@@ -147,7 +156,7 @@ services:
       start_period: 1s
 
   redis:
-    image: docker.io/redis:${REDIS_VERSION:-7}
+    image: docker.io/redis:${REDIS_VERSION:-7.2.16}
     restart: always
     command: >
       --requirepass ${REDIS_AUTH:-myredissecret}
@@ -163,7 +172,7 @@ services:
       retries: 10
 
   postgres:
-    image: docker.io/postgres:${POSTGRES_VERSION:-17}
+    image: docker.io/postgres:${POSTGRES_VERSION:-17.11}
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]

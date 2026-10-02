@@ -6,7 +6,9 @@
 
 ## English
 
-One Docker Compose stack that every lab in this repository runs on. The labs keep only their own scripts; the stack, its overlays, the `.env` template and the readiness check live here. A new lab that needs Langfuse points at `_base/` instead of copying a compose file.
+One Docker Compose stack that every lab in this repository runs on. The labs keep only their own scripts; the stack, its overlays, the `.env` template, the Python requirements and the readiness check live here. A new lab that needs Langfuse points at `_base/` instead of copying a compose file.
+
+The stack is **Langfuse v4** (pinned, see [Image versions](#image-versions)). Its data model is observations-first: ClickHouse stores one wide row per observation in `events_full` / `events_core`, with the trace attributes (name, user, session, tags, metadata) on every row and a trace being its root observation (`is_app_root`); the v3 tables `traces` and `observations` stay empty. Python code that talks to it needs **Python 3.10+** and `pip install -r _base/requirements.txt`.
 
 ### What is in the stack
 
@@ -17,7 +19,7 @@ Six services (`docker-compose.yml`, single node, not highly available):
 | `langfuse-web` | UI + public API | 3000 |
 | `langfuse-worker` | async ingestion and background jobs | 3030 (loopback) |
 | `postgres` | OLTP: users, orgs, projects, prompts, audit log | 5432 (loopback) |
-| `clickhouse` | OLAP: traces, observations, scores | 8123 / 9000 (loopback) |
+| `clickhouse` | OLAP: events_full, events_core (observations, one wide row each), scores | 8123 / 9000 (loopback) |
 | `redis` | queue and cache | 6379 (loopback) |
 | `minio` | S3-compatible blob store: raw events, media, exports | 9090 (S3 API), 9091 (console, loopback) |
 
@@ -33,6 +35,7 @@ _base/
 ├── docker-compose.governance.yml  # overlay: UI customization + org-creators allowlist (needs ee)
 ├── masking/masking_service.py     # the masking sidecar (mounted by the masking overlay)
 ├── .env.example                   # copy to _base/.env
+├── requirements.txt               # pinned Python deps of both labs: langfuse, anthropic, opentelemetry-instrumentation-anthropic
 ├── bin/up.sh · check.sh · down.sh · seed_traces.py
 └── lib/env.sh                     # BASE_DIR, load_env, lf_compose for the lab scripts
 ```
@@ -65,7 +68,7 @@ cp _base/.env.example _base/.env
 chmod 600 _base/.env
 ```
 
-It holds the headless-init credentials, the SDK keys (`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`), the enterprise license key, and optional keys such as `OPENAI_API_KEY`. Every lab reads it. Never commit it.
+It holds the headless-init credentials, the SDK keys (`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`), the enterprise license key, and the optional `ANTHROPIC_API_KEY` that switches the trace generator and the eval lab from the offline simulation to real `claude-haiku-4-5` calls. Every lab reads it. Never commit it.
 
 ### Scripts
 
@@ -74,7 +77,7 @@ It holds the headless-init credentials, the SDK keys (`LANGFUSE_PUBLIC_KEY` / `L
 | `bin/up.sh` | creates `_base/.env` if missing, starts the stack (`EE=1` adds the EE overlay), waits for `/api/public/health`, prints the logins |
 | `bin/check.sh` | readiness check — PASS / FAIL / SKIP per item, exit 1 on any FAIL; `--env-file PATH`, `--help` |
 | `bin/down.sh` | stops the stack with all four compose files; `--purge` also deletes the data volumes (`down -v`) |
-| `bin/seed_traces.py` | the trace generator both labs use (`labs/langfuse-ee/02-generate-traces.py` and `labs/langfuse-eval/01-seed-traces.py` are thin wrappers) |
+| `bin/seed_traces.py` | the trace generator both labs use (`labs/langfuse-ee/02-generate-traces.py` and `labs/langfuse-eval/01-seed-traces.py` are thin wrappers); needs `pip install -r _base/requirements.txt` |
 
 `bin/check.sh` needs only `docker` and `curl`, and never prints a key value:
 
@@ -88,16 +91,25 @@ A SKIP is not a pass.
 
 ### Image versions
 
-The compose file reads four variables, so a run can be pinned without editing it:
+The compose file reads four variables, so a run can use other versions without editing it:
 
 | Variable | Default | Image |
 |---|---|---|
-| `LANGFUSE_VERSION` | `3` | `langfuse/langfuse`, `langfuse/langfuse-worker` |
-| `CLICKHOUSE_VERSION` | `latest` | `clickhouse/clickhouse-server` |
-| `REDIS_VERSION` | `7` | `redis` |
-| `POSTGRES_VERSION` | `17` | `postgres` |
+| `LANGFUSE_VERSION` | `4.48.0` | `langfuse/langfuse`, `langfuse/langfuse-worker` |
+| `CLICKHOUSE_VERSION` | `26.8.15.10` | `clickhouse/clickhouse-server` |
+| `REDIS_VERSION` | `7.2.16` | `redis` |
+| `POSTGRES_VERSION` | `17.11` | `postgres` |
 
-The defaults are floating tags — they are what the stack used before `_base/` existed. Pinning them is tracked separately in [#6](https://github.com/litkhai/langfuse-hols/issues/6). Set a variable in `_base/.env` or in the shell, for example `LANGFUSE_VERSION=3.197.1 CLICKHOUSE_VERSION=25.11.2.24 _base/bin/up.sh`.
+The defaults are exact versions ([#6](https://github.com/litkhai/langfuse-hols/issues/6)). Langfuse v4 needs ClickHouse 25.12 or newer and recommends 26.4 ([ClickHouse deployment guide](https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse)); 26.8.15.10 was the current long-term-support release when it was pinned (#6), Redis 7.2 and Postgres 17 are above the v4 minimums. Two images are not variables: MinIO (`cgr.dev/chainguard/minio`) publishes no version tag, so it is pinned by digest (`@sha256:4692462f…`, MinIO `RELEASE.2026-09-22T19-25-18Z`, resolved 2026-10-02), and the masking sidecar runs `python:3.12.14-slim`. Set a variable in `_base/.env` or in the shell, for example `LANGFUSE_VERSION=4.48.0 CLICKHOUSE_VERSION=26.8.15.10 _base/bin/up.sh`.
+
+### Python dependencies
+
+`requirements.txt` pins `langfuse==4.16.0`, `anthropic==1.11.0` and `opentelemetry-instrumentation-anthropic==0.62.4` (latest on PyPI on 2026-10-02, installed together on Python 3.12). The Anthropic packages are only imported when `ANTHROPIC_API_KEY` is set. Create one virtual environment for both labs from the repository root:
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate     # Python 3.10 or newer
+pip install -r _base/requirements.txt
+```
 
 ### Project name and container names
 
@@ -113,7 +125,9 @@ This is the name the lab SQL instructions use: `docker exec -i langfuse-hols-cli
 
 ## 한국어
 
-이 저장소의 모든 랩이 함께 쓰는 Docker Compose 스택입니다. 랩에는 각자의 스크립트만 남기고, 스택·오버레이·`.env` 템플릿·준비 상태 점검은 여기에 둡니다. Langfuse가 필요한 새 랩은 compose 파일을 복사하는 대신 `_base/`를 가리킵니다.
+이 저장소의 모든 랩이 함께 쓰는 Docker Compose 스택입니다. 랩에는 각자의 스크립트만 남기고, 스택·오버레이·`.env` 템플릿·Python 요구사항·준비 상태 점검은 여기에 둡니다. Langfuse가 필요한 새 랩은 compose 파일을 복사하는 대신 `_base/`를 가리킵니다.
+
+스택은 **Langfuse v4**(버전 고정, [이미지 버전](#이미지-버전) 참조)입니다. 데이터 모델은 observation 우선입니다. ClickHouse는 observation마다 넓은 행 하나를 `events_full` / `events_core`에 저장하고, trace 속성(이름·user·session·tags·metadata)은 모든 행에 있으며 trace는 곧 루트 observation(`is_app_root`)입니다. v3 테이블 `traces`와 `observations`는 비어 있습니다. 이를 사용하는 Python 코드는 **Python 3.10+** 와 `pip install -r _base/requirements.txt`가 필요합니다.
 
 ### 스택 구성
 
@@ -124,7 +138,7 @@ This is the name the lab SQL instructions use: `docker exec -i langfuse-hols-cli
 | `langfuse-web` | UI + 공개 API | 3000 |
 | `langfuse-worker` | 비동기 인제스트·백그라운드 작업 | 3030 (루프백) |
 | `postgres` | OLTP: 사용자·조직·프로젝트·프롬프트·감사 로그 | 5432 (루프백) |
-| `clickhouse` | OLAP: traces·observations·scores | 8123 / 9000 (루프백) |
+| `clickhouse` | OLAP: events_full·events_core(observation당 넓은 행 하나), scores | 8123 / 9000 (루프백) |
 | `redis` | 큐·캐시 | 6379 (루프백) |
 | `minio` | S3 호환 blob 스토어: 원본 이벤트·미디어·익스포트 | 9090 (S3 API), 9091 (콘솔, 루프백) |
 
@@ -140,6 +154,7 @@ _base/
 ├── docker-compose.governance.yml  # 오버레이: UI 커스터마이징 + 조직 생성 허용목록 (ee 필요)
 ├── masking/masking_service.py     # 마스킹 사이드카 (마스킹 오버레이가 마운트)
 ├── .env.example                   # _base/.env 로 복사
+├── requirements.txt               # 두 랩의 버전 고정 Python 의존성: langfuse, anthropic, opentelemetry-instrumentation-anthropic
 ├── bin/up.sh · check.sh · down.sh · seed_traces.py
 └── lib/env.sh                     # 랩 스크립트용 BASE_DIR, load_env, lf_compose
 ```
@@ -172,7 +187,7 @@ cp _base/.env.example _base/.env
 chmod 600 _base/.env
 ```
 
-headless-init 자격증명, SDK 키(`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`), 엔터프라이즈 라이선스 키, 그리고 `OPENAI_API_KEY` 같은 선택 키가 들어 있고, 모든 랩이 이 파일을 읽습니다. 절대 커밋하지 마세요.
+headless-init 자격증명, SDK 키(`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`), 엔터프라이즈 라이선스 키, 그리고 trace 생성기와 eval 랩을 오프라인 시뮬레이션에서 실제 `claude-haiku-4-5` 호출로 바꾸는 선택 키 `ANTHROPIC_API_KEY`가 들어 있고, 모든 랩이 이 파일을 읽습니다. 절대 커밋하지 마세요.
 
 ### 스크립트
 
@@ -181,7 +196,7 @@ headless-init 자격증명, SDK 키(`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY
 | `bin/up.sh` | `_base/.env`가 없으면 생성, 스택 기동(`EE=1`이면 EE 오버레이 추가), `/api/public/health` 대기, 로그인 정보 출력 |
 | `bin/check.sh` | 준비 상태 점검 — 항목별 PASS / FAIL / SKIP, FAIL이 하나라도 있으면 종료 코드 1; `--env-file PATH`, `--help` |
 | `bin/down.sh` | compose 파일 4개를 모두 지정해 스택 종료; `--purge`는 데이터 볼륨까지 삭제(`down -v`) |
-| `bin/seed_traces.py` | 두 랩이 함께 쓰는 trace 생성기(`labs/langfuse-ee/02-generate-traces.py`와 `labs/langfuse-eval/01-seed-traces.py`는 얇은 래퍼) |
+| `bin/seed_traces.py` | 두 랩이 함께 쓰는 trace 생성기(`labs/langfuse-ee/02-generate-traces.py`와 `labs/langfuse-eval/01-seed-traces.py`는 얇은 래퍼); `pip install -r _base/requirements.txt` 필요 |
 
 `bin/check.sh`는 `docker`와 `curl`만 필요하고, 키 값은 절대 출력하지 않습니다.
 
@@ -195,16 +210,25 @@ SKIP은 통과가 아닙니다.
 
 ### 이미지 버전
 
-compose 파일이 변수 4개를 읽으므로, 파일을 고치지 않고도 실행을 고정할 수 있습니다.
+compose 파일이 변수 4개를 읽으므로, 파일을 고치지 않고도 다른 버전으로 실행할 수 있습니다.
 
 | 변수 | 기본값 | 이미지 |
 |---|---|---|
-| `LANGFUSE_VERSION` | `3` | `langfuse/langfuse`, `langfuse/langfuse-worker` |
-| `CLICKHOUSE_VERSION` | `latest` | `clickhouse/clickhouse-server` |
-| `REDIS_VERSION` | `7` | `redis` |
-| `POSTGRES_VERSION` | `17` | `postgres` |
+| `LANGFUSE_VERSION` | `4.48.0` | `langfuse/langfuse`, `langfuse/langfuse-worker` |
+| `CLICKHOUSE_VERSION` | `26.8.15.10` | `clickhouse/clickhouse-server` |
+| `REDIS_VERSION` | `7.2.16` | `redis` |
+| `POSTGRES_VERSION` | `17.11` | `postgres` |
 
-기본값은 유동 태그이며, `_base/` 도입 전에 스택이 쓰던 값 그대로입니다. 고정은 [#6](https://github.com/litkhai/langfuse-hols/issues/6)에서 따로 다룹니다. 변수는 `_base/.env`나 셸에서 지정합니다. 예: `LANGFUSE_VERSION=3.197.1 CLICKHOUSE_VERSION=25.11.2.24 _base/bin/up.sh`.
+기본값은 정확한 버전입니다([#6](https://github.com/litkhai/langfuse-hols/issues/6)). Langfuse v4는 ClickHouse 25.12 이상을 요구하고 26.4를 권장합니다([ClickHouse 배포 가이드](https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse)). 26.8.15.10은 고정 시점(#6)의 장기 지원(LTS) 릴리스였으며, Redis 7.2와 Postgres 17은 v4 최소 요건보다 높습니다. 변수가 아닌 이미지가 둘 있습니다. MinIO(`cgr.dev/chainguard/minio`)는 버전 태그를 배포하지 않아 다이제스트로 고정했고(`@sha256:4692462f…`, MinIO `RELEASE.2026-09-22T19-25-18Z`, 2026-10-02에 확인), 마스킹 사이드카는 `python:3.12.14-slim`을 씁니다. 변수는 `_base/.env`나 셸에서 지정합니다. 예: `LANGFUSE_VERSION=4.48.0 CLICKHOUSE_VERSION=26.8.15.10 _base/bin/up.sh`.
+
+### Python 의존성
+
+`requirements.txt`는 `langfuse==4.16.0`, `anthropic==1.11.0`, `opentelemetry-instrumentation-anthropic==0.62.4`를 고정합니다(2026-10-02 기준 PyPI 최신, Python 3.12에서 함께 설치 확인). Anthropic 패키지는 `ANTHROPIC_API_KEY`가 설정된 때만 import됩니다. 저장소 루트에서 두 랩이 함께 쓸 가상환경 하나를 만드세요.
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate     # Python 3.10 이상
+pip install -r _base/requirements.txt
+```
 
 ### 프로젝트 이름과 컨테이너 이름
 

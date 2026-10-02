@@ -6,13 +6,13 @@ The generator moved to ../../_base/bin/seed_traces.py so every lab can share it
 (langfuse-eval seeds its traces with the same script). This wrapper keeps the
 lab-02 command line working: same argv, same exit code.
 
-Usage:
-    pip install "langfuse>=3" openai
+Usage (Python 3.10+):
+    pip install -r ../../_base/requirements.txt
     python 02-generate-traces.py            # 40 traces
     python 02-generate-traces.py 200        # 200 traces
 
-Runs FULLY OFFLINE by default (no LLM API needed). Set OPENAI_API_KEY in
-_base/.env to make real OpenAI calls instead.
+Runs FULLY OFFLINE by default (no LLM API needed). Set ANTHROPIC_API_KEY in
+_base/.env to make real Anthropic calls (claude-haiku-4-5) instead.
 """
 import os
 import subprocess

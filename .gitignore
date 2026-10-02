@@ -7,6 +7,9 @@
 # Per-developer Claude Code settings: records local tool permissions and has
 # held connection strings.
 .claude/settings.local.json
+# Agent worktrees Claude Code creates inside the clone; `git add -A` would stage
+# each one as an embedded-repository gitlink (#25).
+.claude/worktrees/
 *.tfvars
 !*.tfvars.example
 

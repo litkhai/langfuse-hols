@@ -247,7 +247,7 @@ Two instance-level controls, both env-driven via [docker-compose.governance.yml]
 
 #### 11 — Parquet Export ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
 
-The enterprise data-platform / archival story, in two parts. **(A)** Configure a scheduled **Parquet** blob-storage export via `PUT /api/public/integrations/blob-storage` (type `S3_COMPATIBLE`, pointed at the workshop MinIO). On v4 the integration's `exportSource` must be the enriched observations source, `OBSERVATIONS_V2`; the legacy `LEGACY_TRACES_OBSERVATIONS` source reads the empty v3 tables and the server rejects it with HTTP 400. **(B)** Demonstrate the exact primitive that powers it, **live**, with ClickHouse — no waiting on the scheduler:
+The enterprise data-platform / archival story, in two parts. **(A)** Configure a scheduled **Parquet** blob-storage export via `PUT /api/public/integrations/blob-storage` (type `S3_COMPATIBLE`, pointed at the workshop MinIO). On v4 the integration's `exportSource` must be the enriched observations source, `OBSERVATIONS_V2`; the legacy `LEGACY_TRACES_OBSERVATIONS` source reads the v3 tables, and Langfuse's export docs state that legacy sources are unavailable in the default `events_only` mode. **(B)** Demonstrate the exact primitive that powers it, **live**, with ClickHouse — no waiting on the scheduler:
 
 ```sql
 INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/events_full.parquet',
@@ -277,32 +277,36 @@ Pairs with lab 07 as **archive-then-delete**: export before retention deletes. S
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-06-25** against **Langfuse v3.197.1** (Docker Compose, 6 containers) with a real enterprise trial license key:
+Verified **end-to-end on 2026-10-02** against **Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10**.
+
+- **Stack:** the pinned stack in [`_base/`](../../_base/README.md): Docker 29.8.1, Compose v5.5.1, Python 3.12.14, fresh volumes, default `events_only` write mode.
+- **EE:** a real enterprise license key.
+- **Model calls:** labs 01–11 ran offline. Lab 02 was also run with real Anthropic calls (`claude-haiku-4-5`).
+
+The full captured console output of the 01 → 11 run is in **[lab-output.md](lab-output.md)** (blog-ready).
 
 | Step | Result |
 |---|---|
-| `01` stack up | 6 containers healthy; `/api/public/health` → `{"status":"OK","version":"3.197.1"}` |
-| `02` generate traces | 40 traces ingested via the SDK (offline mode) |
-| `03` explore | tables `traces` / `observations` / `scores` are `ReplacingMergeTree`, monthly-partitioned |
-| `04` analytics | all 8 queries pass; cost/latency/quality numbers sane |
+| `01` stack up | 6 containers; `/api/public/health` → `{"status":"OK","version":"4.48.0"}`; `_base/bin/check.sh` all PASS, ClickHouse migrations applied 50 / shipped 50 |
+| `02` generate traces | 40 traces offline + 5 with real `claude-haiku-4-5` calls (traced by OpenTelemetry, priced) |
+| `03` explore | data in `events_full` / `events_core` (137 rows each) and `scores` (78); the v3 `traces` / `observations` tables exist and hold **0** rows |
+| `04` analytics | all 8 queries return rows from `events_core`; per-model cost non-zero; no joins needed |
 | `05` EE activate | Instance Management API `/api/admin/organizations` → HTTP 200 (license valid) |
 | `06` RBAC/SCIM | org + project + 2 SCIM users + project-level role override, all via API |
 | `07` audit/retention | 14-day retention set (`retentionDays: 14`); audit log shows every lab-06 action |
-
-Labs **08–11 were verified end-to-end on 2026-07-26** (Langfuse v3.197.1, ClickHouse 25.11.2.24, SDK 3.7.0, Docker 29.6.2) with a real enterprise license key. Full captured console output for the whole 01→11 run is in **[lab-output.md](lab-output.md)** (blog-ready).
-
-| Step | Result |
-|---|---|
-| `08` data masking | leak counts all `0` in `traces`+`observations`; **24 rows** carry `[REDACTED_*]`; sidecar logged **84 redactions** |
+| `08` data masking | verdict **PASS**: 24 pii-demo rows masked, leak counts `0` across input / output / metadata in `events_full`; sidecar logged **108 redactions**. The verdict FAILs on an empty table (`--selftest`) and on six other planted cases |
 | `09` protected prompts | v1→v2 label move (v1 `labels={}`); prompt rows in Postgres; 2 `create prompt` audit rows |
 | `10` governance | all `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` confirmed in the container env |
-| `11` parquet export | CH `s3()` round-trip **93 == 93**; integration API on v3.197.1 accepts `JSON/CSV/JSONL` only (not `PARQUET`) → JSONL fallback; ClickHouse writes true Parquet in Part B |
+| `11` parquet export | integration API **accepts `fileType: PARQUET`** with the `OBSERVATIONS_V2` export source (HTTP 200); CH `s3()` round-trip **182 == 182**. The hourly job had not fired before teardown, so its files are not proven |
 
-> **Version-drift finding (lab 11):** the published OpenAPI spec lists `fileType: PARQUET` for the blob-storage integration, but the pinned **v3.197.1** image rejects it with HTTP 400 (`JSON`/`CSV`/`JSONL` only) — scheduled-Parquet export is a newer release. Validate the API surface against your *running* image, not just the docs. The lab script tries `PARQUET`, then falls back to `JSONL`.
->
-> **Portability note (lab 08):** the driver auto-detects the Python interpreter (prefers `.venv/bin/python`, falls back to `python3`), so it runs on macOS where bare `python` doesn't exist.
+> **Version drift (lab 11), resolved by the pin.** On v3.197.1 the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. On the pinned **v4.48.0** it is accepted. The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
 
-Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables are `ReplacingMergeTree`, so analytics read with `FINAL` + `WHERE is_deleted = 0` to avoid double-counting un-merged row versions; **(2)** the SDK's `input_tokens`/`output_tokens` are normalized to the Map keys `input`/`output`/`total` in ClickHouse (the queries use `greatest()` over both spellings). The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
+Confirmed at runtime and built into the labs:
+
+1. **v4 writes observations to `events_full` / `events_core`.** The old tables stay empty, so the analytics read `events_core FINAL` and the masking proof reads `events_full` (full payloads) with `FINAL` + `WHERE is_deleted = 0`.
+2. **Cost is computed only for usage keys the model's price definition has.** Measured on v4.48.0, `gpt-4o-mini` with `input_tokens` / `output_tokens` gets `total_cost = 0`, while `input` / `output` is priced. The generator therefore sends `input` / `output`.
+
+The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
 
 ### 🔍 Additional resources
 
@@ -578,7 +582,7 @@ countIf(position(input, '[REDACTED_') > 0 OR position(output, '[REDACTED_') > 0)
 
 #### 11 — Parquet 반출 ↔ ClickHouse ([11-ee-parquet-export.sh](11-ee-parquet-export.sh))
 
-엔터프라이즈 데이터플랫폼/아카이브 스토리를 두 파트로. **(A)** `PUT /api/public/integrations/blob-storage`로 스케줄 **Parquet** blob 스토리지 반출 설정(type `S3_COMPATIBLE`, 워크숍 MinIO 지정). v4에서 통합의 `exportSource`는 enriched observations 소스인 `OBSERVATIONS_V2`여야 합니다. 레거시 `LEGACY_TRACES_OBSERVATIONS` 소스는 비어 있는 v3 테이블을 읽으므로 서버가 HTTP 400으로 거부합니다. **(B)** 그것을 구동하는 바로 그 primitive를 ClickHouse로 **라이브** 시연 — 스케줄러를 기다리지 않음:
+엔터프라이즈 데이터플랫폼/아카이브 스토리를 두 파트로. **(A)** `PUT /api/public/integrations/blob-storage`로 스케줄 **Parquet** blob 스토리지 반출 설정(type `S3_COMPATIBLE`, 워크숍 MinIO 지정). v4에서 통합의 `exportSource`는 enriched observations 소스인 `OBSERVATIONS_V2`여야 합니다. 레거시 `LEGACY_TRACES_OBSERVATIONS` 소스는 v3 테이블을 읽으며, Langfuse export 문서는 레거시 소스를 기본 `events_only` 모드에서 쓸 수 없다고 밝힙니다. **(B)** 그것을 구동하는 바로 그 primitive를 ClickHouse로 **라이브** 시연 — 스케줄러를 기다리지 않음:
 
 ```sql
 INSERT INTO FUNCTION s3('http://minio:9000/langfuse/exports/manual/events_full.parquet',
@@ -608,32 +612,36 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 
 ### 📝 검증 상태
 
-**2026-06-25**에 실제 엔터프라이즈 트라이얼 라이선스 키로 **Langfuse v3.197.1**(Docker Compose, 컨테이너 6개)에서 **end-to-end 검증**했습니다.
+**2026-10-02**에 **Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10**에서 **end-to-end 검증**했습니다.
+
+- **스택:** [`_base/`](../../_base/README.md)의 고정 스택입니다. Docker 29.8.1, Compose v5.5.1, Python 3.12.14, 새 볼륨, 기본 `events_only` 쓰기 모드를 썼습니다.
+- **EE:** 실제 엔터프라이즈 라이선스 키를 썼습니다.
+- **모델 호출:** 랩 01–11은 오프라인으로 돌렸고, 랩 02는 실제 Anthropic 호출(`claude-haiku-4-5`)로도 한 번 더 돌렸습니다.
+
+01 → 11 전체 실행의 콘솔 출력 원본은 **[lab-output.md](lab-output.md)**에 있습니다(블로그용).
 
 | 단계 | 결과 |
 |---|---|
-| `01` 스택 기동 | 컨테이너 6개 healthy; `/api/public/health` → `{"status":"OK","version":"3.197.1"}` |
-| `02` 트레이스 생성 | SDK(오프라인 모드)로 40건 적재 |
-| `03` 탐색 | `traces`/`observations`/`scores`는 `ReplacingMergeTree`, 월별 파티션 |
-| `04` 분석 | 8개 쿼리 전부 통과; 비용/지연/품질 수치 타당 |
+| `01` 스택 기동 | 컨테이너 6개; `/api/public/health` → `{"status":"OK","version":"4.48.0"}`; `_base/bin/check.sh` 전부 PASS, ClickHouse 마이그레이션 50/50 |
+| `02` 트레이스 생성 | 오프라인 40건 + 실제 `claude-haiku-4-5` 호출 5건(OpenTelemetry로 트레이스되고 비용 계산됨) |
+| `03` 탐색 | 데이터는 `events_full`·`events_core`(각 137행)와 `scores`(78행)에 있음. v3 `traces`·`observations` 테이블은 있으나 **0행** |
+| `04` 분석 | 8개 쿼리 모두 `events_core`에서 결과 반환; 모델별 비용 0이 아님; 조인 불필요 |
 | `05` EE 활성화 | Instance Management API `/api/admin/organizations` → HTTP 200 (라이선스 유효) |
 | `06` RBAC/SCIM | 조직 + 프로젝트 + SCIM 사용자 2명 + 프로젝트 단위 역할 오버라이드, 전부 API로 |
-| `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그에 lab 06의 모든 동작 기록됨 |
+| `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그에 랩 06의 모든 동작 기록됨 |
+| `08` 데이터 마스킹 | 판정 **PASS**: pii-demo 24행 마스킹, `events_full`의 input·output·metadata 전체에서 누출 `0`; 사이드카 로그 **108 redactions**. 빈 테이블(`--selftest`)과 일부러 만든 다른 6가지 경우에서는 FAIL |
+| `09` 보호된 프롬프트 | v1→v2 라벨 이동(v1 `labels={}`); 프롬프트 행은 Postgres에; `create prompt` 감사 2건 |
+| `10` 거버넌스 | 컨테이너 env에서 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
+| `11` parquet 반출 | 통합 API가 `OBSERVATIONS_V2` export source와 함께 **`fileType: PARQUET`를 허용**(HTTP 200); CH `s3()` 라운드트립 **182 == 182**. 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
 
-랩 **08–11은 2026-07-26에 end-to-end 검증**했습니다(Langfuse v3.197.1, ClickHouse 25.11.2.24, SDK 3.7.0, Docker 29.6.2, 실제 엔터프라이즈 라이선스 키). 01→11 전체 실행의 콘솔 출력 원본은 **[lab-output.md](lab-output.md)** 에 있습니다(블로그용).
+> **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). 고정한 **v4.48.0**에서는 허용됩니다. 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
 
-| 단계 | 결과 |
-|---|---|
-| `08` 데이터 마스킹 | `traces`+`observations` leak 카운트 전부 `0`; **24행**에 `[REDACTED_*]`; 사이드카 로그 **84 redactions** |
-| `09` 보호된 프롬프트 | v1→v2 라벨 이동(v1 `labels={}`); 프롬프트 행 Postgres에; `create prompt` 감사 2건 |
-| `10` 거버넌스 | 컨테이너 env에 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
-| `11` parquet 반출 | CH `s3()` 라운드트립 **93 == 93**; v3.197.1 통합 API는 `JSON/CSV/JSONL`만 허용(`PARQUET` 미지원) → JSONL 폴백; Part B에서 ClickHouse가 진짜 Parquet 기록 |
+런타임에서 확인해 랩에 반영한 두 가지:
 
-> **버전 드리프트 발견(랩 11):** 공개 OpenAPI 스펙엔 blob-storage 통합의 `fileType: PARQUET`가 있으나 고정 이미지 **v3.197.1**은 HTTP 400으로 거부(`JSON`/`CSV`/`JSONL`만) — 스케줄 Parquet 반출은 더 최신 릴리스. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 검증할 것. 스크립트는 `PARQUET` 시도 후 `JSONL`로 폴백.
->
-> **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지(`.venv/bin/python` 우선, `python3` 폴백)하므로 bare `python`이 없는 macOS에서도 실행됩니다.
+1. **v4는 observation을 `events_full`·`events_core`에 씁니다.** 예전 테이블은 비어 있습니다. 그래서 분석 쿼리는 `events_core FINAL`을, 마스킹 검증은 전체 원본이 있는 `events_full`을 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다.
+2. **비용은 모델 가격 정의에 있는 usage 키에 대해서만 계산됩니다.** v4.48.0에서 측정해 보니 `gpt-4o-mini`는 `input_tokens`/`output_tokens`로 보내면 `total_cost = 0`이고, `input`/`output`으로 보내면 비용이 계산됩니다. 그래서 생성기는 `input`/`output`을 보냅니다.
 
-런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다. **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
+설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
 
 ### 🔍 추가 자료
 

@@ -1,32 +1,36 @@
 # Evaluating Models in Langfuse — Blog Source & Execution Log
 
 > Working material for a tech blog titled **"Evaluating Models in Langfuse"**.
-> It bundles the narrative, the code, and the **real execution logs** captured while
-> building & verifying [`usecase/langfuse-eval/`](./README.md).
+> It bundles the narrative, the code and the **real execution logs** captured while
+> verifying [`labs/langfuse-eval/`](./README.md).
 >
-> **Verified environment (2026-07-26):** Langfuse server **v3.197.1** · Python SDK
-> `langfuse` **3.7.0** · **ClickHouse 25.11.2.24** · Python 3.9 · self-hosted Docker
-> stack (web · worker · postgres · clickhouse · redis · minio). Fully offline — **no
-> LLM API key** used.
+> **Verified environment (2026-10-02):**
+> - Langfuse server **v4.48.0**
+> - Python SDK `langfuse` **4.16.0** on Python 3.12.14
+> - **ClickHouse 26.8.15.10**
+> - The shared self-hosted Docker stack in [`_base/`](../../_base/README.md)
+>
+> Every step ran **offline** (deterministic simulation). Steps 04 and 05 also ran with
+> **real model calls to Anthropic `claude-haiku-4-5`**, and step 05's managed evaluator used an
+> Anthropic LLM connection. Both modes are shown below.
 
 ---
 
 ## 1. The hook
 
-Most Langfuse tutorials stop at "send a trace." But the reason teams adopt an LLM
-observability platform is the next question: **is my app actually any good, and did
-my last change make it better or worse?**
+Most Langfuse tutorials stop at "send a trace". But the reason teams adopt an LLM
+observability platform is the next question: **is my app actually any good, and did my
+last change make it better or worse?**
 
-Langfuse answers that with a tight loop of product features — **prompt management →
-datasets → experiments → LLM-as-a-judge → human annotation** — and, because it is
-self-hosted on **ClickHouse**, every quality signal it produces is queryable SQL.
+Langfuse answers that with a tight loop of product features: **prompt management →
+datasets → experiments → LLM-as-a-judge → human annotation**. Because it is self-hosted
+on **ClickHouse**, every quality signal it produces is queryable with SQL.
 
 This post walks that loop end to end on a self-hosted instance, then drops into the
 ClickHouse backend to show where the numbers physically live.
 
-> Everything shown is **OSS (MIT)** — no license key. The only optional extra is an
-> LLM key for *real* generation and Langfuse's *managed* judges; without it the whole
-> loop runs offline with deterministic code evaluators.
+> Everything except the optional model calls is **OSS (MIT)**, with no licence key. Without an
+> `ANTHROPIC_API_KEY` the whole loop runs offline with deterministic code evaluators.
 
 ---
 
@@ -41,96 +45,104 @@ ClickHouse backend to show where the numbers physically live.
                          score configs + queue                 API · EVAL · ANNOTATION
 ```
 
-The punchline for a data platform audience: **user feedback, code evaluators, the LLM
-judge, and human annotations all converge into one ClickHouse table — `scores` —
-distinguished by a `source` column.** That single table is what makes cross-cutting
-quality analytics (agreement, drift, A/B) a plain `SELECT`.
+The punchline for a data-platform audience: **user feedback, code evaluators, the LLM
+judge and human annotations all converge in one ClickHouse table, `scores`, told apart by
+a `source` column.** That single table is what makes cross-cutting quality analytics
+(agreement, drift, A/B) a plain `SELECT`.
 
 ---
 
 ## 3. Setup
 
-The lab reuses a running self-hosted stack (the sibling `langfuse-ee` lab). Bring it up
-and install the SDK:
+The lab runs on the shared stack in `_base/`, the same one `labs/langfuse-ee` uses:
 
 ```bash
-# 1) stack (postgres · clickhouse · redis · minio · web · worker)
-cd usecase/langfuse-ee && ./01-up.sh
+# from the repository root
+python3.12 -m venv .venv && .venv/bin/pip install -r _base/requirements.txt   # Python 3.10+
+_base/bin/up.sh            # postgres · clickhouse · redis · minio · web · worker
 #    → http://localhost:3000   login admin@example.com / workshop-admin-pw
 #    → project "LLM Observability"  (public key pk-lf-workshop-public)
-
-# 2) SDK
-cd ../langfuse-eval
-python -m venv .venv && source .venv/bin/activate
-pip install "langfuse>=3" openai
+_base/bin/check.sh         # containers, ClickHouse migrations, SDK keys
+# optional: ANTHROPIC_API_KEY=… in _base/.env → real model calls
 ```
 
-A tiny `_common.py` centralizes the boring parts — `.env` loading, the client, a REST
-helper for endpoints without an SDK method, and the shared Q&A knowledge base:
+A small `_common.py` centralizes the boring parts:
+- `.env` loading
+- the client
+- a REST helper for endpoints without an SDK method
+- the shared Q&A knowledge base
+- the one optional real-model call
 
 ```python
 def client():
     from langfuse import Langfuse, get_client
-    Langfuse(host=..., public_key=..., secret_key=...)
+    Langfuse(base_url=..., public_key=..., secret_key=...)   # SDK v4: base_url (host= is deprecated)
     lf = get_client()
     if not lf.auth_check():
         raise SystemExit("Auth failed — is the stack up and are LANGFUSE_* keys set?")
     return lf
+
+def ask_claude(*, system, user, model, max_tokens):         # only when ANTHROPIC_API_KEY is set
+    AnthropicInstrumentor().instrument()                    # once: traces the call as a GENERATION
+    resp = anthropic.Anthropic(timeout=60.0).messages.create(
+        model=model, max_tokens=max_tokens, system=system,
+        messages=[{"role": "user", "content": user}])
+    ...
 ```
 
 ---
 
 ## 4. Step 01 — seed traces to evaluate
 
-You can't evaluate an empty project. We reuse a trace generator (a customer-support
-RAG assistant) to seed ~20 nested traces with token usage, tags, and user-feedback
-scores.
+You can't evaluate an empty project. The shared trace generator (a customer-support RAG
+assistant) seeds about 20 nested traces with token usage, tags and user-feedback scores:
 
 ```bash
 python 01-seed-traces.py 20
 ```
 
 ```text
+→ Seeding 20 traces with the shared trace generator:
+  _base/bin/seed_traces.py
 ✓ Connected. Generating 20 traces (offline / simulated)…
   …10/20 traces
   …20/20 traces
-✓ Done. Open http://localhost:3000 → Tracing → Traces.
+✓ Done. Open http://localhost:3000 → Tracing → Observations.
 ```
 
 ---
 
 ## 5. Step 02 — Prompt management
 
-Store the system prompt **in Langfuse, not in code**. Create **v1** (terse) and **v2**
-(guard-railed). Creating v2 with the `production` label instantly *deploys* it (the
-label moves), while v1 stays reachable by version number. Fetch by label, fill
-variables with `.compile()`, and **link** the prompt to a generation with `prompt=` so
-the UI can attribute performance to that version.
+Store the system prompt **in Langfuse, not in code**:
+- Create **v1** (terse) and **v2** (guard-railed).
+- Creating v2 with the `production` label instantly *deploys* it: the label moves, while v1 stays reachable by version number.
+- Fetch by label and fill the variables with `.compile()`.
+- **Link** the prompt to a generation with `prompt=`, so the UI can attribute performance to that version.
 
 ```python
 lf.create_prompt(name="support-system", type="text",
     prompt="You are a {{tone}} customer-support assistant. "
            "Answer the user's question in one short sentence.",
-    labels=["production"], config={"model": "gpt-4o-mini", "temperature": 0.2})
+    labels=["production"], config={"model": "claude-haiku-4-5", "temperature": 0.2})
 
 # v2 — creating with `production` MOVES the label here (a deploy); `latest` too.
 lf.create_prompt(name="support-system", type="text",
     prompt="You are a {{tone}} customer-support assistant. Answer in one short "
            "sentence using only verified product facts. If you are unsure, say you "
            "will escalate to a human — never invent policy.",
-    labels=["production", "latest"], config={"model": "gpt-4o-mini", "temperature": 0.2})
+    labels=["production", "latest"], config={"model": "claude-haiku-4-5", "temperature": 0.2})
 
 prod = lf.get_prompt("support-system")                 # → v2 (production)
 with lf.start_as_current_observation(as_type="generation", name="demo",
-                                     model="gpt-4o-mini", prompt=prod) as gen:  # ← link
-    gen.update(output="…", usage_details={"input_tokens": 42, "output_tokens": 18})
+                                     model="claude-haiku-4-5", prompt=prod) as gen:  # ← link
+    gen.update(output="…", usage_details={"input": 42, "output": 18})            # v4: input/output
 ```
 
 ```text
 ✓ created support-system v1  (label: production)
 ✓ created support-system v2  (labels: production, latest) — production now → v2
 ✓ created support-system-chat  (type: chat)
-
 — production (v2) compiled —
    You are a friendly customer-support assistant. Answer in one short sentence using
    only verified product facts. If you are unsure, say you will escalate to a human
@@ -146,8 +158,8 @@ with lf.start_as_current_observation(as_type="generation", name="demo",
 
 ## 6. Step 03 — Datasets (the golden test set)
 
-A dataset is a reusable set of test cases: `input` + `expected_output`. Passing a
-stable `id=` makes re-runs **idempotent** (upsert, not duplicate).
+A dataset is a reusable set of test cases: `input` plus `expected_output`. Passing a
+stable `id=` makes re-runs **idempotent**: they upsert instead of duplicating.
 
 ```python
 lf.create_dataset(name="support-golden-qa", description="…")
@@ -166,115 +178,148 @@ for i, (question, answer) in enumerate(SUPPORT_QA):
 ## 7. Step 04 — Experiments (the heart)
 
 `dataset.run_experiment(name, task, evaluators=[…])` runs a task over every item,
-auto-traces each run, and scores it. We run it **twice** — prompt v1 vs v2 — with three
-**code evaluators** (no LLM key): `keyword-recall`, `length-ok`, `answered`.
+traces each run automatically and scores it. We run it **twice**, prompt v1 against v2,
+with three **code evaluators**: `keyword-recall`, `length-ok` and `answered`.
+
+SDK v4 has no `update_current_trace()`. The variant tag goes on with
+`propagate_attributes()`, wrapped around `run_experiment()` rather than the task. That way it
+also reaches the root `experiment-item-run` observation, the row that identifies the trace.
 
 ```python
-from langfuse import Evaluation
-
-def keyword_recall(*, input, output, expected_output, **kwargs):
-    key = {w for w in re.findall(r"[a-z]+", expected_output.lower()) if len(w) > 4}
-    hits = sum(1 for w in key if w in output.lower())
-    return Evaluation(name="keyword-recall", value=round(hits / len(key), 3))
-
-def answered(*, output, **kwargs):
-    deflecting = "check our documentation" in output.lower() or "contact support" in output.lower()
-    return Evaluation(name="answered", value=0.0 if deflecting else 1.0)
+def run(dataset, name, description, prompt_obj, variant):
+    with propagate_attributes(tags=[f"variant:{variant}", "eval-experiment"],   # ← for the CH A/B
+                              metadata={"variant": variant}):
+        return dataset.run_experiment(name=name, description=description,
+                                      task=make_task(prompt_obj, variant), evaluators=EVALUATORS)
 
 def make_task(prompt_obj, variant):
     system_prompt = prompt_obj.compile(tone="friendly")
     def task(*, item, **kwargs):
-        lf.update_current_trace(tags=[f"variant:{variant}", "eval-experiment"])   # ← for CH A/B
+        if use_anthropic():    # the instrumented client creates the GENERATION itself
+            with propagate_attributes(prompt=prompt_obj):
+                return generate_answer(system_prompt=system_prompt, question=item.input["question"], ...)
         with lf.start_as_current_observation(as_type="generation", name="answer-generation",
-                                             model="gpt-4o-mini", prompt=prompt_obj) as gen:
-            ans = generate_answer(system_prompt=system_prompt, question=item.input["question"],
-                                  expected=item.expected_output, variant=variant)
-            gen.update(output=ans, usage_details={...})
-        return ans
+                                             model=MODEL, prompt=prompt_obj) as gen:   # offline
+            answer = generate_answer(...)
+            gen.update(output=answer, usage_details={"input": ..., "output": ...})
+        return answer
     return task
-
-res_v1 = dataset.run_experiment(name="prompt-v1", task=make_task(prompt_v1, "v1"),
-                                evaluators=[keyword_recall, length_ok, answered])
-res_v2 = dataset.run_experiment(name="prompt-v2", task=make_task(prompt_v2, "v2"),
-                                evaluators=[keyword_recall, length_ok, answered])
 ```
+
+Offline (`ANTHROPIC_API_KEY` empty) — the simulation answers from the KB for v2 and deflects for v1, by construction:
 
 ```text
 🧪 Experiment: prompt-v1   (10 items)
-Average Scores:
   • answered:       0.000
   • keyword-recall: 0.000
   • length-ok:      1.000
-
 🧪 Experiment: prompt-v2   (10 items)
-Average Scores:
   • answered:       1.000
   • keyword-recall: 1.000
   • length-ok:      1.000
 ```
 
-The guard-railed v2 answers on-topic and grounded; the terse v1 deflects. In the UI,
-**Datasets → Runs** shows the two runs side by side.
+Real model (`claude-haiku-4-5`):
+
+```text
+Running experiments over 'support-golden-qa' (REAL Anthropic claude-haiku-4-5)…
+🧪 Experiment: prompt-v1   (10 items)
+  • answered:       1.000
+  • keyword-recall: 0.326
+  • length-ok:      1.000
+🧪 Experiment: prompt-v2   (10 items)
+  • answered:       1.000
+  • keyword-recall: 0.169
+  • length-ok:      1.000
+```
+
+**The real run disagrees with the simulation**, and that is the point of running it. A real
+model answers both prompts, and the guard-railed v2 ("if you are unsure, say you will
+escalate") gives *less* of the reference wording than the terse v1. In the UI,
+**Datasets → Runs** shows the runs side by side.
 
 ---
 
 ## 8. Step 05 — LLM-as-a-judge (hybrid)
 
-Use a model to grade the output. The evaluator is a judge: offline it applies a
-deterministic rubric; with `OPENAI_API_KEY` it makes a real grading call.
+A model grades the output. Offline, the evaluator applies a deterministic rubric. With
+`ANTHROPIC_API_KEY` set, it makes a real grading call, which is traced as a GENERATION
+under the evaluator's span:
 
 ```python
 def llm_judge(*, input, output, expected_output, **kwargs):
-    if os.environ.get("OPENAI_API_KEY"):
-        # real grading call → "Score 0.0–1.0. Reply with ONLY the number."
-        ...
-        return Evaluation(name="llm-judge-correctness", value=score)
+    if use_anthropic():
+        text = ask_claude(system="You are a strict grader for a customer-support assistant.",
+                          user=f"Question: …\nReference answer: …\nCandidate answer: …\n\n"
+                               "Score how correct and grounded the candidate is, from 0.0 to 1.0. "
+                               "Reply with ONLY the number.",
+                          model=JUDGE_MODEL, max_tokens=256)
+        return Evaluation(name="llm-judge-correctness", value=..., comment=f"graded by {JUDGE_MODEL}")
     # offline: token overlap with the reference, zeroed on deflections
     return Evaluation(name="llm-judge-correctness", value=overlap)
 ```
 
 ```text
-🧪 judge-prompt-v1 → llm-judge-correctness: 0.000
-🧪 judge-prompt-v2 → llm-judge-correctness: 1.000
+offline:  judge-prompt-v1 → llm-judge-correctness: 0.000   judge-prompt-v2 → 1.000
+real:     judge-prompt-v1 → llm-judge-correctness: 0.415   judge-prompt-v2 → 0.215
 ```
 
-**Managed judges.** Langfuse also ships maintained evaluator templates (Hallucination,
-Toxicity, Context-Relevance, Helpfulness, Ragas) that run *continuously* on production
-traces or dataset runs and write `source = 'EVAL'`. They require a structured-output
-model in the UI's *LLM Connections*. (Covered in `05-llm-as-a-judge.md`.)
+The real judge agrees with the real keyword evaluator: on this golden set the
+guard-railed prompt costs correctness.
+
+**Managed evaluators.** Langfuse also runs evaluators *continuously* on incoming
+observations and writes `source = 'EVAL'`. On v4 these are **observation-level**
+evaluators; trace-level ones are Legacy and stop running in `events_only` mode.
+[`05-llm-as-a-judge.md`](05-llm-as-a-judge.md) sets one up through the public API. It needs
+three pieces:
+- an Anthropic LLM connection
+- an evaluator that judges a root observation's input and output
+- a rule for root observations named `support-request`
+
+Seeding five more traces then produced:
+
+```text
+EVAL scores: 5 (after ~10s)
+name                        source  data_type  n  avg_value
+support-answer-helpfulness  EVAL    NUMERIC    5  0.95
+— the judge's own calls, also in ClickHouse —
+Execute evaluator: support-answer-helpfulness   SPAN
+chat claude-haiku-4-5                           GENERATION  claude-haiku-4-5  $0.002896 (5 calls)
+```
 
 ---
 
 ## 9. Step 06 — Annotation queues (human-in-the-loop)
 
 Define **score configs** (the review dimensions), a **queue** bound to them, and enqueue
-traces. All via the Public REST API (Basic auth); the Python SDK has no helper for these.
+items. All of this goes through the public REST API with Basic auth; the Python SDK has no
+helper for these. Two things changed on v4:
+- `/api/public/v2/scores` answers 404. `/v3/scores` returns the trace linkage only when you ask for the `subject` field group.
+- Queue items are the trace's **root observation**, enqueued as `OBSERVATION`.
 
 ```python
-# score configs
 quality_id = api("POST", "/api/public/score-configs",
     {"name": "answer-quality", "dataType": "CATEGORICAL",
      "categories": [{"label": "good", "value": 1}, {"label": "ok", "value": 0.5},
                     {"label": "bad", "value": 0}]})["id"]
 correct_id = api("POST", "/api/public/score-configs",
     {"name": "factually-correct", "dataType": "BOOLEAN"})["id"]
-
-# queue
 queue_id = api("POST", "/api/public/annotation-queues",
     {"name": "human-review", "scoreConfigIds": [quality_id, correct_id]})["id"]
 
-# enqueue traces that already have user feedback (so signals co-occur — see §11)
-scored = api("GET", "/api/public/v2/scores?name=user-thumbs&limit=25")["data"]
-trace_ids = list(dict.fromkeys(s["traceId"] for s in scored))[:8]
+# enqueue traces that already have user feedback (so signals co-occur — see §10.5)
+scored = api("GET", "/api/public/v3/scores?name=user-thumbs&limit=25&fields=subject")["data"]
+trace_ids = list(dict.fromkeys(s["subject"]["id"] for s in scored
+                               if s["subject"]["kind"] == "trace"))[:8]
 for tid in trace_ids:
     api("POST", f"/api/public/annotation-queues/{queue_id}/items",
-        {"objectId": tid, "objectType": "TRACE"})
+        {"objectId": root_observation_id(tid), "objectType": "OBSERVATION"})
 ```
 
 ```text
-✓ score configs: answer-quality=4f8a86d6… factually-correct=079dec7c…
-✓ queue 'human-review' = cms1d591m001ctb07351x8lfb
-✓ enqueued 8 traces for human review
+✓ score configs: answer-quality=3300e5c8… factually-correct=d2ad08de…
+✓ queue 'human-review' = cmuq5w7nq0012s507kd7hqziy
+✓ enqueued 8 traces (as their root observations) for human review
 ✓ wrote demo review scores on 8 traces
 ```
 
@@ -285,19 +330,21 @@ arrive with `source = 'ANNOTATION'`.
 
 ## 10. Step 07 — Every signal, unified in ClickHouse (the payoff)
 
-Now the SA moment: plain SQL on the `scores` table. Langfuse tables are
-`ReplacingMergeTree`, so read with `FINAL` + `WHERE is_deleted = 0`.
+Now the SA moment: plain SQL on `scores`, joined to the v4 events table when a query needs
+trace context. Langfuse tables are `ReplacingMergeTree`, so read them with `FINAL` +
+`WHERE is_deleted = 0`. Give step 06 about ten seconds before this step, because scores
+ingest asynchronously.
 
 ```bash
-docker exec -i langfuse-ee-clickhouse-1 clickhouse-client \
+docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
 
 The `scores` schema (abridged `DESCRIBE`):
 
 ```
-trace_id  Nullable(String)   name       String    value     Float64
-source    String             data_type  String    string_value Nullable(String)
+trace_id  Nullable(String)   observation_id Nullable(String)   name  String   value Float64
+source    String             data_type  String                 string_value Nullable(String)
 dataset_run_id Nullable(String)   queue_id Nullable(String)   is_deleted UInt8   timestamp DateTime64(3)
 ```
 
@@ -310,163 +357,161 @@ GROUP BY source, name ORDER BY source, name;
 ```
 
 ```text
-source  name                      data_type  n    avg_value
-API     answered                  NUMERIC    20   0.5
-API     hallucination-check       NUMERIC    36   0.788
-API     human-answer-quality      NUMERIC     8   0.875
-API     human-factually-correct   BOOLEAN     8   0.75
-API     keyword-recall            NUMERIC    20   0.5
-API     length-ok                 NUMERIC    20   1
-API     llm-judge-correctness     NUMERIC    20   0.5
-API     pii-demo                  BOOLEAN    12   1      ← from a sibling lab in the same project
-API     user-thumbs               BOOLEAN    40   0.75
+source  name                        data_type  n    avg_value
+API     answered                    NUMERIC    40   0.75
+API     hallucination-check         NUMERIC    66   0.8
+API     human-answer-quality        NUMERIC     8   0.875
+API     human-factually-correct     BOOLEAN     8   0.75
+API     keyword-recall              NUMERIC    40   0.374
+API     length-ok                   NUMERIC    40   1
+API     llm-judge-correctness       NUMERIC    40   0.408
+API     pii-demo                    BOOLEAN    12   1      ← from the neighbouring lab on the same stack
+API     user-thumbs                 BOOLEAN    70   0.8
+EVAL    support-answer-helpfulness  NUMERIC     5   0.95   ← the managed evaluator (step 05)
 ```
 
-> Note: offline, everything is `source = API` (written via the SDK). Langfuse's
-> **managed** evaluators write `EVAL`; **UI** annotations write `ANNOTATION`. One table,
-> three provenances. (`pii-demo` here comes from a neighboring lab sharing the project —
-> a nice live illustration that *all* signals land together.)
+**Three provenances in one table.**
+- Experiment evaluators and SDK scores are `source = API`.
+- The managed evaluator wrote `EVAL`.
+- UI annotations would write `ANNOTATION`.
+
+`pii-demo` comes from the `langfuse-ee` lab sharing the project, a live illustration that *all* signals land together.
 
 ### 10.2 Volume by data type
 
-```sql
-SELECT data_type, count() AS n FROM scores FINAL WHERE is_deleted = 0 GROUP BY data_type;
-```
-
 ```text
-NUMERIC   124
-BOOLEAN    60
+NUMERIC   239
+BOOLEAN    90
 ```
 
 ### 10.3 Numeric distribution per metric (p50/p90)
 
-```sql
-SELECT name, count() n, round(avg(value),3) mean,
-       round(quantile(0.5)(value),3) p50, round(quantile(0.9)(value),3) p90
-FROM scores FINAL WHERE is_deleted = 0 AND data_type = 'NUMERIC'
-GROUP BY name ORDER BY name;
-```
-
 ```text
-name                   n    mean   p50   p90
-answered               20   0.5    0.5   1
-hallucination-check    36   0.788  0.78  0.955
-human-answer-quality    8   0.875  1     1
-keyword-recall         20   0.5    0.5   1
-length-ok              20   1      1     1
-llm-judge-correctness  20   0.5    0.5   1
+name                        n    mean   p50    p90
+answered                    40   0.75   1      1
+hallucination-check         66   0.8    0.78   0.95
+human-answer-quality         8   0.875  1      1
+keyword-recall              40   0.374  0.209  1
+length-ok                   40   1      1      1
+llm-judge-correctness       40   0.408  0.2    1
+support-answer-helpfulness   5   0.95   1      1
 ```
 
 ### 10.4 Experiment A/B — reconstructed in ClickHouse
 
-Evaluator scores don't carry the dataset-run id in ClickHouse, but lab 04 tagged each
-experiment trace with its variant — so a `scores → traces` join reconstructs the A/B:
+Evaluator scores don't carry the dataset-run id in ClickHouse. Measured on v4: 0 of 40
+experiment scores have `dataset_run_id`, although all 40 carry `observation_id`. But step 04
+tagged each experiment's root row with its variant, so a scores → root-row join
+reconstructs the A/B:
 
 ```sql
-SELECT multiIf(has(t.tags,'variant:v1'),'prompt-v1',
-               has(t.tags,'variant:v2'),'prompt-v2','other') AS variant,
+SELECT multiIf(has(e.tags,'variant:v1'),'prompt-v1',
+               has(e.tags,'variant:v2'),'prompt-v2','other') AS variant,
        s.name AS metric, count() AS n, round(avg(s.value),3) AS avg_value
 FROM scores AS s FINAL
-INNER JOIN traces AS t FINAL ON s.trace_id = t.id
-WHERE s.is_deleted = 0 AND t.is_deleted = 0 AND has(t.tags,'eval-experiment')
+INNER JOIN (SELECT trace_id, tags FROM events_core FINAL
+            WHERE is_deleted = 0 AND is_app_root AND has(tags,'eval-experiment')) AS e
+        ON s.trace_id = e.trace_id
+WHERE s.is_deleted = 0
   AND s.name IN ('keyword-recall','answered','llm-judge-correctness')
 GROUP BY variant, metric ORDER BY metric, variant;
 ```
 
 ```text
 variant     metric                 n    avg_value
-prompt-v1   answered               10   0
-prompt-v2   answered               10   1
-prompt-v1   keyword-recall         10   0
-prompt-v2   keyword-recall         10   1
-prompt-v1   llm-judge-correctness  10   0
-prompt-v2   llm-judge-correctness  10   1
+prompt-v1   answered               20   0.5
+prompt-v2   answered               20   1
+prompt-v1   keyword-recall         20   0.163
+prompt-v2   keyword-recall         20   0.584
+prompt-v1   llm-judge-correctness  20   0.207
+prompt-v2   llm-judge-correctness  20   0.607
 ```
 
-**v2 beats v1 across all three metrics — code evaluators and the LLM judge agree — and
-it's a single GROUP BY.**
+**Read it as two runs, not one.** Each `n = 20` is the offline run (10) plus the real run
+(10) of the same experiment.
+
+| | keyword-recall v1 → v2 | judge v1 → v2 |
+|---|---|---|
+| Offline simulation | 0 → 1 | 0 → 1 |
+| Real `claude-haiku-4-5` | 0.326 → 0.169 | 0.415 → 0.215 |
+
+To keep the two apart in ClickHouse, add the run to the `GROUP BY`. v4 stamps
+`experiment_id` / `experiment_name` on every event row (480 rows across 8 experiments
+here), so that is a key you get without tagging anything. It is still a single
+`GROUP BY` either way.
 
 ### 10.5 Per-trace agreement of co-occurring signals
 
-Pivot to one row per trace: user sentiment vs the automated hallucination check vs the
-human review, all on the same seed traces.
-
-```sql
-SELECT trace_id,
-       anyIf(value, name='user-thumbs')          AS user_thumbs,
-       anyIf(value, name='hallucination-check')  AS halluc_check,
-       anyIf(value, name='human-answer-quality') AS human_quality
-FROM scores FINAL WHERE is_deleted = 0
-  AND name IN ('user-thumbs','hallucination-check','human-answer-quality')
-GROUP BY trace_id
-HAVING countIf(name='user-thumbs') > 0 AND countIf(name='human-answer-quality') > 0
-ORDER BY trace_id LIMIT 20;
-```
+Pivot to one row per trace: user sentiment against the automated hallucination check
+against the human review, all on the same seed traces.
 
 ```text
 trace_id                          user_thumbs  halluc_check  human_quality
-07f194f9c1156d6d0a4e5b70a6d964a3       1           0.93           1
-269cd696236c7b8714a0bccb8a476a87       1           0.83           1
-3e2b6091a092f52ad4a057a7b0cc1b3b       0           0              0.5     ← all signals agree: weak
-a2086977a9f2533683f4a9a948a639d0       0           0.88           1
-ab3b4d37560c95ee638c254c076e2bba       1           0.98           1
-b841d0a01fe771d6d9178793a9d3c2e6       1           0.77           1
-eadf50853fcb75468eb225790cdb1ca4       1           0.71           0.5
-f86c2ca2e08596db1d8709660710d430       1           0.6            1
+0db0bbbc055c362f123d7503deeab8b9       1           0.73           1
+13679d62439a62178abb65ce67029ced       1           0.78           0.5
+5bc7b2df124095e1490f0980f2c4ae77       1           0.88           1
+87c8b773342d0505a62e9e0d6e56a9e6       0           0.69           0.5     ← user and reviewer agree: weak
+9946be4432909e4816a330c7ef3c71cf       1           0.99           1
+a9e5fd3d34f8f13d87380838c98f32c5       1           0.94           1
+b8d36cccf59de7a61d7f5b4b72e04541       1           0.95           1
+fdd1d1e93e03e1acc188f8a17fbddcb5       1           0.68           1
 ```
 
-The trace where the user thumbed-down (`0`), the hallucination check scored `0`, and the
-human graded it `0.5` — three independent signals converging — is exactly the row you
-want surfaced. That's the analysis the UI doesn't give you and ClickHouse does.
+The trace where the user gave a thumbs-down (`0`) and the human graded it `0.5` is the
+row you want surfaced. The automated check scored it `0.69`, which is lower than most.
+That is the analysis the UI doesn't give you and ClickHouse does.
 
 ### 10.6 Daily trend
 
-```sql
-SELECT toDate(timestamp) AS day, count() AS n, round(avg(value),3) AS avg_llm_judge
-FROM scores FINAL WHERE is_deleted = 0 AND name = 'llm-judge-correctness'
-GROUP BY day ORDER BY day;
-```
-
 ```text
-day          n    avg_llm_judge
-2026-07-26   20   0.5
+day          n_scores  avg_llm_judge
+2026-10-01   40        0.408          (UTC)
 ```
 
 ---
 
 ## 11. Field notes — what the SDK actually does (blog-worthy gotchas)
 
-These are the non-obvious behaviors we hit and had to design around. They make good
-"here's what the docs don't tell you" material.
+These are the non-obvious behaviours we hit and had to design around: good "here's what
+the docs don't tell you" material. All of them were seen on Langfuse 4.48.0 with SDK 4.16.0
+unless noted.
 
-1. **Experiment scores are `source = API`, not `EVAL`.** In SDK 3.7.0, scores written by
-   `run_experiment` evaluators (including an in-code LLM judge) land as `source=API`.
-   Only Langfuse's *managed* evaluators write `EVAL`; only UI annotations write
-   `ANNOTATION`. Query by `source` accordingly.
+1. **Simulation and a real model can disagree — run both.** Offline, the guard-railed
+   prompt wins on every metric by construction. With `claude-haiku-4-5` it *lost*:
+   keyword-recall 0.326 → 0.169, and the judge 0.415 → 0.215. Two independent
+   evaluators agree that the "escalate if unsure" wording costs correctness on this set.
 
-2. **`dataset_run_id` is not populated on scores in ClickHouse.** The column exists but
-   is empty for evaluator scores — the run linkage lives in Postgres. To reconstruct an
-   A/B in ClickHouse, **tag the experiment trace** (`lf.update_current_trace(tags=…)`) and
-   join `scores → traces`.
+2. **Experiment scores are `source = API`; managed evaluators write `EVAL`.** Scores from
+   `run_experiment` evaluators, including an in-code LLM judge, land as `API`. The
+   managed observation-level evaluator wrote `EVAL`. UI annotations write `ANNOTATION`.
 
-3. **`config_id` binding is strictly typed.** A `create_score(config_id=…)` whose
-   `data_type` doesn't match the config's is silently dropped at ingestion (a NUMERIC
-   score against a CATEGORICAL config just vanished). Either match the type exactly or
-   leave the score unbound.
+3. **Scores attach to observations now.** On v4, all 40 experiment scores carry an
+   `observation_id` (the root observation). `dataset_run_id` is still empty on them (0 of
+   40), so reconstruct an A/B by the root row's tags, or by `experiment_id` on the event rows.
 
-4. **Scores ingest asynchronously.** They flow SDK → worker → ClickHouse; allow a few
-   seconds (we saw ~seconds to ~2 min under load) before querying `scores`. Poll, don't
-   assume.
+4. **Tag around `run_experiment()`, not inside the task.** `propagate_attributes()` inside
+   the task starts one level below the root `experiment-item-run` observation. The A/B
+   join reads the root row, so wrap the experiment call instead.
 
-5. **Trace names are not unique across labs on a shared stack.** Selecting "recent
-   traces named `support-request`" picked up a *neighboring* lab's PII traces (same
-   name), so a cross-signal join found nothing in common. Fix: **select traces by a score
-   they carry** (`GET /api/public/v2/scores?name=user-thumbs`), not by name.
+5. **v4 REST changes.**
+   - `/api/public/v2/scores` and `/api/public/scores` answer 404.
+   - `/v3/scores` leaves the trace linkage out unless you request `fields=subject`.
+   - Annotation-queue items for a trace are its root observation, enqueued as `OBSERVATION`.
 
-6. **Two databases, two jobs.** Prompts, datasets, and annotation queues live in
-   **Postgres**; traces, observations, and **scores** live in **ClickHouse**. If a stack
-   reset wipes the Postgres volume, your datasets/prompts disappear while ClickHouse
-   traces may survive — re-run the create scripts to repopulate.
+6. **Scores ingest asynchronously.** They flow SDK → worker → ClickHouse. Give it about ten
+   seconds after step 06 before querying `scores` in step 07; poll rather than assume.
+
+7. **Trace names are not unique across labs on a shared stack.** Select traces by a score
+   they carry (`/v3/scores?name=user-thumbs`), not by name. The neighbouring lab's PII
+   traces share the `support-request` name.
+
+8. **Two databases, two jobs.** Prompts, datasets and annotation queues live in
+   **Postgres**. Observations (`events_full` / `events_core`) and **scores** live in
+   **ClickHouse**.
+
+9. **`config_id` binding is strictly typed** (seen on SDK 3.7.0; not re-tested on v4).
+   A score whose `data_type` doesn't match its config's was dropped at ingestion. The lab
+   therefore writes its demo review scores unbound.
 
 ---
 
@@ -474,15 +519,16 @@ These are the non-obvious behaviors we hit and had to design around. They make g
 
 | Step | Result |
 |---|---|
-| `01` seed | 20 traces ingested |
+| `01` seed | 20 traces ingested through the shared generator |
 | `02` prompts | v1 + v2 + chat; `production` label moved to v2; compile + `prompt=` link OK |
 | `03` dataset | 10 items upserted (`golden-00…09`), idempotent |
-| `04` experiments | prompt-v1 `answered 0.0 / keyword-recall 0.0` → prompt-v2 `1.0 / 1.0` |
-| `05` LLM-judge | `judge-v1 = 0.0`, `judge-v2 = 1.0` (offline rubric) |
-| `06` annotation | 2 score configs + `human-review` queue + 8 traces enqueued + demo scores |
-| `07` ClickHouse | unified model + tag-join A/B (v2 ≫ v1 on 3 metrics) + per-trace agreement |
+| `04` experiments | Offline: v1 `answered 0 / keyword-recall 0` → v2 `1 / 1`. Real `claude-haiku-4-5`: keyword-recall v1 0.326 → v2 0.169 |
+| `05` LLM-judge | Offline `0 → 1`. Real judge `0.415 → 0.215`. Managed observation-level evaluator: 5 `EVAL` scores, avg 0.95 |
+| `06` annotation | 2 score configs + `human-review` queue + 8 root observations enqueued + demo scores |
+| `07` ClickHouse | unified model (API + EVAL), A/B via root-row join, per-trace agreement, daily trend |
 
-Environment: Langfuse v3.197.1 · SDK `langfuse` 3.7.0 · ClickHouse 25.11.2.24 · offline.
+Environment: Langfuse v4.48.0 · SDK `langfuse` 4.16.0 · ClickHouse 26.8.15.10 · offline and
+real (`claude-haiku-4-5`, about $0.017 of Anthropic usage for both labs together, at list price).
 
 ---
 
@@ -491,18 +537,18 @@ Environment: Langfuse v3.197.1 · SDK `langfuse` 3.7.0 · ClickHouse 25.11.2.24 
 1. **Why evaluation is the real reason to run an LLM observability platform** (§1)
 2. **The quality loop in one diagram** (§2)
 3. **Prompts as versioned, deployable artifacts** (§5)
-4. **Datasets + experiments: catching a regression before prod** (§6–7, lead with the A/B log)
-5. **Judging at scale: code evaluators, LLM-as-a-judge, and managed judges** (§8)
+4. **Datasets + experiments: catching a regression before prod** (§6–7). Lead with the real run: the guard-rail that looked like a win offline.
+5. **Judging at scale: code evaluators, LLM-as-a-judge and managed evaluators** (§8)
 6. **Humans in the loop** (§9)
-7. **The ClickHouse payoff: one `scores` table, every signal** (§10 — this is the
-   differentiator for a ClickHouse audience; lead with §10.4 and §10.5)
+7. **The ClickHouse payoff: one `scores` table, every signal** (§10). This is the differentiator for a ClickHouse audience; lead with §10.4 and §10.5.
 8. **Field notes / gotchas** (§11)
-9. **Try it yourself** — link the lab, note it's OSS and runs offline
+9. **Try it yourself.** Link the lab, and note that it is OSS and runs offline.
 
-**Recommended hero visuals:** the §10.4 A/B result (prompt-v1 vs v2, all zeros → all
-ones) and the §10.5 agreement table (the `3e2b…` all-signals-agree row).
+**Recommended hero visuals:**
+- The §10.4 two-runs table: offline 0 → 1, real 0.326 → 0.169.
+- The §10.5 agreement table, with the row where the user and the reviewer both flag a weak answer.
 
 ---
 
-*Source lab: [`usecase/langfuse-eval/`](./README.md) · Governance sibling:
-[`usecase/langfuse-ee/`](../langfuse-ee/README.md) · Author: Ken Lee (ClickHouse SA).*
+*Source lab: [`labs/langfuse-eval/`](./README.md) · Governance sibling:
+[`labs/langfuse-ee/`](../langfuse-ee/README.md) · Author: Ken Lee (ClickHouse SA).*

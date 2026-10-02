@@ -2,6 +2,14 @@
 
 **As of 2026-10-02** — split out of [litkhai/clickhouse-hols](https://github.com/litkhai/clickhouse-hols/tree/pre-split-2026-10) with history.
 
+## Verification
+
+Both labs were run end to end on **2026-10-02** against **Langfuse v4.48.0 / SDK 4.16.0 /
+ClickHouse 26.8.15.10** on the pinned stack below. That run used a real enterprise licence key,
+and real Anthropic calls for the optional path. The per-lab results are in the
+[langfuse-ee](labs/langfuse-ee/README.md) and [langfuse-eval](labs/langfuse-eval/README.md)
+READMEs, and the logs in each lab's `lab-output.md`.
+
 ## CI
 
 `checks` (on pull requests): `links`, `syntax`, `compose` (every overlay set merges and carries
@@ -36,10 +44,5 @@ for the minimum versions — all read on 2026-10-01/02.
 
 ## Open work
 
-Tracked as issues — [all open](https://github.com/litkhai/langfuse-hols/issues) · [needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify):
-
-- [Re-run both labs from labs/](https://github.com/litkhai/langfuse-hols/issues/1)
-- [Link with the ClickHouse-only Langfuse lab in clickhouse-hols](https://github.com/litkhai/langfuse-hols/issues/2)
-- [Roadmap: the labs this repository does not have yet](https://github.com/litkhai/langfuse-hols/issues/8)
-- [labs/langfuse-ee needs its own AGENTS.md](https://github.com/litkhai/langfuse-hols/issues/11)
-- [Revisit D7 (no Pages site) if the repository grows past four labs](https://github.com/litkhai/langfuse-hols/issues/12)
+Tracked as issues, not here: [all open](https://github.com/litkhai/langfuse-hols/issues) ·
+[needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify).

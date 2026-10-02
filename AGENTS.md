@@ -20,7 +20,7 @@ Differences from the core repository:
 
 - Both labs run on the shared stack in `_base/` (decision D8, #7). Lab-specific code stays in its lab; anything a second lab needs moves to `_base/`.
 - Verification lines name Langfuse, the Python SDK and ClickHouse versions
-  (e.g. *Langfuse v3.197.1 / SDK 3.7.0 / CH 25.11*).
+  (e.g. *Langfuse v4.48.0 / SDK 4.16.0 / CH 26.8.15.10*).
 - `labs/langfuse-ee/08-generate-pii-traces.py` fabricates PII on purpose and is allowlisted
   in `.gitleaks.toml`. Do not widen that allowlist to a directory.
 

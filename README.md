@@ -40,9 +40,14 @@ Current state and what still needs a re-run: [STATUS.md](STATUS.md).
 git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
 ./.github/scripts/check_syntax.sh
+python3 tools/labs_json.py --check
 ./.github/scripts/check_compose.sh   # merges every compose overlay set; needs docker compose
 ./.github/scripts/check_sql.sh       # parses the .sql files in the ClickHouse image; needs docker
 ```
+
+`docs/labs.json` lists the labs whose `lab.yaml` sets `web: true`, for the notes site, which
+fetches it from `main`. Keys and categories: [`tools/lab.schema.md`](tools/lab.schema.md).
+After changing a `lab.yaml`, run `python3 tools/labs_json.py` and commit the file.
 
 ### 📝 License
 
@@ -88,9 +93,14 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
 ./.github/scripts/check_syntax.sh
+python3 tools/labs_json.py --check
 ./.github/scripts/check_compose.sh   # compose 오버레이 조합을 모두 병합; docker compose 필요
 ./.github/scripts/check_sql.sh       # ClickHouse 이미지로 .sql 파일을 파싱; docker 필요
 ```
+
+`docs/labs.json`에는 `lab.yaml`에 `web: true`가 있는 실습만 담기며, 노트 사이트가 `main`에서
+가져갑니다. 키와 분류는 [`tools/lab.schema.md`](tools/lab.schema.md). `lab.yaml`을 바꾼 뒤
+`python3 tools/labs_json.py`를 실행하고 그 파일을 커밋하세요.
 
 ### 📝 라이선스
 

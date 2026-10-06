@@ -21,6 +21,11 @@ runs. **v4 is the current track**; Langfuse v3 gets security patches only until 
 All four run on the shared stack in [`_base/`](_base/). The track is the first argument of
 its scripts (`_base/bin/up.sh v4`), and its pins are in `_base/<track>/versions.env`.
 
+To run the ClickHouse SQL of v4 `langfuse-ee` 03–04 and `langfuse-eval` 07 without bringing
+Langfuse up, use [usecase/langfuse-on-clickhouse](https://github.com/litkhai/clickhouse-hols/tree/main/usecase/langfuse-on-clickhouse) in clickhouse-hols. It is a
+snapshot of a v4 run's ClickHouse tables (Langfuse 4.52.0, ClickHouse 26.8.18.2) in one
+plain ClickHouse container.
+
 ### 📖 Reading (`reading/`)
 
 Background pages, not labs: nothing in them is run.
@@ -77,6 +82,11 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 
 네 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다. 트랙은 스크립트의 첫 번째
 인자(`_base/bin/up.sh v4`)이고, 트랙별 버전 고정은 `_base/<track>/versions.env`에 있습니다.
+
+Langfuse를 띄우지 않고 v4 `langfuse-ee` 03–04와 `langfuse-eval` 07의 ClickHouse SQL을
+돌리려면 clickhouse-hols의 [usecase/langfuse-on-clickhouse](https://github.com/litkhai/clickhouse-hols/tree/main/usecase/langfuse-on-clickhouse)를 쓰세요. v4 실행의
+ClickHouse 테이블 스냅샷(Langfuse 4.52.0, ClickHouse 26.8.18.2)을 일반 ClickHouse 컨테이너
+하나에 올린 실습입니다.
 
 ### 📖 읽기 자료 (`reading/`)
 

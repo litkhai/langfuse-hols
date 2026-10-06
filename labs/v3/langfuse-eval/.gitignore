@@ -1,0 +1,9 @@
+# Secrets — never commit. The enterprise license key and all passwords live here.
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc

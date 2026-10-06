@@ -81,12 +81,25 @@ echo "▶ Writing active traces to Parquet on MinIO…"
   SETTINGS s3_truncate_on_insert = 1;"
 
 echo "▶ Reading the Parquet back from MinIO (round-trip proof):"
-"${CH[@]}" -q "SELECT count() AS rows_in_parquet
-  FROM s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet');"
+rows_src=$("${CH[@]}" -q "SELECT count() FROM default.traces FINAL WHERE is_deleted = 0;")
+rows_pq=$("${CH[@]}" -q "SELECT count()
+  FROM s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet');")
+echo "  rows in traces (FINAL, active)  = ${rows_src}"
+echo "  rows read back from the Parquet = ${rows_pq}"
+if [[ "$rows_src" != "$rows_pq" || "$rows_src" == "0" ]]; then
+  echo "✗ Round trip FAILED: the Parquet file does not hold the rows that were written."
+  exit 1
+fi
+echo "  ✅ ${rows_src} == ${rows_pq}"
 
 echo "▶ Schema ClickHouse inferred from the exported Parquet (first 15 columns):"
+# Header line + the first 15 rows, then the box's closing border (#37). DESCRIBE cannot be
+# a subquery, so the cut is done here rather than with LIMIT; the footer setting keeps a wide
+# schema's last line a plain border instead of a repeated header.
 "${CH[@]}" -q "DESCRIBE TABLE s3('${S3}', '${MK_USER}', '${MK_PASS}', 'Parquet')
-  SETTINGS describe_compact_output = 1 FORMAT PrettyCompact;" | head -18
+  SETTINGS describe_compact_output = 1, output_format_pretty_display_footer_column_names = 0
+  FORMAT PrettyCompact;" \
+  | awk 'NR <= 16 { print; next } { last = $0 } END { if (NR > 16) print last }'
 
 cat <<EOF
 

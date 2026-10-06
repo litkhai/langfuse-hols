@@ -285,7 +285,7 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `08` data masking | leak counts all `0` in `traces` + `observations`; **24 rows** carry `[REDACTED_*]`; sidecar logged **84 redactions** |
 | `09` protected prompts | v1→v2 label move (v1 `labels={}`, v2 `{production,latest}`); prompt rows in Postgres; 2 `create prompt` audit rows |
 | `10` governance | all `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` confirmed in the container env |
-| `11` parquet export | the integration API **accepts `fileType: PARQUET`** on v3.225.11; ClickHouse `s3()` writes the active traces to Parquet on MinIO and reads **52** rows back (the script prints the read-back count only). The hourly job had not fired before teardown, so its files are not proven |
+| `11` parquet export | the integration API **accepts `fileType: PARQUET`** on v3.225.11; ClickHouse `s3()` writes the active traces to Parquet on MinIO and reads **52** rows back. On that run the script printed only the read-back count; since #37 it also prints the source count and fails on a mismatch or an empty table. The hourly job had not fired before teardown, so its files are not proven |
 
 > **Version drift (lab 11), closed by the pin.** On v3.197.1 (2026-07-26) the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. The pinned **v3.225.11** accepts it (2026-10-06). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
 >
@@ -604,7 +604,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 | `08` 데이터 마스킹 | `traces`+`observations` leak 카운트 전부 `0`; **24행**에 `[REDACTED_*]`; 사이드카 로그 **84 redactions** |
 | `09` 보호된 프롬프트 | v1→v2 라벨 이동(v1 `labels={}`, v2 `{production,latest}`); 프롬프트 행은 Postgres에; `create prompt` 감사 2건 |
 | `10` 거버넌스 | 컨테이너 env에서 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
-| `11` parquet 반출 | v3.225.11의 통합 API가 **`fileType: PARQUET`를 허용**; ClickHouse `s3()`가 활성 trace를 MinIO에 Parquet로 쓰고 **52**행을 다시 읽음(스크립트는 다시 읽은 행 수만 출력). 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
+| `11` parquet 반출 | v3.225.11의 통합 API가 **`fileType: PARQUET`를 허용**; ClickHouse `s3()`가 활성 trace를 MinIO에 Parquet로 쓰고 **52**행을 다시 읽음. 그 실행 때 스크립트는 다시 읽은 행 수만 출력했고, #37 이후로는 원본 행 수도 출력하며 두 값이 다르거나 테이블이 비어 있으면 실패합니다. 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
 
 > **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1(2026-07-26)에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). 고정한 **v3.225.11**은 허용합니다(2026-10-06). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
 >

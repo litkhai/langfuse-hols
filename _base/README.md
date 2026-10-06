@@ -141,7 +141,7 @@ python3.12 -m venv .venv-v4 && source .venv-v4/bin/activate
 pip install -r _base/v4/requirements.txt     # langfuse 4.17.0; anthropic + opentelemetry-instrumentation-anthropic, imported only when ANTHROPIC_API_KEY is set
 
 python3.12 -m venv .venv-v3 && source .venv-v3/bin/activate
-pip install -r _base/v3/requirements.txt     # langfuse 3.15.0; the OpenAI path (OPENAI_API_KEY) also needs `pip install openai`
+pip install -r _base/v3/requirements.txt     # langfuse 3.15.0, which brings `openai` as its own dependency (used only when OPENAI_API_KEY is set)
 ```
 
 `.venv-*/` is gitignored.
@@ -306,7 +306,7 @@ python3.12 -m venv .venv-v4 && source .venv-v4/bin/activate
 pip install -r _base/v4/requirements.txt     # langfuse 4.17.0; anthropic + opentelemetry-instrumentation-anthropic은 ANTHROPIC_API_KEY가 있을 때만 import
 
 python3.12 -m venv .venv-v3 && source .venv-v3/bin/activate
-pip install -r _base/v3/requirements.txt     # langfuse 3.15.0; OpenAI 경로(OPENAI_API_KEY)는 `pip install openai`도 필요
+pip install -r _base/v3/requirements.txt     # langfuse 3.15.0. `openai`는 langfuse의 의존성으로 함께 설치됨(OPENAI_API_KEY가 있을 때만 사용)
 ```
 
 `.venv-*/`는 gitignore에 있습니다.

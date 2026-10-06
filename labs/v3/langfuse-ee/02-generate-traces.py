@@ -7,7 +7,7 @@ The generator moved to ../../../_base/v3/seed_traces.py so every lab can share i
 lab-02 command line working: same argv, same exit code.
 
 Usage:
-    pip install -r ../../../_base/v3/requirements.txt   # plus `pip install openai` for real OpenAI calls
+    pip install -r ../../../_base/v3/requirements.txt   # brings openai too (langfuse 3.15.0 depends on it)
     python 02-generate-traces.py            # 40 traces
     python 02-generate-traces.py 200        # 200 traces
 

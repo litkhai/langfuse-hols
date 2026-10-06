@@ -4,6 +4,7 @@
 #   python3.12 -m venv .venv-v3 && .venv-v3/bin/pip install -r _base/v3/requirements.txt
 #
 # Exact pin, resolved from PyPI on 2026-10-06. Without OPENAI_API_KEY the labs run fully
-# offline. The OpenAI path (OPENAI_API_KEY set) also needs `pip install openai`, which is
-# not pinned here and which the verification run does not use.
+# offline. langfuse 3.15.0 itself depends on `openai` (pip resolved openai 3.24.0 on
+# 2026-10-06, Python 3.12), so the OpenAI path needs nothing extra; it is not pinned here
+# and the verification run does not use it.
 langfuse==3.15.0

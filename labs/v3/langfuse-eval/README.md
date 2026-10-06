@@ -62,7 +62,7 @@ langfuse-eval/
   ```
   This lab uses that stack and its `_base/.env` credentials — the same ones the `langfuse-ee` lab uses (its `01-up.sh` runs the same script).
 - **Python 3.10+** (`langfuse` 3.15.0 requires it) and `pip install -r _base/v3/requirements.txt` (from the repository root).
-- *(optional)* `OPENAI_API_KEY` in `_base/.env` for real generation + managed LLM-as-a-judge (plus `pip install openai`).
+- *(optional)* `OPENAI_API_KEY` in `_base/.env` for real generation + managed LLM-as-a-judge (`openai` comes with `langfuse` 3.15.0).
 
 ### 🚀 Quick start (offline — no LLM key needed)
 
@@ -240,7 +240,7 @@ langfuse-eval/
   ```
   이 랩은 그 스택과 `_base/.env` 자격증명을 사용합니다 — `langfuse-ee` 랩이 쓰는 것과 같으며, 그 랩의 `01-up.sh`도 같은 스크립트를 실행합니다.
 - **Python 3.10+**(`langfuse` 3.15.0의 요구 사항)와 `pip install -r _base/v3/requirements.txt` (저장소 루트에서).
-- *(선택)* `_base/.env`의 `OPENAI_API_KEY` — 실제 생성 + managed LLM-as-a-judge용 (추가로 `pip install openai`).
+- *(선택)* `_base/.env`의 `OPENAI_API_KEY` — 실제 생성 + managed LLM-as-a-judge용 (`openai`는 `langfuse` 3.15.0과 함께 설치됨).
 
 ### 🚀 빠른 시작 (오프라인 — LLM 키 불필요)
 

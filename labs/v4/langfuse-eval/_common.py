@@ -8,7 +8,7 @@ optional real-model call.
 
 Third-party deps: `langfuse` (4.x, Python 3.10+). `anthropic` and
 `opentelemetry-instrumentation-anthropic` are imported only when ANTHROPIC_API_KEY
-is set (see _base/requirements.txt). Everything runs FULLY OFFLINE unless it is.
+is set (see _base/v4/requirements.txt). Everything runs FULLY OFFLINE unless it is.
 """
 import base64
 import json
@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 # ── .env loading (_base/.env: the one file docker-compose and every lab read) ─
-BASE_ENV = os.path.normpath(os.path.join(HERE, "..", "..", "_base", ".env"))
+BASE_ENV = os.path.normpath(os.path.join(HERE, "..", "..", "..", "_base", ".env"))
 
 
 def load_env(path: str | None = None) -> None:
@@ -54,8 +54,8 @@ def client():
     lf = get_client()
     if not lf.auth_check():
         raise SystemExit(
-            "✗ Auth check failed — is the Langfuse stack up (`_base/bin/up.sh`, "
-            "check with `_base/bin/check.sh`) and are LANGFUSE_* keys set in _base/.env?"
+            "✗ Auth check failed — is the Langfuse stack up (`_base/bin/up.sh v4`, "
+            "check with `_base/bin/check.sh v4`) and are LANGFUSE_* keys set in _base/.env?"
         )
     return lf
 
@@ -147,7 +147,7 @@ def ask_claude(*, system: str, user: str, model: str, max_tokens: int) -> str:
     except ImportError as exc:
         raise SystemExit(
             f"✗ ANTHROPIC_API_KEY is set but {exc.name} is not installed — "
-            "run: .venv/bin/pip install -r _base/requirements.txt"
+            "run: .venv-v4/bin/pip install -r _base/v4/requirements.txt"
         ) from exc
 
     try:

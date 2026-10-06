@@ -5,7 +5,7 @@ Deletes only the lab's own artifacts, and only where the Public API can: the pro
 The annotation queue, dataset and score configs have no DELETE endpoint (checked
 against the OpenAPI spec and Langfuse 4.48.0), so the script prints the manual UI
 step for them instead of crashing. It does NOT touch the Docker stack — that is
-shared with the other labs and lives in `_base/` (stop it with `_base/bin/down.sh`).
+shared with the other labs and lives in `_base/` (stop it with `_base/bin/down.sh v4`).
 Nothing here is destructive to the stack.
 """
 import os
@@ -47,7 +47,7 @@ def main() -> None:
     print(f"    • queue '{QUEUE_NAME}'  → UI → Annotations → … → Delete")
     print(f"    • dataset '{DATASET_NAME}'  → UI → Datasets → … → Delete")
     print(f"    • score configs (answer-quality, factually-correct) → UI → Settings → Scores")
-    print("\n  The Docker stack is untouched — stop it via _base/bin/down.sh")
+    print("\n  The Docker stack is untouched — stop it via _base/bin/down.sh v4")
 
 
 if __name__ == "__main__":

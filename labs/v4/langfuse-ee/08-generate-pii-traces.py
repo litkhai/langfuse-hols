@@ -14,9 +14,9 @@ The Python SDK (v3 and v4) is OpenTelemetry-native and ships to /api/public/otel
 the only ingestion path server-side masking applies to.
 
 Usage (Python 3.10+):
-    python3 -m venv .venv && .venv/bin/pip install -r ../../_base/requirements.txt
-    .venv/bin/python 08-generate-pii-traces.py            # 12 traces
-    .venv/bin/python 08-generate-pii-traces.py 40         # 40 traces
+    python3 -m venv .venv-v4 && .venv-v4/bin/pip install -r ../../../_base/v4/requirements.txt
+    .venv-v4/bin/python 08-generate-pii-traces.py         # 12 traces
+    .venv-v4/bin/python 08-generate-pii-traces.py 40      # 40 traces
 """
 import os
 import sys
@@ -43,9 +43,9 @@ def _load_dotenv(path: str) -> None:
             os.environ.setdefault(key, val)
 
 
-# The stack (and its .env) is shared by every lab: ../../_base/.env
+# The stack (and its .env) is shared by every lab: ../../../_base/.env
 _load_dotenv(os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "_base", ".env")))
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "_base", ".env")))
 
 from langfuse import Langfuse, get_client, propagate_attributes
 
@@ -122,7 +122,7 @@ def main():
     # CRITICAL: flush the async buffer before the script exits.
     lf.flush()
     print("✓ Sent. Give the worker a few seconds to ingest + mask, then run:")
-    print("    docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse \\")
+    print("    docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse \\")
     print("      --password clickhouse --multiquery < 08-verify-masking.sql   (its last row is the verdict)")
 
 

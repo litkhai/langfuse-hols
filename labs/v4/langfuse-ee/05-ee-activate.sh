@@ -7,7 +7,7 @@
 #   1. Put your key in _base/.env:   LANGFUSE_EE_LICENSE_KEY=<your-key>
 #   2. ./05-ee-activate.sh
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
+. "$(dirname "${BASH_SOURCE[0]}")/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 
 if [[ -z "${LANGFUSE_EE_LICENSE_KEY:-}" ]]; then
@@ -53,5 +53,5 @@ else
   echo "⚠ Admin API returned HTTP $code."
   echo "  • 401/403 → license key not recognized, or ADMIN_API_KEY mismatch."
   echo "  • Check activation in the logs:"
-  echo "      docker logs langfuse-hols-langfuse-web-1 2>&1 | grep -i -E 'license|entitlement'"
+  echo "      docker logs ${LF_PROJECT}-langfuse-web-1 2>&1 | grep -i -E 'license|entitlement'"
 fi

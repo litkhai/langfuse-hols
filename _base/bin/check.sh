@@ -1,42 +1,65 @@
 #!/usr/bin/env bash
-# Check that the shared Langfuse stack is up and usable.
+# Check that the shared Langfuse stack of one track is up and usable.
 #
 # Each check prints PASS, FAIL or SKIP. SKIP is not a pass: it means the check
 # does not apply to what is running, or a credential for it is missing.
 #
-#   _base/bin/check.sh
-#   _base/bin/check.sh --env-file path/to/other.env
+#   _base/bin/check.sh <v3|v4>
+#   _base/bin/check.sh <v3|v4> --env-file path/to/other.env
 #
-# Checks: the six containers run (and the four with a healthcheck are healthy) ·
-# web and worker answer · Langfuse's ClickHouse migrations finished (not just the
-# server answering) · the SDK keys are accepted · the masking sidecar, if running,
-# is healthy. Needs only docker and curl. Never prints a key value.
+# Checks: the six containers of langfuse-hols-<track> run (and the four with a healthcheck
+# are healthy) · web and worker answer · the version web reports equals the LANGFUSE_VERSION
+# compose resolves (versions.env, then the env file, then the shell) · Langfuse's
+# ClickHouse migrations finished (not just the server answering) · the SDK keys are
+# accepted · the masking sidecar, if running, is healthy. Needs only docker and curl.
+# Never prints a key value.
 
 set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_file="$here/.env"
+track=""
+usage="usage: _base/bin/check.sh <v3|v4> [--env-file PATH]"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --env-file) env_file="${2:-}"; shift 2 ;;
-        -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) echo "unknown argument: $1" >&2; exit 1 ;;
+        -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        v[0-9]*) track="$1"; shift ;;
+        *) echo "unknown argument: $1" >&2; echo "$usage" >&2; exit 2 ;;
     esac
 done
+
+if [[ ! "$track" =~ ^v[0-9]+$ || ! -f "$here/$track/versions.env" ]]; then
+    echo "$usage" >&2
+    exit 2
+fi
 
 for tool in docker curl; do
     command -v "$tool" >/dev/null 2>&1 || { echo "$tool is required" >&2; exit 1; }
 done
 
 if [ ! -f "$env_file" ]; then
-    echo "no env file at $env_file -- run _base/bin/up.sh (it creates _base/.env from .env.example)" >&2
+    echo "no env file at $env_file -- run _base/bin/up.sh $track (it creates _base/.env from .env.example)" >&2
     exit 1
 fi
 
 # shellcheck disable=SC1091
-. "$here/lib/env.sh"
+. "$here/lib/env.sh" "$track"
+
+# The version compose resolves for the images: the shell wins over the env file, which wins
+# over versions.env. Work it out BEFORE load_env, which exports the env file into this shell.
+# Each file is read in a subshell with load_env, so quoting and comments behave as below.
+file_value() {  # file key -> the key's value in that file (empty if absent)
+    ( unset "$2"; load_env "$1"; printf '%s' "${!2:-}" )
+}
+expected_version="$(file_value "$TRACK_DIR/versions.env" LANGFUSE_VERSION)"
+v="$(file_value "$env_file" LANGFUSE_VERSION)"
+[ -n "$v" ] && expected_version="$v"
+[ -n "${LANGFUSE_VERSION:-}" ] && expected_version="$LANGFUSE_VERSION"
+
 load_env "$env_file"
+export LF_ENV_FILE="$env_file"   # lf_compose passes this file (not _base/.env) to compose
 
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 HOST="${HOST%/}"
@@ -71,10 +94,10 @@ req() {
     HTTP_BODY="${resp%$'\n'*}"
 }
 
-# compose against the shared stack. Overlays are not needed to list containers.
-compose() { lf_compose -- --env-file "$env_file" "$@"; }
+# compose against this track's stack. Overlays are not needed to list containers.
+compose() { lf_compose -- "$@"; }
 
-echo "stack: langfuse-hols  (env file: $env_file)"
+echo "stack: $LF_PROJECT  (env file: $env_file)"
 echo
 
 # --- 1. Containers ---------------------------------------------------------
@@ -93,7 +116,7 @@ else
         state=$(svc_field "$svc" 2)
         health=$(svc_field "$svc" 3)
         if [ -z "$state" ]; then
-            fail "container $svc" "not found -- start the stack with _base/bin/up.sh"
+            fail "container $svc" "not found -- start the stack with _base/bin/up.sh $TRACK"
         elif [ "$state" != "running" ]; then
             fail "container $svc" "state is '$state', expected 'running'"
         elif [ "$hc" = "1" ] && [ "$health" != "healthy" ]; then
@@ -111,6 +134,11 @@ req "$HOST/api/public/health"
 if [ "$HTTP_CODE" = "200" ]; then
     ver=$(printf '%s' "$HTTP_BODY" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     pass "web $HOST/api/public/health -> 200 (Langfuse ${ver:-version not reported})"
+    if [ "$ver" = "$expected_version" ]; then
+        pass "web version $ver equals LANGFUSE_VERSION ($TRACK pin or override)"
+    else
+        fail "web version" "health reports '${ver:-none}', LANGFUSE_VERSION resolves to '${expected_version:-none}' -- is the other track (or an older image) answering on $HOST?"
+    fi
 else
     fail "web $HOST/api/public/health" "HTTP $HTTP_CODE"
 fi

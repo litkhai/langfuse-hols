@@ -15,7 +15,7 @@
 -- its trace with scores.trace_id = events_core.trace_id.
 --
 -- Run against the shared stack in _base/ (container name is fixed by its compose project):
---   docker exec -i langfuse-hols-clickhouse-1 \
+--   docker exec -i langfuse-hols-v4-clickhouse-1 \
 --     clickhouse-client -u clickhouse --password clickhouse --multiquery \
 --     < 07-scores-in-clickhouse.sql
 -- ─────────────────────────────────────────────────────────────────────────────

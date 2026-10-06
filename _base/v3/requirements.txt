@@ -1,0 +1,9 @@
+# Python dependencies of the v3-track labs (labs/v3/*, and _base/v3/seed_traces.py).
+# Install into a virtual environment (Python 3.10 or newer: the PyPI metadata of langfuse
+# 3.15.0 says Requires-Python >=3.10):
+#   python3.12 -m venv .venv-v3 && .venv-v3/bin/pip install -r _base/v3/requirements.txt
+#
+# Exact pin, resolved from PyPI on 2026-10-06. Without OPENAI_API_KEY the labs run fully
+# offline. The OpenAI path (OPENAI_API_KEY set) also needs `pip install openai`, which is
+# not pinned here and which the verification run does not use.
+langfuse==3.15.0

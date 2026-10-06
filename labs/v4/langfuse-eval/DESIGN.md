@@ -1,16 +1,16 @@
-# Design — `labs/langfuse-eval/` : The Langfuse Quality Loop
+# Design — `labs/v4/langfuse-eval/` : The Langfuse Quality Loop
 
 > 상태: **구현 완료 · 2026-07-26 end-to-end 검증** — 최신/권위 있는 검증 결과는 [README.md](README.md) 참조. (이 문서는 설계 근거 기록용으로 유지)
 > 작성일: 2026-07-25 · 작성자: Ken Lee (ClickHouse SA)
-> 자매 랩: [`labs/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
-> 참고(#7): 스택·`.env`·trace 생성기는 두 랩이 공유하는 [`_base/`](../../_base/README.md)로 옮겨졌다. 아래 본문의 해당 경로는 현재 위치로 고쳐 두었다.
-> 참고(#22): 이 설계는 Langfuse v3 / Python SDK v3 기준으로 쓰였다. 스택은 Langfuse v4(4.48.0)로 고정되었고 코드는 v4로 포팅되었다. observation이 ClickHouse `events_full` / `events_core`에 저장되고(trace는 루트 observation이며 trace 속성은 모든 행에 있음 — `traces`/`observations` 테이블은 비어 있음), `update_current_trace()`는 `propagate_attributes()`로 바뀌었으며, 실제 모델 호출은 OpenAI 대신 Anthropic(`claude-haiku-4-5`, 공식 `anthropic` SDK + OpenTelemetry 계측)이고, Python은 3.10+ (`pip install -r _base/requirements.txt`), managed evaluator는 observation 수준이다. 아래 본문은 설계 당시의 기록이며, 달라진 부분에는 `(#22)` 주석을 달았다.
+> 자매 랩: [`labs/v4/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
+> 참고(#7): 스택·`.env`·trace 생성기는 두 랩이 공유하는 [`_base/`](../../../_base/README.md)로 옮겨졌다. 아래 본문의 해당 경로는 현재 위치로 고쳐 두었다.
+> 참고(#22): 이 설계는 Langfuse v3 / Python SDK v3 기준으로 쓰였다. 스택은 Langfuse v4(4.48.0)로 고정되었고 코드는 v4로 포팅되었다. observation이 ClickHouse `events_full` / `events_core`에 저장되고(trace는 루트 observation이며 trace 속성은 모든 행에 있음 — `traces`/`observations` 테이블은 비어 있음), `update_current_trace()`는 `propagate_attributes()`로 바뀌었으며, 실제 모델 호출은 OpenAI 대신 Anthropic(`claude-haiku-4-5`, 공식 `anthropic` SDK + OpenTelemetry 계측)이고, Python은 3.10+ (`pip install -r _base/v4/requirements.txt`), managed evaluator는 observation 수준이다. 아래 본문은 설계 당시의 기록이며, 달라진 부분에는 `(#22)` 주석을 달았다.
 
 ---
 
 ## 1. 목적 & 포지셔닝
 
-기존 `labs/langfuse-ee/` 랩은 **"self-host 배포 → 관측(observability) → ClickHouse 백엔드 → EE governance(RBAC/SCIM/Audit/Retention)"** 를 다룬다.
+기존 `labs/v4/langfuse-ee/` 랩은 **"self-host 배포 → 관측(observability) → ClickHouse 백엔드 → EE governance(RBAC/SCIM/Audit/Retention)"** 를 다룬다.
 빠진 축은 **Langfuse가 관측 플랫폼을 넘어 제공하는 "LLM 품질 관리 제품 기능"** 이다.
 
 이 랩은 그 빈틈을 채운다. 하나의 서사로 Langfuse **제품 기능**을 꿴다:
@@ -18,7 +18,7 @@
 > **프롬프트를 버전 관리하고 → 골든 데이터셋을 만들고 → 실험으로 버전/모델을 비교하고 → 자동·휴먼 평가로 점수를 매기고 → 그 점수가 ClickHouse에 어떻게 쌓여 분석되는지 본다.**
 
 ### 기존 랩과의 관계
-- **스택 재사용**: 새 컨테이너를 띄우지 않는다. 공유 스택 [`_base/`](../../_base/README.md)(같은 `_base/.env`, 같은 포트 3000)을 그대로 쓴다. README 상단에 "먼저 `_base/bin/up.sh`로 스택을 올려라"를 명시.
+- **스택 재사용**: 새 컨테이너를 띄우지 않는다. 공유 스택 [`_base/`](../../../_base/README.md)(같은 `_base/.env`, 같은 포트 3000)을 그대로 쓴다. README 상단에 "먼저 `_base/bin/up.sh v4`로 스택을 올려라"를 명시.
 - **관측 vs 품질**: 관측(trace가 어떻게 흐르나)은 기존 랩, 품질(그 trace를 어떻게 평가/개선하나)은 이 랩. 디렉터리를 분리해 서사가 섞이지 않게 한다.
 
 ### 라이선스 (검증 완료)
@@ -54,11 +54,11 @@ Langfuse 라이선스 페이지 기준, 이 랩이 다루는 기능은 **전부 
 ## 3. 파일 구조 (제안)
 
 ```
-labs/langfuse-eval/
+labs/v4/langfuse-eval/
 ├── README.md                    # 한/영 bilingual (기존 랩 골격 재사용)
 ├── DESIGN.md                    # 이 문서 (검토 후 삭제 or docs/로 이동)
 │   (.env.example / _env.sh 는 두지 않는다 — 공유 스택의 _base/.env.example · _base/lib/env.sh 사용, 평가용 키는 _base/.env.example 에 병합 (§6))
-├── 01-seed-traces.py            # 공유 생성기 _base/bin/seed_traces.py 재사용 래퍼 — 평가 대상 trace 확보
+├── 01-seed-traces.py            # 공유 생성기 _base/v4/seed_traces.py 재사용 래퍼 — 평가 대상 trace 확보
 ├── 02-prompt-management.py      # 프롬프트 생성·버전·라벨·compile·generation 링크
 ├── 03-datasets.py               # 골든 테스트셋 구축 (input + expected_output)
 ├── 04-experiments.py            # run_experiment: prompt/model 비교 + code evaluator, run 비교 출력
@@ -77,12 +77,12 @@ labs/langfuse-eval/
 각 스크립트는 **(a) 무엇을 하는가 · (b) 핵심 SDK/API · (c) 무엇이 생기나 · (d) 관찰 포인트(UI + ClickHouse) · (e) 검증 기준** 을 따른다.
 
 ### 01 — Seed traces (`01-seed-traces.py`)
-- **(a)** 평가 대상이 될 trace를 확보. 공유 생성기 [`../../_base/bin/seed_traces.py`](../../_base/bin/seed_traces.py)(langfuse-ee의 `02-generate-traces.py`와 같은 스크립트)를 재사용하는 얇은 래퍼. 기본 40건.
+- **(a)** 평가 대상이 될 trace를 확보. 공유 생성기 [`../../../_base/v4/seed_traces.py`](../../../_base/v4/seed_traces.py)(langfuse-ee의 `02-generate-traces.py`와 같은 스크립트)를 재사용하는 얇은 래퍼. 기본 40건.
 - **(b)** 기존 로직 그대로 (`start_as_current_observation`, `create_score`, `flush`).
 - **(c)** `traces`/`observations`/`scores`(source=API) 행.
 - **(d)** UI → Tracing. 이후 06 annotation, 05 production-trace 평가의 입력.
 - **(e)** `auth_check()` 통과 + N건 적재 확인.
-- **재사용 판단**: 코드 복제 대신 공유 생성기(`_base/bin/seed_traces.py`)를 subprocess로 호출. 경로는 `__file__` 기준.
+- **재사용 판단**: 코드 복제 대신 공유 생성기(`_base/v4/seed_traces.py`)를 subprocess로 호출. 경로는 `__file__` 기준.
 
 ### 02 — Prompt Management (`02-prompt-management.py`)
 - **(a)** 프롬프트를 코드에서 분리해 Langfuse에 저장·버전·배포. support-assistant 시스템 프롬프트를 **v1(간결) → v2(가드레일 강화)** 로 진화시키고 라벨로 배포 제어.
@@ -192,7 +192,7 @@ labs/langfuse-eval/
 - **(c)/(d)/(e)** 기존 랩 04 스타일: 모든 쿼리가 실행되고 수치가 타당.
 
 ### 99 — Cleanup (`99-cleanup.py`)
-- 이 랩이 만든 것만 삭제(프롬프트·데이터셋·큐·score config). **스택은 안 내린다**(공유 스택 `_base/` 소관 — `_base/bin/down.sh`). ⚠️ 삭제 API 지원 범위 확인 — 미지원이면 "UI에서 삭제" 안내.
+- 이 랩이 만든 것만 삭제(프롬프트·데이터셋·큐·score config). **스택은 안 내린다**(공유 스택 `_base/` 소관 — `_base/bin/down.sh v4`). ⚠️ 삭제 API 지원 범위 확인 — 미지원이면 "UI에서 삭제" 안내.
 
 ---
 

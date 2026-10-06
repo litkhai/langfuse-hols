@@ -5,6 +5,6 @@
 #   EE=1 ./01-up.sh      # same stack + enterprise overlay (labs 05–11; needs license key)
 #                        # (labs 08 & 10 add their own overlays via their scripts)
 #
-# The stack is shared by every lab and lives in ../../_base — this is a thin
-# wrapper around _base/bin/up.sh (see _base/README.md).
-exec "$(dirname "${BASH_SOURCE[0]}")/../../_base/bin/up.sh" "$@"
+# The stack is shared by every lab and lives in ../../../_base — this is a thin
+# wrapper around _base/bin/up.sh v4 (see _base/README.md).
+exec "$(dirname "${BASH_SOURCE[0]}")/../../../_base/bin/up.sh" v4 "$@"

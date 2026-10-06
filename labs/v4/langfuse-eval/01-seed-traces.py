@@ -3,7 +3,7 @@
 
 This lab is about EVALUATING LLM output, so we first need some output to look at.
 Rather than duplicate the trace generator, we reuse the shared one
-(`../../_base/bin/seed_traces.py`) — every lab talks to the SAME running stack
+(`../../../_base/v4/seed_traces.py`) — every lab talks to the SAME running stack
 (`_base/`) with the SAME keys.
 
     python 01-seed-traces.py            # 40 traces (default)
@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SEEDER = os.path.normpath(os.path.join(HERE, "..", "..", "_base", "bin", "seed_traces.py"))
+SEEDER = os.path.normpath(os.path.join(HERE, "..", "..", "..", "_base", "v4", "seed_traces.py"))
 
 
 def main() -> None:
@@ -24,7 +24,7 @@ def main() -> None:
     if not os.path.exists(SEEDER):
         sys.exit(
             f"✗ Shared trace generator not found: {SEEDER}\n"
-            "  It ships with the repository in _base/bin/ — check that your checkout is complete."
+            "  It ships with the repository in _base/v4/ — check that your checkout is complete."
         )
     print(f"→ Seeding {n} traces with the shared trace generator:\n  {SEEDER}\n")
     # The generator loads _base/.env (same LANGFUSE_* creds as ours) and flushes.

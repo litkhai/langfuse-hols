@@ -8,7 +8,7 @@
 #
 # Requires: EE active (license key in _base/.env).
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
+. "$(dirname "${BASH_SOURCE[0]}")/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 
 if [[ -z "${LANGFUSE_EE_LICENSE_KEY:-}" ]]; then

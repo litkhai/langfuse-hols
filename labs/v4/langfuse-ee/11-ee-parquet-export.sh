@@ -13,7 +13,7 @@
 #
 # Requires: stack up + EE active (run 05 first), jq, ADMIN_API_KEY in _base/.env.
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
+. "$(dirname "${BASH_SOURCE[0]}")/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 

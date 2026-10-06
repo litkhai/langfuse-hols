@@ -25,16 +25,16 @@ Shared by the labs: langfuse-ee calls it as `02-generate-traces.py`, langfuse-ev
 as `01-seed-traces.py`; both just forward their argv here.
 
 Usage (from the repository root, Python 3.10+):
-    python3 -m venv .venv && .venv/bin/pip install -r _base/requirements.txt
-    .venv/bin/python _base/bin/seed_traces.py            # 40 traces
-    .venv/bin/python _base/bin/seed_traces.py 200        # 200 traces
+    python3.12 -m venv .venv-v4 && .venv-v4/bin/pip install -r _base/v4/requirements.txt
+    .venv-v4/bin/python _base/v4/seed_traces.py            # 40 traces
+    .venv-v4/bin/python _base/v4/seed_traces.py 200        # 200 traces
 """
 import os
 import sys
 import time
 import random
 
-# Load _base/.env (this file lives in _base/bin/) so LANGFUSE_* / ANTHROPIC_API_KEY
+# Load _base/.env (this file lives in _base/v4/) so LANGFUSE_* / ANTHROPIC_API_KEY
 # are available (the same file docker-compose reads). No external dependency.
 def _load_dotenv(path: str) -> None:
     if not os.path.exists(path):
@@ -255,7 +255,7 @@ def start_claude():
         from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
     except ImportError as exc:
         sys.exit(f"✗ ANTHROPIC_API_KEY is set but {exc.name} is not installed — "
-                 "run: .venv/bin/pip install -r _base/requirements.txt")
+                 "run: .venv-v4/bin/pip install -r _base/v4/requirements.txt")
     AnthropicInstrumentor().instrument()
     # Reads ANTHROPIC_API_KEY. The SDK's default read timeout is 600 s, so a stalled
     # connection would freeze the script for ten minutes; time out at 60 s instead

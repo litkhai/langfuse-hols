@@ -15,9 +15,9 @@
 #                                        # empty events_full (needs only the running stack)
 #
 # Requires: EE active (license key in _base/.env), the langfuse SDK installed
-# (pip install -r _base/requirements.txt, Python 3.10+), `jq` optional.
+# (pip install -r _base/v4/requirements.txt, Python 3.10+), `jq` optional.
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
+. "$(dirname "${BASH_SOURCE[0]}")/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 
 VERIFY_SQL="08-verify-masking.sql"
@@ -65,11 +65,11 @@ COMPOSE=(lf_compose ee masking --)
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 
 # Pick a Python interpreter: an activated venv, then the lab's or the repository's
-# .venv, then python3, then python.
+# .venv-v4, then python3, then python.
 PY="python"
 if [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then PY="$VIRTUAL_ENV/bin/python"
-elif [[ -x .venv/bin/python ]]; then PY=".venv/bin/python"
-elif [[ -x ../../.venv/bin/python ]]; then PY="../../.venv/bin/python"
+elif [[ -x .venv-v4/bin/python ]]; then PY=".venv-v4/bin/python"
+elif [[ -x ../../../.venv-v4/bin/python ]]; then PY="../../../.venv-v4/bin/python"
 elif command -v python3 >/dev/null 2>&1; then PY="python3"
 fi
 
@@ -88,7 +88,7 @@ echo "▶ Sending PII-laden traces (secrets embedded in input/output/metadata)�
 echo "  (using interpreter: ${PY})"
 if ! "$PY" 08-generate-pii-traces.py "${1:-12}"; then
   echo "✗ generator failed. Create the venv and install the SDK (Python 3.10+):"
-  echo "    python3 -m venv .venv && ./.venv/bin/pip install -r ../../_base/requirements.txt"
+  echo "    python3 -m venv .venv-v4 && ./.venv-v4/bin/pip install -r ../../../_base/v4/requirements.txt"
   exit 1
 fi
 
@@ -100,7 +100,7 @@ if ! run_verify "$VERIFY_SQL"; then
   echo
   echo "✗ MASKING VERDICT: FAIL — see the counts above (no pii-demo rows, no placeholders, or a leaked secret)."
   echo "  If the counts are all zero the traces may not be ingested yet: wait a few seconds and re-run"
-  echo "  the SQL (docker exec … < ${VERIFY_SQL}), or check:  docker logs langfuse-hols-masking-1"
+  echo "  the SQL (docker exec … < ${VERIFY_SQL}), or check:  docker logs ${LF_PROJECT}-masking-1"
   exit 1
 fi
 
@@ -116,7 +116,7 @@ Notes:
   • Masking only applies to the OTLP endpoint (/api/public/otel = SDK v3+).
   • FAIL_CLOSED=true (see docker-compose.masking.yml): if the callback errors,
     the event is DROPPED rather than stored unmasked — the secure default.
-  • Tail the sidecar to watch redactions:  docker logs -f langfuse-hols-masking-1
+  • Tail the sidecar to watch redactions:  docker logs -f ${LF_PROJECT}-masking-1
   • Positive control (the verdict must FAIL on an empty table):  ./08-ee-data-masking.sh --selftest
   • Teardown removes the sidecar too:      ./99-cleanup.sh
 EOF

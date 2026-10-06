@@ -10,7 +10,7 @@ A hands-on tour of Langfuse's **product features for LLM quality** — prompt
 management, datasets, experiments, LLM-as-a-judge, and human annotation — then a
 look at how every quality signal lands in the **ClickHouse** backend.
 
-This is the sibling of [`labs/langfuse-ee/`](../langfuse-ee/README.md). Where that
+This is the sibling of [`labs/v4/langfuse-ee/`](../langfuse-ee/README.md). Where that
 lab covers *self-hosting + the ClickHouse backend + Enterprise governance*, this one
 answers a different question: **once Langfuse is running, how do you actually use it
 to measure and improve LLM quality?**
@@ -42,7 +42,7 @@ lets you run cross-cutting quality analytics the UI doesn't offer.
 langfuse-eval/
 ├── README.md                   # this file
 ├── _common.py                  # shared: _base/.env loader, client, REST helper, the Q&A KB
-├── 01-seed-traces.py           # seed traces to evaluate with the shared generator (_base/bin/seed_traces.py)
+├── 01-seed-traces.py           # seed traces to evaluate with the shared generator (_base/v4/seed_traces.py)
 ├── 02-prompt-management.py     # versions, labels (production/latest), compile, prompt→trace link
 ├── 03-datasets.py              # a golden test set (input + expected_output), idempotent
 ├── 04-experiments.py           # run_experiment: prompt v1 vs v2 + code evaluators
@@ -55,21 +55,21 @@ langfuse-eval/
 
 ### ✅ Prerequisites
 
-- **The shared stack in [`_base/`](../../_base/README.md) must be running.** From the repository root:
+- **The shared stack in [`_base/`](../../../_base/README.md) must be running.** From the repository root:
   ```bash
-  _base/bin/up.sh      # brings up web/worker/postgres/clickhouse/redis/minio (creates _base/.env from the template on first run)
-  _base/bin/check.sh   # optional: containers healthy, migrations finished, SDK keys valid
+  _base/bin/up.sh v4      # brings up web/worker/postgres/clickhouse/redis/minio (creates _base/.env from the template on first run)
+  _base/bin/check.sh v4   # optional: containers healthy, migrations finished, SDK keys valid
   ```
   This lab uses that stack and its `_base/.env` credentials — the same ones the `langfuse-ee` lab uses (its `01-up.sh` runs the same script).
-- **Python 3.10+** (Langfuse Python SDK v4 requires it) and `pip install -r _base/requirements.txt` — the packages are pinned there.
+- **Python 3.10+** (Langfuse Python SDK v4 requires it) and `pip install -r _base/v4/requirements.txt` — the packages are pinned there.
 - *(optional)* `ANTHROPIC_API_KEY` in `_base/.env` for real generation (`claude-haiku-4-5`) + the LLM judge. The real calls use the official `anthropic` SDK, traced by `opentelemetry-instrumentation-anthropic`.
 
 ### 🚀 Quick start (offline — no LLM key needed)
 
 ```bash
-cd labs/langfuse-eval
-python3.12 -m venv ../../.venv && source ../../.venv/bin/activate   # Python 3.10+; one venv for both labs
-pip install -r ../../_base/requirements.txt
+cd labs/v4/langfuse-eval
+python3.12 -m venv ../../../.venv-v4 && source ../../../.venv-v4/bin/activate   # Python 3.10+; one venv for both labs
+pip install -r ../../../_base/v4/requirements.txt
 
 python 01-seed-traces.py 20        # seed traces to evaluate
 python 02-prompt-management.py     # version + label + compile + link a prompt
@@ -79,7 +79,7 @@ python 05-llm-as-a-judge.py        # add an LLM-judge score (offline rubric by d
 python 06-annotation-queue.py      # create the human-review queue + demo scores
 
 # Explore how every score lands in ClickHouse (scores ingest asynchronously — give 06 ~10 s):
-docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
+docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
 
@@ -152,7 +152,7 @@ Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
 
 Verified **end-to-end on 2026-10-02** against **Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10**.
 
-- **Stack:** the pinned shared stack in [`_base/`](../../_base/README.md), Python 3.12.14.
+- **Stack:** the pinned shared stack in [`_base/`](../../../_base/README.md), Python 3.12.14.
 - **Offline:** every step ran offline.
 - **Real model calls:** steps 04 and 05 also ran with real calls to Anthropic `claude-haiku-4-5`. Step 05's managed evaluator ran through an Anthropic LLM connection.
 
@@ -183,7 +183,7 @@ Runtime findings built into the labs:
 - [Python SDK v3 → v4](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4) · [Anthropic integration (OpenTelemetry)](https://langfuse.com/integrations/model-providers/anthropic) · [Upgrade trace-level evaluators](https://langfuse.com/faq/all/llm-as-a-judge-migration)
 
 ### 📝 License
-[MIT](../../LICENSE) — same as the rest of the repository.
+[MIT](../../../LICENSE) — same as the rest of the repository.
 
 ### 👤 Author
 Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
@@ -191,7 +191,7 @@ Created: 2026-07-26
 
 ---
 
-**Happy Evaluating! 🎯** — for the deployment/governance side, see [`labs/langfuse-ee/`](../langfuse-ee/README.md).
+**Happy Evaluating! 🎯** — for the deployment/governance side, see [`labs/v4/langfuse-ee/`](../langfuse-ee/README.md).
 
 ---
 
@@ -201,7 +201,7 @@ Langfuse의 **LLM 품질 관리 제품 기능** — 프롬프트 관리, 데이�
 LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 품질 신호가 **ClickHouse**
 백엔드에 어떻게 쌓이는지까지 보는 실습입니다.
 
-이 랩은 [`labs/langfuse-ee/`](../langfuse-ee/README.md)의 자매 랩입니다. 그 랩이
+이 랩은 [`labs/v4/langfuse-ee/`](../langfuse-ee/README.md)의 자매 랩입니다. 그 랩이
 *self-hosting + ClickHouse 백엔드 + Enterprise governance* 를 다뤘다면, 이 랩은 다른
 질문에 답합니다: **Langfuse를 띄운 뒤, 실제로 LLM 품질을 측정하고 개선하려면 어떻게
 쓰는가?**
@@ -232,7 +232,7 @@ SQL로 할 수 있습니다.
 langfuse-eval/
 ├── README.md                   # 이 문서
 ├── _common.py                  # 공통: _base/.env 로더, 클라이언트, REST 헬퍼, Q&A 지식베이스
-├── 01-seed-traces.py           # 공유 생성기(_base/bin/seed_traces.py)로 평가 대상 trace 확보
+├── 01-seed-traces.py           # 공유 생성기(_base/v4/seed_traces.py)로 평가 대상 trace 확보
 ├── 02-prompt-management.py     # 버전·라벨(production/latest)·compile·프롬프트→trace 링크
 ├── 03-datasets.py              # 골든 테스트셋(input + expected_output), 멱등
 ├── 04-experiments.py           # run_experiment: 프롬프트 v1 vs v2 + 코드 평가자
@@ -245,21 +245,21 @@ langfuse-eval/
 
 ### ✅ 사전 준비물
 
-- **[`_base/`](../../_base/README.md)의 공유 스택이 실행 중이어야 합니다.** 저장소 루트에서:
+- **[`_base/`](../../../_base/README.md)의 공유 스택이 실행 중이어야 합니다.** 저장소 루트에서:
   ```bash
-  _base/bin/up.sh      # web/worker/postgres/clickhouse/redis/minio 기동 (첫 실행 시 템플릿에서 _base/.env 생성)
-  _base/bin/check.sh   # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
+  _base/bin/up.sh v4      # web/worker/postgres/clickhouse/redis/minio 기동 (첫 실행 시 템플릿에서 _base/.env 생성)
+  _base/bin/check.sh v4   # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
   ```
   이 랩은 그 스택과 `_base/.env` 자격증명을 사용합니다 — `langfuse-ee` 랩이 쓰는 것과 같으며, 그 랩의 `01-up.sh`도 같은 스크립트를 실행합니다.
-- **Python 3.10+** (Langfuse Python SDK v4 요구사항) 와 `pip install -r _base/requirements.txt` — 패키지는 그 파일에 고정되어 있습니다.
+- **Python 3.10+** (Langfuse Python SDK v4 요구사항) 와 `pip install -r _base/v4/requirements.txt` — 패키지는 그 파일에 고정되어 있습니다.
 - *(선택)* `_base/.env`의 `ANTHROPIC_API_KEY` — 실제 생성(`claude-haiku-4-5`) + LLM 판정용. 실제 호출은 공식 `anthropic` SDK를 쓰고 `opentelemetry-instrumentation-anthropic`이 추적합니다.
 
 ### 🚀 빠른 시작 (오프라인 — LLM 키 불필요)
 
 ```bash
-cd labs/langfuse-eval
-python3.12 -m venv ../../.venv && source ../../.venv/bin/activate   # Python 3.10+; 두 랩이 venv 하나를 공유
-pip install -r ../../_base/requirements.txt
+cd labs/v4/langfuse-eval
+python3.12 -m venv ../../../.venv-v4 && source ../../../.venv-v4/bin/activate   # Python 3.10+; 두 랩이 venv 하나를 공유
+pip install -r ../../../_base/v4/requirements.txt
 
 python 01-seed-traces.py 20        # 평가 대상 trace 시드
 python 02-prompt-management.py     # 프롬프트 버전·라벨·compile·링크
@@ -269,7 +269,7 @@ python 05-llm-as-a-judge.py        # LLM 판정 스코어 추가(기본 오프�
 python 06-annotation-queue.py      # 휴먼 검수 큐 + 데모 스코어 생성
 
 # 모든 스코어가 ClickHouse에 어떻게 쌓이는지 탐색 (스코어는 비동기 적재 — 06 이후 ~10초 대기):
-docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
+docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
 
@@ -337,7 +337,7 @@ trace는 루트 observation의 id를 담은 `OBSERVATION` 아이템으로 적재
 
 **2026-10-02**에 **Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10**에서 **end-to-end 검증**했습니다.
 
-- **스택:** [`_base/`](../../_base/README.md)의 고정 공유 스택, Python 3.12.14를 썼습니다.
+- **스택:** [`_base/`](../../../_base/README.md)의 고정 공유 스택, Python 3.12.14를 썼습니다.
 - **오프라인:** 모든 단계를 오프라인으로 돌렸습니다.
 - **실제 모델 호출:** 04와 05는 Anthropic `claude-haiku-4-5` 실제 호출로도 돌렸고, 05의 관리형 evaluator는 Anthropic LLM connection으로 실행했습니다.
 
@@ -368,7 +368,7 @@ trace는 루트 observation의 id를 담은 `OBSERVATION` 아이템으로 적재
 - [Python SDK v3 → v4](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4) · [Anthropic 연동 (OpenTelemetry)](https://langfuse.com/integrations/model-providers/anthropic) · [trace 수준 evaluator 업그레이드](https://langfuse.com/faq/all/llm-as-a-judge-migration)
 
 ### 📝 라이선스
-[MIT](../../LICENSE) — same as the rest of the repository.
+[MIT](../../../LICENSE) — same as the rest of the repository.
 
 ### 👤 작성자
 Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
@@ -376,4 +376,4 @@ Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
 
 ---
 
-**Happy Evaluating! 🎯** — 배포/거버넌스 측면은 [`labs/langfuse-ee/`](../langfuse-ee/README.md) 참고.
+**Happy Evaluating! 🎯** — 배포/거버넌스 측면은 [`labs/v4/langfuse-ee/`](../langfuse-ee/README.md) 참고.

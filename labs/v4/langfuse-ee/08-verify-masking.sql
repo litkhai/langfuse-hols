@@ -14,7 +14,7 @@
 -- is what stops a vacuous "0 leaks" from passing. 08-ee-data-masking.sh exits 1 on FAIL.
 --
 -- Run:
---   docker exec -i langfuse-hols-clickhouse-1 clickhouse-client \
+--   docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client \
 --     -u clickhouse --password clickhouse --multiquery < 08-verify-masking.sql
 --
 -- The metadata is stored as two parallel arrays (metadata_names / metadata_values), so

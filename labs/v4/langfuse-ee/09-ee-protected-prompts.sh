@@ -17,7 +17,7 @@
 # Requires: stack up (EE active for the protection capstone), jq, and the project
 # keys in _base/.env (LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY).
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../../_base/lib/env.sh"; load_env "$BASE_DIR/.env"
+. "$(dirname "${BASH_SOURCE[0]}")/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 command -v jq >/dev/null || { echo "✗ please install jq"; exit 1; }
 

@@ -8,7 +8,7 @@
 > - Langfuse server **v4.48.0**
 > - Python SDK `langfuse` **4.16.0** on Python 3.12.14
 > - **ClickHouse 26.8.15.10**
-> - The shared self-hosted Docker stack in [`_base/`](../../_base/README.md)
+> - The shared self-hosted Docker stack in [`_base/`](../../../_base/README.md)
 >
 > Every step ran **offline** (deterministic simulation). Steps 04 and 05 also ran with
 > **real model calls to Anthropic `claude-haiku-4-5`**, and step 05's managed evaluator used an

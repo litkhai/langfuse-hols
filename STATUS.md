@@ -1,46 +1,66 @@
 # STATUS.md
 
-**As of 2026-10-03** — `docs/labs.json` added (notes-site export, 0 labs published). As of 2026-10-02: split out of [litkhai/clickhouse-hols](https://github.com/litkhai/clickhouse-hols/tree/pre-split-2026-10) with history.
+**As of 2026-10-06** — the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
+[#33](https://github.com/litkhai/langfuse-hols/issues/33)), and the v4 pins moved to Langfuse 4.52.0 / SDK 4.17.0. Neither track has run on its new pins yet
+([#34](https://github.com/litkhai/langfuse-hols/issues/34)). As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
+[litkhai/clickhouse-hols](https://github.com/litkhai/clickhouse-hols/tree/pre-split-2026-10) with history.
 
 ## Verification
 
-Both labs were run end to end on **2026-10-02** against **Langfuse v4.48.0 / SDK 4.16.0 /
-ClickHouse 26.8.15.10** on the pinned stack below. That run used a real enterprise licence key,
-and real Anthropic calls for the optional path. The per-lab results are in the
-[langfuse-ee](labs/langfuse-ee/README.md) and [langfuse-eval](labs/langfuse-eval/README.md)
-READMEs, and the logs in each lab's `lab-output.md`.
+Each track keeps its last real end-to-end run until #34 runs it on the pins below. Both runs
+happened at the old paths (`labs/langfuse-*`), before the split into tracks.
+
+| Track | Last verified | Against | How |
+|---|---|---|---|
+| v4 — [langfuse-ee](labs/v4/langfuse-ee/README.md), [langfuse-eval](labs/v4/langfuse-eval/README.md) | 2026-10-02 | Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10 | real enterprise licence key; real Anthropic calls for the optional path |
+| v3 — [langfuse-ee](labs/v3/langfuse-ee/README.md), [langfuse-eval](labs/v3/langfuse-eval/README.md) | 2026-07-26 (`langfuse-ee` 01–07: 2026-06-25) | Langfuse v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24 | real enterprise licence key; offline (no model key) |
+
+The per-lab results are in each lab's README, and the logs in each lab's `lab-output.md`.
 
 ## CI
 
-`checks` (on pull requests): `links`, `syntax`, `compose` (every overlay set merges and carries
-what its lab needs), `sql` (every `.sql` parses in the pinned ClickHouse image), `secrets`
-(gitleaks), `hygiene` — green. GitHub secret scanning and push protection are on.
+`checks` (on pull requests):
+
+- `links`
+- `syntax`
+- `compose`, run once per track. Every overlay set merges, carries what its lab needs, and resolves to that track's pins. The base file refuses to resolve without a track.
+- `sql`. Each track's `.sql` files parse in that track's ClickHouse image.
+- `secrets` (gitleaks)
+- `hygiene`
+
+GitHub secret scanning and push protection are on.
 
 ## Pins
 
-The shared stack in [`_base/`](_base/) runs on these versions. Each image tag is the
-`${VAR:-default}` default in the compose file, so a run can override it without editing the file.
+What differs by track is in `_base/<track>/versions.env` and `_base/<track>/requirements.txt`.
+The shared images are the `${VAR:-default}` defaults in [`_base/docker-compose.yml`](_base/docker-compose.yml), or
+fixed tags and digests there. A run can override any of them without editing a file.
 
-| Pin | Version | Why |
-|---|---|---|
-| `langfuse/langfuse`, `langfuse/langfuse-worker` | 4.48.0 | Latest GA release on 2026-09-30, the target of the v4 re-verification ([#6](https://github.com/litkhai/langfuse-hols/issues/6)). v3 receives security patches only until 2027-01-31 |
-| `clickhouse/clickhouse-server` | 26.8.15.10 | Current LTS. Langfuse v4 requires ≥ 25.12 and recommends 26.4. Langfuse's own CI tests 26.4.5.143, but the 26.4 line has had no patch image since 2026-08-06 |
-| `redis` | 7.2.16 | Langfuse v4 requires ≥ 7.0 and recommends 7.2 |
-| `postgres` | 17.11 | Langfuse v4 requires ≥ 15 (16 recommended); 17 is the upstream compose default and this stack's existing major |
-| `cgr.dev/chainguard/minio` | `@sha256:4692462f…d285` | The registry publishes only `latest` / `latest-dev`, so the pin is the index digest of `latest` resolved on 2026-10-02 (MinIO RELEASE.2026-09-22T19-25-18Z) |
-| `python` (lab 08 masking sidecar) | 3.12.14-slim | Highest `3.12.<patch>-slim` on Docker Hub on 2026-10-02 |
-| `langfuse` (PyPI) | 4.16.0 | Latest Python SDK v4 (2026-09-30); needs Python ≥ 3.10 |
-| `anthropic` (PyPI) | 1.11.0 | Optional real model calls; latest on 2026-10-02 |
-| `opentelemetry-instrumentation-anthropic` (PyPI) | 0.62.4 | Traces those calls into Langfuse; latest on 2026-10-02 |
+| Pin | v3 | v4 | Why |
+|---|---|---|---|
+| `langfuse/langfuse`, `langfuse/langfuse-worker` | 3.225.11 | 4.52.0 | Latest release of each major on 2026-10-06. v3 receives security patches only until 2027-01-31 ([#35](https://github.com/litkhai/langfuse-hols/issues/35)) |
+| `clickhouse/clickhouse-server` | 26.8.18.2 | 26.8.18.2 | Newest patch of the current LTS on 2026-10-06. Langfuse v4 requires ≥ 25.12 and recommends 26.4. Measured on a throwaway stack on 2026-10-06: Langfuse 3.225.11 applies all 37 of its ClickHouse migrations on it, none dirty |
+| `langfuse` (PyPI) | 3.15.0 | 4.17.0 | Latest of each SDK major (2026-05-21, 2026-10-05); both need Python ≥ 3.10 |
+| `anthropic`, `opentelemetry-instrumentation-anthropic` (PyPI) | — | 1.11.0, 0.62.4 | v4's optional real calls; latest on 2026-10-06. v3's real-call path uses OpenAI, is not pinned, and is not part of a verification run |
+| `redis` | 7.2.16 | 7.2.16 | Langfuse v4 requires ≥ 7.0 and recommends 7.2 |
+| `postgres` | 17.11 | 17.11 | Langfuse v4 requires ≥ 15 (16 recommended); 17 is the upstream compose default and this stack's existing major |
+| `cgr.dev/chainguard/minio` | `@sha256:4cf4831a…0034` | same | The registry publishes only `latest` / `latest-dev`, so the pin is the index digest of `latest`, resolved on 2026-10-06 |
+| `python` (lab 08 masking sidecar) | 3.12.15-slim | same | Highest `3.12.<patch>-slim` on Docker Hub on 2026-10-06 |
 
-How each was confirmed: GitHub releases API and Docker Hub tags for the images, the registry's
-tag list and manifest digest for MinIO, PyPI JSON for the Python packages, and Langfuse's
+How each was confirmed (read on 2026-10-06):
+
+- Langfuse images: GitHub releases API and Docker Hub tags
+- the other images: Docker Hub tags
+- MinIO: the cgr.dev manifest API
+- Python packages: PyPI JSON
+
+The v4 minimum versions and the v3 support end date come from Langfuse's
 [v3 → v4 upgrade guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4)
-for the minimum versions — all read on 2026-10-01/02.
+(read 2026-10-01/02).
 
 ## Inventory
 
-2 labs and 1 reading page in the README tables; 0 single-language.
+4 labs (2 labs × 2 tracks) and 1 reading page in the README tables; 0 single-language.
 
 ## Open work
 

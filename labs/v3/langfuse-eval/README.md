@@ -6,6 +6,8 @@
 
 ## English
 
+> **Langfuse v3 track.** The stack versions are pinned in [`_base/v3/versions.env`](../../../_base/v3/versions.env). This is the lab as it was before the v4 port, kept for Langfuse v3 deployments; v3 gets security patches only until 2027-01-31. For v4 use [`labs/v4/langfuse-eval`](../../v4/langfuse-eval/README.md).
+
 A hands-on tour of Langfuse's **product features for LLM quality** — prompt
 management, datasets, experiments, LLM-as-a-judge, and human annotation — then a
 look at how every quality signal lands in the **ClickHouse** backend.
@@ -59,7 +61,7 @@ langfuse-eval/
   _base/bin/check.sh v3 # optional: containers healthy, migrations finished, SDK keys valid
   ```
   This lab uses that stack and its `_base/.env` credentials — the same ones the `langfuse-ee` lab uses (its `01-up.sh` runs the same script).
-- **Python 3.9+** and `pip install -r _base/v3/requirements.txt` (from the repository root).
+- **Python 3.10+** (`langfuse` 3.15.0 requires it) and `pip install -r _base/v3/requirements.txt` (from the repository root).
 - *(optional)* `OPENAI_API_KEY` in `_base/.env` for real generation + managed LLM-as-a-judge (plus `pip install openai`).
 
 ### 🚀 Quick start (offline — no LLM key needed)
@@ -182,6 +184,8 @@ Created: 2026-07-26
 
 ## 한국어
 
+> **Langfuse v3 트랙.** 스택 버전은 [`_base/v3/versions.env`](../../../_base/v3/versions.env)에 고정되어 있습니다. v4 포팅 이전의 실습을 Langfuse v3 운영 환경을 위해 남겨 둔 것입니다. v3 보안 패치는 2027-01-31까지만 나옵니다. v4는 [`labs/v4/langfuse-eval`](../../v4/langfuse-eval/README.md)를 쓰세요.
+
 Langfuse의 **LLM 품질 관리 제품 기능** — 프롬프트 관리, 데이터셋, 실험,
 LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 품질 신호가 **ClickHouse**
 백엔드에 어떻게 쌓이는지까지 보는 실습입니다.
@@ -235,7 +239,7 @@ langfuse-eval/
   _base/bin/check.sh v3 # 선택: 컨테이너 healthy, 마이그레이션 완료, SDK 키 유효 확인
   ```
   이 랩은 그 스택과 `_base/.env` 자격증명을 사용합니다 — `langfuse-ee` 랩이 쓰는 것과 같으며, 그 랩의 `01-up.sh`도 같은 스크립트를 실행합니다.
-- **Python 3.9+** 와 `pip install -r _base/v3/requirements.txt` (저장소 루트에서).
+- **Python 3.10+**(`langfuse` 3.15.0의 요구 사항)와 `pip install -r _base/v3/requirements.txt` (저장소 루트에서).
 - *(선택)* `_base/.env`의 `OPENAI_API_KEY` — 실제 생성 + managed LLM-as-a-judge용 (추가로 `pip install openai`).
 
 ### 🚀 빠른 시작 (오프라인 — LLM 키 불필요)

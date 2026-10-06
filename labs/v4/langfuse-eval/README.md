@@ -6,6 +6,8 @@
 
 ## English
 
+> **Langfuse v4 track.** The stack versions are pinned in [`_base/v4/versions.env`](../../../_base/v4/versions.env). For a Langfuse v3 deployment use [`labs/v3/langfuse-eval`](../../v3/langfuse-eval/README.md); v3 gets security patches only until 2027-01-31.
+
 A hands-on tour of Langfuse's **product features for LLM quality** — prompt
 management, datasets, experiments, LLM-as-a-judge, and human annotation — then a
 look at how every quality signal lands in the **ClickHouse** backend.
@@ -196,6 +198,8 @@ Created: 2026-07-26
 ---
 
 ## 한국어
+
+> **Langfuse v4 트랙.** 스택 버전은 [`_base/v4/versions.env`](../../../_base/v4/versions.env)에 고정되어 있습니다. Langfuse v3를 운영 중이라면 [`labs/v3/langfuse-eval`](../../v3/langfuse-eval/README.md)를 쓰세요. v3 보안 패치는 2027-01-31까지만 나옵니다.
 
 Langfuse의 **LLM 품질 관리 제품 기능** — 프롬프트 관리, 데이터셋, 실험,
 LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 품질 신호가 **ClickHouse**

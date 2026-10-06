@@ -6,6 +6,8 @@
 
 ## English
 
+> **Langfuse v3 track.** The stack versions are pinned in [`_base/v3/versions.env`](../../../_base/v3/versions.env). This is the lab as it was before the v4 port, kept for Langfuse v3 deployments; v3 gets security patches only until 2027-01-31. For v4 use [`labs/v4/langfuse-ee`](../../v4/langfuse-ee/README.md).
+
 A hands-on, end-to-end workshop for **self-hosting [Langfuse](https://langfuse.com)** — the open-source LLM observability platform — and then looking *under the hood* at the **ClickHouse backend** that powers it.
 
 Langfuse v3 stores all of its OLTP state (users, orgs, projects, prompts, the audit log) in **Postgres**, but every **trace, observation, and score** lands in **ClickHouse**. That makes Langfuse a real, production-grade ClickHouse application you can stand up in minutes — and a great way to *feel* why ClickHouse is the right OLAP engine for high-volume, append-only LLM telemetry.
@@ -69,18 +71,19 @@ The stack itself is **shared with the other labs** and lives in [`_base/`](../..
 ```
 _base/
 ├── .env.example                 # Secrets, headless-init, EE license key, SDK keys (copy to _base/.env)
-├── docker-compose.yml           # OSS stack: web · worker · postgres · clickhouse · redis · minio
+├── v3/ · v4/                    # Per track: versions.env (image pins) · requirements.txt (v3: langfuse) · seed_traces.py
+├── docker-compose.yml           # OSS stack (pinned images): web · worker · postgres · clickhouse · redis · minio
 ├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
 ├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
 ├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
 ├── masking/masking_service.py   # Lab 08: tiny stdlib masking-callback sidecar
-└── bin/                         # up.sh · check.sh · down.sh · seed_traces.py
+└── bin/                         # up.sh · check.sh · down.sh (first argument: the track, v3 or v4)
 ```
 
 ### ✅ Prerequisites
 
 - **Docker + Docker Compose** (Docker Desktop on Mac/Windows). Give it ≥ 4 CPU / 16 GiB.
-- **Python 3.9+** for lab 02.
+- **Python 3.10+** for lab 02 (`langfuse` 3.15.0 requires it).
 - **`jq`** and **`curl`** for the enterprise scripts (05–07).
 - An **enterprise license key** for labs 05–07 (the OSS track needs nothing extra).
 
@@ -110,7 +113,7 @@ docker exec -i langfuse-hols-v3-clickhouse-1 clickhouse-client -u clickhouse --p
   --multiquery < 04-clickhouse-analytics.sql
 ```
 
-> The container name is fixed by the compose project name (`langfuse-hols-v3`, set in `_base/docker-compose.yml`), so it no longer depends on the directory the stack was started from.
+> The container name is fixed by the compose project name (`langfuse-hols-v3`: `langfuse-hols-` plus the track, set in `_base/docker-compose.yml`), so it no longer depends on the directory the stack was started from.
 
 ### 🏢 Enterprise Track
 
@@ -321,6 +324,8 @@ For questions, see the main [clickhouse-hols README](../../../README.md).
 
 ## 한국어
 
+> **Langfuse v3 트랙.** 스택 버전은 [`_base/v3/versions.env`](../../../_base/v3/versions.env)에 고정되어 있습니다. v4 포팅 이전의 실습을 Langfuse v3 운영 환경을 위해 남겨 둔 것입니다. v3 보안 패치는 2027-01-31까지만 나옵니다. v4는 [`labs/v4/langfuse-ee`](../../v4/langfuse-ee/README.md)를 쓰세요.
+
 **[Langfuse](https://langfuse.com) self-hosting** — 오픈소스 LLM 관측가능성(observability) 플랫폼 — 을 직접 구축하고, 그 내부를 떠받치는 **ClickHouse 백엔드**까지 들여다보는 종단간 실습입니다.
 
 Langfuse v3는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사 로그)를 **Postgres**에 저장하지만, 모든 **trace·observation·score**는 **ClickHouse**에 적재됩니다. 즉 Langfuse는 몇 분 만에 띄울 수 있는 실전급 ClickHouse 애플리케이션이며, 고볼륨 append-only LLM 텔레메트리에 왜 ClickHouse가 적합한지를 직접 체감하기에 좋은 사례입니다.
@@ -384,18 +389,19 @@ langfuse-ee/
 ```
 _base/
 ├── .env.example                 # 시크릿, headless-init, EE 라이선스 키, SDK 키 (_base/.env 로 복사)
-├── docker-compose.yml           # OSS 스택: web · worker · postgres · clickhouse · redis · minio
+├── v3/ · v4/                    # 트랙별: versions.env(이미지 버전 고정) · requirements.txt(v3: langfuse) · seed_traces.py
+├── docker-compose.yml           # OSS 스택(이미지 버전 고정): web · worker · postgres · clickhouse · redis · minio
 ├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
 ├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
 ├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
 ├── masking/masking_service.py   # 랩 08: stdlib 전용 초경량 마스킹 콜백 사이드카
-└── bin/                         # up.sh · check.sh · down.sh · seed_traces.py
+└── bin/                         # up.sh · check.sh · down.sh (첫 번째 인자: 트랙, v3 또는 v4)
 ```
 
 ### ✅ 사전 준비물
 
 - **Docker + Docker Compose** (Mac/Windows는 Docker Desktop). CPU 4코어 / 16 GiB 이상 권장.
-- 랩 02용 **Python 3.9+**.
+- 랩 02용 **Python 3.10+**(`langfuse` 3.15.0의 요구 사항).
 - 엔터프라이즈 스크립트(05–07)용 **`jq`** 와 **`curl`**.
 - 랩 05–07용 **엔터프라이즈 라이선스 키** (OSS 트랙은 추가 준비물 없음).
 
@@ -425,7 +431,7 @@ docker exec -i langfuse-hols-v3-clickhouse-1 clickhouse-client -u clickhouse --p
   --multiquery < 04-clickhouse-analytics.sql
 ```
 
-> 컨테이너 이름은 compose 프로젝트 이름(`langfuse-hols-v3`, `_base/docker-compose.yml`에 고정)으로 정해지므로, 스택을 어느 디렉터리에서 띄웠는지에 더 이상 좌우되지 않습니다.
+> 컨테이너 이름은 compose 프로젝트 이름(`langfuse-hols-v3`: `langfuse-hols-`에 트랙을 붙인 값, `_base/docker-compose.yml`에 고정)으로 정해지므로, 스택을 어느 디렉터리에서 띄웠는지에 더 이상 좌우되지 않습니다.
 
 ### 🏢 Enterprise 트랙
 

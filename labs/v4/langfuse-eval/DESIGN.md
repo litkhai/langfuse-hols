@@ -4,7 +4,7 @@
 > 작성일: 2026-07-25 · 작성자: Ken Lee (ClickHouse SA)
 > 자매 랩: [`labs/v4/langfuse-ee/`](../langfuse-ee/README.md) (self-host + ClickHouse 백엔드 + EE governance)
 > 참고(#7): 스택·`.env`·trace 생성기는 두 랩이 공유하는 [`_base/`](../../../_base/README.md)로 옮겨졌다. 아래 본문의 해당 경로는 현재 위치로 고쳐 두었다.
-> 참고(#22): 이 설계는 Langfuse v3 / Python SDK v3 기준으로 쓰였다. 스택은 Langfuse v4(4.48.0)로 고정되었고 코드는 v4로 포팅되었다. observation이 ClickHouse `events_full` / `events_core`에 저장되고(trace는 루트 observation이며 trace 속성은 모든 행에 있음 — `traces`/`observations` 테이블은 비어 있음), `update_current_trace()`는 `propagate_attributes()`로 바뀌었으며, 실제 모델 호출은 OpenAI 대신 Anthropic(`claude-haiku-4-5`, 공식 `anthropic` SDK + OpenTelemetry 계측)이고, Python은 3.10+ (`pip install -r _base/v4/requirements.txt`), managed evaluator는 observation 수준이다. 아래 본문은 설계 당시의 기록이며, 달라진 부분에는 `(#22)` 주석을 달았다.
+> 참고(#22): 이 설계는 Langfuse v3 / Python SDK v3 기준으로 쓰였다. 스택은 Langfuse v4(#22 당시 4.48.0, 현재 버전은 `_base/v4/versions.env`)로 고정되었고 코드는 v4로 포팅되었다. observation이 ClickHouse `events_full` / `events_core`에 저장되고(trace는 루트 observation이며 trace 속성은 모든 행에 있음 — `traces`/`observations` 테이블은 비어 있음), `update_current_trace()`는 `propagate_attributes()`로 바뀌었으며, 실제 모델 호출은 OpenAI 대신 Anthropic(`claude-haiku-4-5`, 공식 `anthropic` SDK + OpenTelemetry 계측)이고, Python은 3.10+ (`pip install -r _base/v4/requirements.txt`), managed evaluator는 observation 수준이다. 아래 본문은 설계 당시의 기록이며, 달라진 부분에는 `(#22)` 주석을 달았다.
 
 ---
 

@@ -1,6 +1,6 @@
 # Langfuse-on-ClickHouse Enterprise Workshop — Full Run Log & Blog Source
 
-A complete, captured end-to-end run of every lab in [`labs/langfuse-ee/`](./README.md): the OSS track (01–04) and the full Enterprise track (05–11), on the shared stack in [`_base/`](../../_base/README.md). This is the raw material for a tech blog: real commands, real output, and the findings that came out of running it.
+A complete, captured end-to-end run of every lab in [`labs/langfuse-ee/`](./README.md): the OSS track (01–04) and the full Enterprise track (05–11), on the shared stack in [`_base/`](../../../_base/README.md). This is the raw material for a tech blog: real commands, real output, and the findings that came out of running it.
 
 > Language note: the run log below is in English (console output is language-neutral). A Korean blog outline (한국어 블로그 아웃라인) is at the end.
 
@@ -31,7 +31,7 @@ A complete, captured end-to-end run of every lab in [`labs/langfuse-ee/`](./READ
 | Real model calls (optional) | `anthropic` 1.11.0 + `opentelemetry-instrumentation-anthropic` 0.62.4, model `claude-haiku-4-5` |
 | Run date | 2026-10-02 KST. Timestamps below are UTC, 2026-10-01 23:22–23:26 |
 
-Pins and the reason for each are in [`STATUS.md`](../../STATUS.md).
+Pins and the reason for each are in [`STATUS.md`](../../../STATUS.md).
 
 ## Run summary
 

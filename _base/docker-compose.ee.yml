@@ -12,9 +12,12 @@
 #    docker-compose.masking.yml     (lab 08) · docker-compose.governance.yml (lab 10)
 #
 #  Usage (merge overlay on top of the base compose; the base file always comes first,
-#  and relative paths + `.env` resolve against `_base/` — the first file's directory):
-#    docker compose -f _base/docker-compose.yml -f _base/docker-compose.ee.yml up -d
-#  or, from a lab script:  lf_compose ee -- up -d      (see _base/lib/env.sh)
+#  and relative paths resolve against `_base/` — the first file's directory). The track's
+#  versions.env is required (#33); lf_compose passes it and _base/.env for you:
+#    . _base/lib/env.sh v4 && lf_compose ee -- up -d      (or: EE=1 _base/bin/up.sh v4)
+#  by hand:
+#    docker compose --env-file _base/v4/versions.env --env-file _base/.env \
+#                   -f _base/docker-compose.yml -f _base/docker-compose.ee.yml up -d
 #
 #  The `:?` guard makes compose FAIL FAST with a clear message if you forgot to
 #  set LANGFUSE_EE_LICENSE_KEY in _base/.env. Core/OSS features never need this file.

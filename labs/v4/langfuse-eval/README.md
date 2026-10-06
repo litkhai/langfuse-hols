@@ -152,23 +152,23 @@ Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-10-02** against **Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10**.
+Verified **end-to-end on 2026-10-06** against **Langfuse v4.52.0 / SDK 4.17.0 / ClickHouse 26.8.18.2** (track v4, [#34](https://github.com/litkhai/langfuse-hols/issues/34)).
 
-- **Stack:** the pinned shared stack in [`_base/`](../../../_base/README.md), Python 3.12.14.
+- **Stack:** the pinned shared stack in [`_base/`](../../../_base/README.md) (`_base/v4/versions.env`), fresh volumes, Python 3.12.14.
 - **Offline:** every step ran offline.
-- **Real model calls:** steps 04 and 05 also ran with real calls to Anthropic `claude-haiku-4-5`. Step 05's managed evaluator ran through an Anthropic LLM connection.
+- **Real model calls:** steps 04 and 05 also ran with real calls to Anthropic `claude-haiku-4-5`. Step 05's managed evaluator ran through an Anthropic LLM connection, created with the API block in [05-llm-as-a-judge.md](05-llm-as-a-judge.md).
 
 The full log is in [lab-output.md](lab-output.md).
 
 | Step | Result |
 |---|---|
-| `01` seed | 20 traces ingested through the shared generator (`_base/bin/seed_traces.py`) |
+| `01` seed | 20 traces ingested through the shared generator (`_base/v4/seed_traces.py`) |
 | `02` prompts | v1 + v2 + chat created; `production` label moved to v2; compile + `prompt=` link OK |
 | `03` dataset | 10 items upserted (`golden-00…09`), idempotent |
-| `04` experiments | offline: prompt-v1 `answered 0 / keyword-recall 0` → prompt-v2 `1 / 1`; real `claude-haiku-4-5`: keyword-recall v1 **0.326** → v2 **0.169** |
-| `05` LLM-judge | offline rubric `0 → 1`; real judge v1 **0.415** → v2 **0.215**; managed observation-level evaluator wrote **5 `EVAL` scores** (avg 0.95) |
-| `06` annotation | 2 score configs + `human-review` queue + 8 root observations enqueued (`objectType: OBSERVATION`) + demo scores |
-| `07` ClickHouse | all sections return rows; the A/B join `scores → events_core` root rows works; per-trace agreement populated; `API` and `EVAL` sources side by side |
+| `04` experiments | offline: prompt-v1 `answered 0 / keyword-recall 0` → prompt-v2 `1 / 1`; real `claude-haiku-4-5`: keyword-recall v1 **0.345** → v2 **0.152** |
+| `05` LLM-judge | offline rubric `0 → 1`; real judge v1 **0.420** → v2 **0.250**; managed observation-level evaluator wrote **5 `EVAL` scores** (avg 0.96) on the 5 traces seeded after the rule |
+| `06` annotation | 2 score configs + `human-review` queue + 8 traces enqueued as their root observations + demo scores |
+| `07` ClickHouse | all six sections return rows; the A/B join `scores → events_core` root rows works; per-trace agreement populated; `API` and `EVAL` sources side by side |
 
 Runtime findings built into the labs:
 
@@ -339,23 +339,23 @@ trace는 루트 observation의 id를 담은 `OBSERVATION` 아이템으로 적재
 
 ### 📝 검증 상태
 
-**2026-10-02**에 **Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10**에서 **end-to-end 검증**했습니다.
+**2026-10-06**에 **Langfuse v4.52.0 / SDK 4.17.0 / ClickHouse 26.8.18.2**에서 **end-to-end 검증**했습니다(v4 트랙, [#34](https://github.com/litkhai/langfuse-hols/issues/34)).
 
-- **스택:** [`_base/`](../../../_base/README.md)의 고정 공유 스택, Python 3.12.14를 썼습니다.
+- **스택:** [`_base/`](../../../_base/README.md)의 고정 공유 스택(`_base/v4/versions.env`), 새 볼륨, Python 3.12.14를 썼습니다.
 - **오프라인:** 모든 단계를 오프라인으로 돌렸습니다.
-- **실제 모델 호출:** 04와 05는 Anthropic `claude-haiku-4-5` 실제 호출로도 돌렸고, 05의 관리형 evaluator는 Anthropic LLM connection으로 실행했습니다.
+- **실제 모델 호출:** 04와 05는 Anthropic `claude-haiku-4-5` 실제 호출로도 돌렸습니다. 05의 관리형 evaluator는 [05-llm-as-a-judge.md](05-llm-as-a-judge.md)의 API 블록으로 만든 Anthropic LLM connection으로 실행했습니다.
 
 전체 로그는 [lab-output.md](lab-output.md)에 있습니다.
 
 | 단계 | 결과 |
 |---|---|
-| `01` 시드 | 공유 생성기(`_base/bin/seed_traces.py`)로 trace 20건 적재 |
+| `01` 시드 | 공유 생성기(`_base/v4/seed_traces.py`)로 trace 20건 적재 |
 | `02` 프롬프트 | v1 + v2 + chat 생성; `production` 라벨 v2로 이동; compile + `prompt=` 링크 정상 |
 | `03` 데이터셋 | 10개 아이템 upsert(`golden-00…09`), 멱등 |
-| `04` 실험 | 오프라인: prompt-v1 `answered 0 / keyword-recall 0` → prompt-v2 `1 / 1`; 실제 `claude-haiku-4-5`: keyword-recall v1 **0.326** → v2 **0.169** |
-| `05` LLM 판정 | 오프라인 rubric `0 → 1`; 실제 judge v1 **0.415** → v2 **0.215**; 관리형 observation 단위 evaluator가 **`EVAL` 스코어 5건** 기록(평균 0.95) |
-| `06` 어노테이션 | score config 2개 + `human-review` 큐 + 루트 observation 8건 적재(`objectType: OBSERVATION`) + 데모 스코어 |
-| `07` ClickHouse | 전 섹션 결과 반환; `scores → events_core` 루트 행 A/B 조인 동작; trace별 일치도 채워짐; `API`와 `EVAL` 출처가 함께 보임 |
+| `04` 실험 | 오프라인: prompt-v1 `answered 0 / keyword-recall 0` → prompt-v2 `1 / 1`; 실제 `claude-haiku-4-5`: keyword-recall v1 **0.345** → v2 **0.152** |
+| `05` LLM 판정 | 오프라인 rubric `0 → 1`; 실제 judge v1 **0.420** → v2 **0.250**; 관리형 observation 단위 evaluator가 규칙 생성 뒤 시드한 trace 5건에 **`EVAL` 스코어 5건** 기록(평균 0.96) |
+| `06` 어노테이션 | score config 2개 + `human-review` 큐 + trace 8건을 루트 observation으로 적재 + 데모 스코어 |
+| `07` ClickHouse | 여섯 섹션 모두 결과 반환; `scores → events_core` 루트 행 A/B 조인 동작; trace별 일치도 채워짐; `API`와 `EVAL` 출처가 함께 보임 |
 
 랩에 반영한 런타임 발견:
 

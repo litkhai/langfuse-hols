@@ -265,32 +265,33 @@ Pairs with lab 07 as **archive-then-delete**: export before retention deletes. S
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-06-25** against **Langfuse v3.197.1** (Docker Compose, 6 containers) with a real enterprise trial license key:
+Verified **end-to-end on 2026-10-06** against **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2** (track v3, [#34](https://github.com/litkhai/langfuse-hols/issues/34)).
+
+- **Stack:** the pinned stack in [`_base/`](../../../_base/README.md) (`_base/v3/versions.env`): Docker 29.8.2, Compose v5.5.1, Python 3.12.14, fresh volumes.
+- **EE:** a real enterprise license key.
+- **Model calls:** labs 01–11 ran offline. The real OpenAI path (`OPENAI_API_KEY`) was not run.
+
+The full captured console output of the 01 → 11 run is in **[lab-output.md](lab-output.md)** (blog-ready). Earlier runs, on v3.197.1: labs 01–07 on 2026-06-25, labs 08–11 on 2026-07-26 (SDK 3.7.0, ClickHouse 25.11.2.24).
 
 | Step | Result |
 |---|---|
-| `01` stack up | 6 containers healthy; `/api/public/health` → `{"status":"OK","version":"3.197.1"}` |
+| `01` stack up | 6 containers; `/api/public/health` → version `3.225.11`; `_base/bin/check.sh v3` all PASS, including the health version equal to the pin and ClickHouse migrations applied 37 / shipped 37 |
 | `02` generate traces | 40 traces ingested via the SDK (offline mode) |
-| `03` explore | tables `traces` / `observations` / `scores` are `ReplacingMergeTree`, monthly-partitioned |
-| `04` analytics | all 8 queries pass; cost/latency/quality numbers sane |
+| `03` explore | tables `traces` / `observations` / `scores` are `ReplacingMergeTree`, monthly-partitioned; `traces` holds 41 raw rows but 40 with `FINAL` + `is_deleted = 0`; 130 `observations` and 76 `scores` rows on disk |
+| `04` analytics | all 8 queries return rows; per-model cost non-zero for the three simulated models |
 | `05` EE activate | Instance Management API `/api/admin/organizations` → HTTP 200 (license valid) |
 | `06` RBAC/SCIM | org + project + 2 SCIM users + project-level role override, all via API |
-| `07` audit/retention | 14-day retention set (`retentionDays: 14`); audit log shows every lab-06 action |
-
-Labs **08–11 were verified end-to-end on 2026-07-26** (Langfuse v3.197.1, ClickHouse 25.11.2.24, SDK 3.7.0, Docker 29.6.2) with a real enterprise license key. Full captured console output for the whole 01→11 run is in **[lab-output.md](lab-output.md)** (blog-ready).
-
-| Step | Result |
-|---|---|
-| `08` data masking | leak counts all `0` in `traces`+`observations`; **24 rows** carry `[REDACTED_*]`; sidecar logged **84 redactions** |
-| `09` protected prompts | v1→v2 label move (v1 `labels={}`); prompt rows in Postgres; 2 `create prompt` audit rows |
+| `07` audit/retention | 14-day retention set (`retentionDays: 14`); the audit log's latest 6 rows are the lab-06 organization, its 2 org memberships and 3 API keys (project creation, SCIM users and the role override are not among them) |
+| `08` data masking | leak counts all `0` in `traces` + `observations`; **24 rows** carry `[REDACTED_*]`; sidecar logged **84 redactions** |
+| `09` protected prompts | v1→v2 label move (v1 `labels={}`, v2 `{production,latest}`); prompt rows in Postgres; 2 `create prompt` audit rows |
 | `10` governance | all `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` confirmed in the container env |
-| `11` parquet export | CH `s3()` round-trip **93 == 93**; integration API on v3.197.1 accepts `JSON/CSV/JSONL` only (not `PARQUET`) → JSONL fallback; ClickHouse writes true Parquet in Part B |
+| `11` parquet export | the integration API **accepts `fileType: PARQUET`** on v3.225.11; ClickHouse `s3()` writes the active traces to Parquet on MinIO and reads **52** rows back (the script prints the read-back count only). The hourly job had not fired before teardown, so its files are not proven |
 
-> **Version-drift finding (lab 11):** the published OpenAPI spec lists `fileType: PARQUET` for the blob-storage integration, but the pinned **v3.197.1** image rejects it with HTTP 400 (`JSON`/`CSV`/`JSONL` only) — scheduled-Parquet export is a newer release. Validate the API surface against your *running* image, not just the docs. The lab script tries `PARQUET`, then falls back to `JSONL`.
+> **Version drift (lab 11), closed by the pin.** On v3.197.1 (2026-07-26) the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. The pinned **v3.225.11** accepts it (2026-10-06). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
 >
-> **Portability note (lab 08):** the driver auto-detects the Python interpreter (prefers `.venv/bin/python`, falls back to `python3`), so it runs on macOS where bare `python` doesn't exist.
+> **Portability note (lab 08):** the driver auto-detects the Python interpreter (prefers `.venv/bin/python`, falls back to `python3`, which is the track venv's when `.venv-v3` is activated), so it runs on macOS where bare `python` doesn't exist.
 
-Two things confirmed at runtime and baked into the labs: **(1)** Langfuse tables are `ReplacingMergeTree`, so analytics read with `FINAL` + `WHERE is_deleted = 0` to avoid double-counting un-merged row versions; **(2)** the SDK's `input_tokens`/`output_tokens` are normalized to the Map keys `input`/`output`/`total` in ClickHouse (the queries use `greatest()` over both spellings). The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
+Confirmed at runtime and baked into the labs: **(1)** Langfuse tables are `ReplacingMergeTree`, so analytics read with `FINAL` + `WHERE is_deleted = 0` to avoid double-counting un-merged row versions (lab 03 shows 41 raw vs 40 active `traces` rows on 2026-10-06); **(2)** the SDK's `input_tokens`/`output_tokens` are normalized to the Map keys `input`/`output`/`total` in ClickHouse (the queries use `greatest()` over both spellings). The ClickHouse `DESCRIBE` output in lab 03 is authoritative for your installed version.
 
 ### 🔍 Additional resources
 
@@ -583,32 +584,33 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 
 ### 📝 검증 상태
 
-**2026-06-25**에 실제 엔터프라이즈 트라이얼 라이선스 키로 **Langfuse v3.197.1**(Docker Compose, 컨테이너 6개)에서 **end-to-end 검증**했습니다.
+**2026-10-06**에 **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2**에서 **end-to-end 검증**했습니다(v3 트랙, [#34](https://github.com/litkhai/langfuse-hols/issues/34)).
+
+- **스택:** [`_base/`](../../../_base/README.md)의 고정 스택(`_base/v3/versions.env`)입니다. Docker 29.8.2, Compose v5.5.1, Python 3.12.14, 새 볼륨을 썼습니다.
+- **EE:** 실제 엔터프라이즈 라이선스 키를 썼습니다.
+- **모델 호출:** 랩 01–11은 오프라인으로 돌렸습니다. 실제 OpenAI 경로(`OPENAI_API_KEY`)는 실행하지 않았습니다.
+
+01 → 11 전체 실행의 콘솔 출력 원본은 **[lab-output.md](lab-output.md)**에 있습니다(블로그용). 이전 실행은 v3.197.1에서 했습니다. 랩 01–07은 2026-06-25에, 랩 08–11은 2026-07-26에(SDK 3.7.0, ClickHouse 25.11.2.24) 돌렸습니다.
 
 | 단계 | 결과 |
 |---|---|
-| `01` 스택 기동 | 컨테이너 6개 healthy; `/api/public/health` → `{"status":"OK","version":"3.197.1"}` |
+| `01` 스택 기동 | 컨테이너 6개; `/api/public/health` → 버전 `3.225.11`; `_base/bin/check.sh v3` 전부 PASS(health 버전이 고정 버전과 같음, ClickHouse 마이그레이션 37/37 포함) |
 | `02` 트레이스 생성 | SDK(오프라인 모드)로 40건 적재 |
-| `03` 탐색 | `traces`/`observations`/`scores`는 `ReplacingMergeTree`, 월별 파티션 |
-| `04` 분석 | 8개 쿼리 전부 통과; 비용/지연/품질 수치 타당 |
+| `03` 탐색 | `traces`/`observations`/`scores`는 `ReplacingMergeTree`, 월별 파티션; `traces`는 원시 41행이지만 `FINAL` + `is_deleted = 0`으로는 40행; 디스크의 `observations` 130행, `scores` 76행 |
+| `04` 분석 | 8개 쿼리 모두 결과 반환; 시뮬레이션한 세 모델 모두 비용이 0이 아님 |
 | `05` EE 활성화 | Instance Management API `/api/admin/organizations` → HTTP 200 (라이선스 유효) |
 | `06` RBAC/SCIM | 조직 + 프로젝트 + SCIM 사용자 2명 + 프로젝트 단위 역할 오버라이드, 전부 API로 |
-| `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그에 lab 06의 모든 동작 기록됨 |
-
-랩 **08–11은 2026-07-26에 end-to-end 검증**했습니다(Langfuse v3.197.1, ClickHouse 25.11.2.24, SDK 3.7.0, Docker 29.6.2, 실제 엔터프라이즈 라이선스 키). 01→11 전체 실행의 콘솔 출력 원본은 **[lab-output.md](lab-output.md)** 에 있습니다(블로그용).
-
-| 단계 | 결과 |
-|---|---|
+| `07` 감사/보존 | 14일 보존 설정(`retentionDays: 14`); 감사 로그의 최근 6행은 랩 06의 조직 생성, 조직 멤버십 2개, API 키 3개(프로젝트 생성·SCIM 사용자·역할 오버라이드는 이 목록에 없음) |
 | `08` 데이터 마스킹 | `traces`+`observations` leak 카운트 전부 `0`; **24행**에 `[REDACTED_*]`; 사이드카 로그 **84 redactions** |
-| `09` 보호된 프롬프트 | v1→v2 라벨 이동(v1 `labels={}`); 프롬프트 행 Postgres에; `create prompt` 감사 2건 |
-| `10` 거버넌스 | 컨테이너 env에 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
-| `11` parquet 반출 | CH `s3()` 라운드트립 **93 == 93**; v3.197.1 통합 API는 `JSON/CSV/JSONL`만 허용(`PARQUET` 미지원) → JSONL 폴백; Part B에서 ClickHouse가 진짜 Parquet 기록 |
+| `09` 보호된 프롬프트 | v1→v2 라벨 이동(v1 `labels={}`, v2 `{production,latest}`); 프롬프트 행은 Postgres에; `create prompt` 감사 2건 |
+| `10` 거버넌스 | 컨테이너 env에서 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
+| `11` parquet 반출 | v3.225.11의 통합 API가 **`fileType: PARQUET`를 허용**; ClickHouse `s3()`가 활성 trace를 MinIO에 Parquet로 쓰고 **52**행을 다시 읽음(스크립트는 다시 읽은 행 수만 출력). 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
 
-> **버전 드리프트 발견(랩 11):** 공개 OpenAPI 스펙엔 blob-storage 통합의 `fileType: PARQUET`가 있으나 고정 이미지 **v3.197.1**은 HTTP 400으로 거부(`JSON`/`CSV`/`JSONL`만) — 스케줄 Parquet 반출은 더 최신 릴리스. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 검증할 것. 스크립트는 `PARQUET` 시도 후 `JSONL`로 폴백.
+> **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1(2026-07-26)에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). 고정한 **v3.225.11**은 허용합니다(2026-10-06). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
 >
-> **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지(`.venv/bin/python` 우선, `python3` 폴백)하므로 bare `python`이 없는 macOS에서도 실행됩니다.
+> **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지합니다. `.venv/bin/python`을 먼저 찾고, 없으면 `python3`를 씁니다(`.venv-v3`를 활성화했다면 그 트랙 venv의 것). 그래서 bare `python`이 없는 macOS에서도 실행됩니다.
 
-런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다. **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
+런타임에서 확인해 랩에 반영한 두 가지: **(1)** Langfuse 테이블은 `ReplacingMergeTree`이므로, 병합 전 중복 버전을 이중 집계하지 않도록 분석 쿼리는 `FINAL` + `WHERE is_deleted = 0`으로 읽습니다(2026-10-06 랩 03에서 `traces` 원시 41행 대 활성 40행). **(2)** SDK의 `input_tokens`/`output_tokens`는 ClickHouse에서 Map 키 `input`/`output`/`total`로 정규화됩니다(쿼리는 두 표기를 `greatest()`로 처리). 설치 버전의 정답은 랩 03의 `DESCRIBE` 출력입니다.
 
 ### 🔍 추가 자료
 

@@ -1,6 +1,6 @@
 # Langfuse-on-ClickHouse Enterprise Workshop — Full Run Log & Blog Source
 
-A complete, captured end-to-end run of every lab in [`labs/langfuse-ee/`](./README.md): the OSS track (01–04) and the full Enterprise track (05–11), on the shared stack in [`_base/`](../../../_base/README.md). This is the raw material for a tech blog: real commands, real output, and the findings that came out of running it.
+A complete, captured end-to-end run of every lab in [`labs/v4/langfuse-ee/`](./README.md): the OSS track (01–04) and the full Enterprise track (05–11), on the shared stack in [`_base/`](../../../_base/README.md). This is the raw material for a tech blog: real commands, real output, and the findings that came out of running it.
 
 > Language note: the run log below is in English (console output is language-neutral). A Korean blog outline (한국어 블로그 아웃라인) is at the end.
 
@@ -8,88 +8,98 @@ A complete, captured end-to-end run of every lab in [`labs/langfuse-ee/`](./READ
 
 ## TL;DR
 
-- Self-hosted **Langfuse v4.48.0** stores every observation in two new **ClickHouse 26.8.15.10** tables, `events_full` and `events_core`; scores stay in `scores`. We stood the stack up, sent traces with Python SDK 4.16.0, and ran cost, latency and quality analytics straight on ClickHouse — with no joins, because v4 puts the trace attributes on every observation row.
-- We then activated an **Enterprise license** and exercised the EE entitlements end to end. The highlight is **server-side data masking, *proven* in ClickHouse with SQL**, ending in a PASS/FAIL verdict that was itself tested against eight planted cases. The other one is a **Parquet export ↔ ClickHouse `s3()` round-trip**.
+- Self-hosted **Langfuse v4.52.0** stores every observation in two new **ClickHouse 26.8.18.2** tables, `events_full` and `events_core`; scores stay in `scores`. We stood the stack up, sent traces with Python SDK 4.17.0, and ran cost, latency and quality analytics straight on ClickHouse — with no joins, because v4 puts the trace attributes on every observation row.
+- We then activated an **Enterprise license** and exercised the EE entitlements end to end. The highlight is **server-side data masking, *proven* in ClickHouse with SQL**, ending in a PASS/FAIL verdict that was itself shown to FAIL on an empty table. The other one is a **Parquet export ↔ ClickHouse `s3()` round-trip**.
 - The optional real model calls go to **Anthropic `claude-haiku-4-5`**, traced by OpenTelemetry and priced by Langfuse.
-- Main findings, all from this run:
+- Main findings, from the 2026-10-06 run (comparisons with v3.197.1 come from the earlier v3 run, and a few items are marked as not re-run):
   - v4 writes somewhere else, so v3-era SQL returns nothing.
   - Cost depends on the usage key names.
   - The masking proof needs a positive control.
-  - The Parquet drift seen on v3.197.1 is gone on 4.48.0.
+  - The Parquet drift seen on v3.197.1 is gone on 4.52.0.
 
 ## Environment
 
 | Component | Version / detail |
 |---|---|
-| Host | macOS (Darwin 25.6), Docker Desktop |
-| Docker Engine / Compose | 29.8.1 / v5.5.1 |
-| Langfuse (web + worker) | **v4.48.0** (`langfuse/langfuse:4.48.0`, `langfuse/langfuse-worker:4.48.0`), default `events_only` write mode |
-| ClickHouse | **26.8.15.10** (LTS) |
-| Postgres / Redis / MinIO | 17.11 / 7.2.16 / `cgr.dev/chainguard/minio@sha256:4692462f…` (RELEASE.2026-09-22T19-25-18Z) |
-| Masking sidecar | `python:3.12.14-slim` (stdlib only) |
-| Python SDK | `langfuse` **4.16.0** on Python 3.12.14 (OpenTelemetry-native) |
+| Host | macOS (Darwin 25.6) |
+| Docker Engine / Compose | 29.8.2 / v5.5.1 |
+| Langfuse (web + worker) | **v4.52.0** (`langfuse/langfuse:4.52.0`, `langfuse/langfuse-worker:4.52.0`), default `events_only` write mode |
+| ClickHouse | **26.8.18.2** (LTS) |
+| Postgres / Redis / MinIO | 17.11 / 7.2.16 / `cgr.dev/chainguard/minio@sha256:4cf4831a…` (index digest of `latest`, resolved 2026-10-06) |
+| Masking sidecar | `python:3.12.15-slim` (stdlib only) |
+| Python SDK | `langfuse` **4.17.0** on Python 3.12.14 (OpenTelemetry-native) |
 | Real model calls (optional) | `anthropic` 1.11.0 + `opentelemetry-instrumentation-anthropic` 0.62.4, model `claude-haiku-4-5` |
-| Run date | 2026-10-02 KST. Timestamps below are UTC, 2026-10-01 23:22–23:26 |
+| Run date | 2026-10-06 KST. Timestamps below are UTC, 2026-10-06 11:00–11:02 |
 
-Pins and the reason for each are in [`STATUS.md`](../../../STATUS.md).
+Pins and the reason for each are in [`STATUS.md`](../../../STATUS.md). The Postgres, Redis, MinIO and sidecar versions are the pins in `_base/docker-compose*.yml`; the run logs do not print them.
 
 ## Run summary
 
 | Lab | Feature | Result |
 |---|---|---|
-| 01 | Stack up (6 containers) | ✅ healthy; `/api/public/health` → `{"status":"OK","version":"4.48.0"}`; `check.sh` all PASS, ClickHouse migrations 50/50 |
+| 01 | Stack up (6 containers) | ✅ healthy; `check.sh v4`: 11 PASS, 1 SKIP (masking sidecar, expected); `/api/public/health` → 200 (Langfuse 4.52.0); ClickHouse migrations 50/50 |
 | 02 | Generate traces (SDK) | ✅ 40 traces offline, plus 5 with real `claude-haiku-4-5` calls |
-| 03 | Explore the ClickHouse backend | ✅ data in `events_full` / `events_core` (137 rows each), `scores` 78; v3 `traces` / `observations` **0** |
+| 03 | Explore the ClickHouse backend | ✅ data in `events_full` / `events_core` (158 rows each), `scores` 88; v3 `traces` / `observations` **0** |
 | 04 | Analytics on ClickHouse | ✅ cost / latency p95 / errors / tier / quality / leaderboard / trend / sessions, with no joins |
 | 05 | Activate Enterprise | ✅ Instance Management API → HTTP 200 |
 | 06 | RBAC & SCIM | ✅ org + project + 2 SCIM users + project-level role override |
-| 07 | Data retention + audit | ✅ 14-day retention; audit log shows every lab-06 action |
-| 08 | **Server-side data masking** | ✅ **verdict PASS**: 24 masked rows, 0 leaks, 108 redactions; the verdict FAILs on an empty table and on 6 other planted cases |
+| 07 | Data retention + audit | ✅ 14-day retention; audit log lists the lab-06 organization create, API-key mints and 2 memberships |
+| 08 | **Server-side data masking** | ✅ **verdict PASS**: 24 masked rows, 0 leaks, 108 redactions; the verdict FAILs on an empty table (`--selftest`). The other planted cases were not re-run on 2026-10-06 |
 | 09 | Protected prompt labels | ✅ v1→v2 label move; prompts in Postgres; audited |
 | 10 | Instance governance | ✅ UI + org-creator vars injected and verified |
 | 11 | Parquet export ↔ ClickHouse | ✅ **`fileType: PARQUET` accepted** with the `OBSERVATIONS_V2` source; `s3()` round-trip **182 == 182** |
+
+All 17 steps of this lab's part of the run (reset through lab 11) exited 0 in `summary.tsv`.
 
 ---
 
 ## Reset — clean slate
 
 ```console
-$ _base/bin/down.sh --purge
-▶ Stopping stack and DELETING all data volumes…
- …
-✅ Stack down, volumes removed.
+$ _base/bin/down.sh v4 --purge
+▶ Stopping the v4 stack and DELETING all its data volumes…
+✅ Stack v4 down, volumes removed.
 ```
 
 ## Lab 01 — Deploy the stack (OSS)
 
 ```console
 $ ./01-up.sh
-▶ No _base/.env found — creating one from _base/.env.example (edit the # CHANGEME values for prod).
-▶ Starting Langfuse stack in OSS mode (postgres · clickhouse · redis · minio · web · worker)…
+▶ Starting Langfuse v4 stack in OSS mode (postgres · clickhouse · redis · minio · web · worker)…
  …
- Container langfuse-hols-langfuse-web-1 Started
+ Container langfuse-hols-v4-langfuse-web-1 Started
 ▶ Waiting for langfuse-web to become healthy (first boot runs DB + ClickHouse migrations, ~2-3 min)…
 ..✅ Langfuse is up after ~15s.
 
 ────────────────────────────────────────────────────────────
-  Langfuse UI      http://localhost:3000
+  Langfuse UI      http://localhost:3000   (track v4)
   Login            admin@example.com / workshop-admin-pw
   Project          LLM Observability
   API public key   pk-lf-workshop-public
+
   MinIO console    http://localhost:9091   (minio / miniosecret)
   ClickHouse HTTP  http://localhost:8123   (clickhouse / clickhouse)
+
+  Next (from the repository root):
+    _base/bin/check.sh v4                  # readiness: containers, migrations, keys
+    python3.12 -m venv .venv-v4 && source .venv-v4/bin/activate     # Python 3.10+
+    pip install -r _base/v4/requirements.txt
+    python _base/v4/seed_traces.py         # or the lab's own seed script
 ────────────────────────────────────────────────────────────
 ```
 
 ```console
-$ _base/bin/check.sh
+$ _base/bin/check.sh v4
+stack: langfuse-hols-v4  (env file: _base/.env)
+
 PASS  container langfuse-web running
 PASS  container langfuse-worker running
 PASS  container postgres running, healthy
 PASS  container clickhouse running, healthy
 PASS  container redis running, healthy
 PASS  container minio running, healthy
-PASS  web http://localhost:3000/api/public/health -> 200 (Langfuse 4.48.0)
+PASS  web http://localhost:3000/api/public/health -> 200 (Langfuse 4.52.0)
+PASS  web version 4.52.0 equals LANGFUSE_VERSION (v4 pin or override)
 PASS  worker http://localhost:3030/api/health -> 200
 PASS  ClickHouse migrations finished (applied 50, shipped 50, dirty 0)
 PASS  SDK keys accepted (http://localhost:3000/api/public/projects -> 200)
@@ -102,12 +112,12 @@ stack is ready.
 
 The compose file uses **headless initialization** (`LANGFUSE_INIT_*`) to create the first org, project, user and API keys on boot, so data can flow before anyone opens the UI.
 
-`check.sh` checks more than "the server answers". It compares the latest row of ClickHouse's `schema_migrations` with the highest migration number shipped in the web image. v4.48.0 ships 50; v3.197.1 shipped 34.
+`check.sh` checks more than "the server answers". It compares the latest row of ClickHouse's `schema_migrations` with the highest migration number shipped in the web image, and it checks that the version the health endpoint reports equals the pin. v4.52.0 ships 50; v3.197.1 shipped 34.
 
 ## Lab 02 — Generate traces via the Python SDK
 
 ```console
-$ python 02-generate-traces.py
+$ ANTHROPIC_API_KEY= python 02-generate-traces.py
 ✓ Connected. Generating 40 traces (offline / simulated)…
   …10/40 traces
   …20/40 traces
@@ -130,15 +140,17 @@ $ python 02-generate-traces.py 5
 - SDK v4 has no `update_current_trace()`. The generator wraps the work in `propagate_attributes(trace_name=…, user_id=…, session_id=…, tags=…, metadata=…)`, which writes those attributes onto every observation it creates.
 - Usage is sent as `{"input": …, "output": …}`, the keys Langfuse prices by.
 
-**The real path.** Real calls use the official `anthropic` SDK. `opentelemetry-instrumentation-anthropic` turns each call into a GENERATION span, and v4's default span filter keeps it because it carries `gen_ai.*` attributes. Measured after the run, the instrumented calls were:
-- 65 rows with scope `opentelemetry.instrumentation.anthropic`
+**The real path.** Real calls use the official `anthropic` SDK. `opentelemetry-instrumentation-anthropic` turns each call into a GENERATION span, and v4's default span filter keeps it because it carries `gen_ai.*` attributes. Measured after the run (lab 03 and lab 04 below), the instrumented calls were:
+- 5 `GENERATION` rows, one per real call, named `anthropic.chat` in the latest trace
 - model `claude-haiku-4-5-20251001` (the dated ID the API returns)
-- priced by Langfuse at $0.0137
+- priced by Langfuse at $0.001278 for the 5 calls (138 input and 228 output tokens)
+
+The instrumentation scope name on those rows was not queried on 2026-10-06.
 
 ## Lab 03 — Explore the ClickHouse backend
 
 ```console
-$ docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
+$ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
     --multiquery < 03-clickhouse-explore.sql
 ```
 
@@ -172,35 +184,38 @@ scores       ReplacingMergeTree  toYYYYMM(timestamp)   project_id, toDate(timest
 Row counts. This is **the v4 evidence**: the v3 tables still exist, and stay empty.
 
 ```
-events_full         137
-events_core         137
+events_full         158
+events_core         158
 traces (v3)           0
 observations (v3)     0
-scores               78
+scores               88
 ```
 
 The latest traces are read from their root rows (`is_app_root`). Trace attributes sit on every observation row:
 
 ```
-af4d80e6…  support-request  user_007  sess_user_007_7  ['env:production','feature:search-assist','tier:enterprise']
-d2d76a95…  support-request  user_008  sess_user_008_7  ['env:production','feature:troubleshooting','tier:pro']
+9aa72b76…  support-request  user_004  sess_user_004_0  ['env:production','feature:onboarding','tier:free']
+7f355a74…  support-request  user_008  sess_user_008_0  ['env:production','feature:troubleshooting','tier:pro']
 …
 SPAN        support-request    root=true
 SPAN        retrieve-context   root=false
-GENERATION  answer-generation  root=false  gpt-4o-mini  {'input':761,'output':286,'total':1047}  {'input':0.00011415,'output':0.0001716,'total':0.00028575}
+GENERATION  anthropic.chat     root=false  claude-haiku-4-5-20251001  {'input':27,'output':38,'total':65,'input_cached_tokens':0,'input_cache_creation':0}  {'input':0.000027,'output':0.00019,'input_cached_tokens':0,'input_cache_creation':0,'total':0.000217}
+SPAN        answer-generation  root=false
 ```
+
+The latest trace is one of the five real-call traces, so its generation is the instrumented `anthropic.chat` call with the dated model ID.
 
 **Columns.**
 - `events_core` has the same columns as `events_full`, with truncated `input` / `output`. The materialized view `events_core_mv` fills it.
 - `total_cost` is an `ALIAS` of `cost_details['total']`, and `calculated_*_cost` are `MATERIALIZED` from `cost_details`.
 - Metadata is two parallel arrays, `metadata_names` / `metadata_values`.
 
-**ReplacingMergeTree.** Raw rows and `FINAL` agreed in this run: **137 = 137**. On v3.197.1 the `traces` table showed 41 raw rows for 40 traces. Langfuse describes the v4 events table as "mostly immutable", which fits. The lab still reads with `FINAL` + `is_deleted = 0`, because retention deletes and updates do create row versions.
+**ReplacingMergeTree.** Raw rows and `FINAL` agreed in this run: **158 = 158**. On v3.197.1 the `traces` table showed 41 raw rows for 40 traces. Langfuse describes the v4 events table as "mostly immutable", which fits. The lab still reads with `FINAL` + `is_deleted = 0`, because retention deletes and updates do create row versions.
 
 ## Lab 04 — Analytics directly on ClickHouse
 
 ```console
-$ docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
+$ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse \
     --multiquery < 04-clickhouse-analytics.sql
 ```
 
@@ -211,16 +226,20 @@ Every query reads `events_core FINAL`. v3 needed a traces↔observations join to
 | model | calls | input_tok | output_tok | total_cost_usd | avg_cost/call |
 |---|--:|--:|--:|--:|--:|
 | gpt-4o | 9 | 5,785 | 2,547 | 0.039932 | 0.004437 |
-| claude-haiku-4-5 | 15 | 12,360 | 3,330 | 0.029010 | 0.001934 |
-| gpt-4o-mini | 33 | 15,417 | 3,682 | 0.004522 | 0.000137 |
+| claude-haiku-4-5 | 15 | 12,360 | 3,330 | 0.02901 | 0.001934 |
+| gpt-4o-mini | 34 | 15,523 | 3,687 | 0.004541 | 0.000134 |
+| claude-haiku-4-5-20251001 | 5 | 138 | 228 | 0.001278 | 0.000256 |
+
+The last row is the five real calls of lab 02; the `claude-haiku-4-5` row is the simulated traffic.
 
 **2) Latency p50/p95/p99 per model** — `quantile()` over `dateDiff('millisecond', start_time, end_time)`:
 
 | model | calls | avg_ms | p50 | p95 | p99 |
 |---|--:|--:|--:|--:|--:|
-| gpt-4o | 9 | 792 | 724 | 1,335.40 | 1,405.48 |
-| claude-haiku-4-5 | 15 | 532 | 543 | 805.30 | 817.06 |
-| gpt-4o-mini | 33 | 228 | 184 | 524.40 | 553.88 |
+| claude-haiku-4-5-20251001 | 5 | 1,121 | 1,062 | 1,433.20 | 1,457.04 |
+| gpt-4o | 9 | 791 | 723 | 1,335.80 | 1,405.56 |
+| claude-haiku-4-5 | 15 | 532 | 541 | 804.30 | 816.06 |
+| gpt-4o-mini | 34 | 227 | 182 | 524.50 | 554.05 |
 
 **3) Error rate per model** — `countIf(level = 'ERROR')`:
 
@@ -228,31 +247,32 @@ Every query reads `events_core FINAL`. v3 needed a traces↔observations join to
 |---|--:|--:|--:|
 | gpt-4o | 9 | 1 | 11.11 |
 | claude-haiku-4-5 | 15 | 1 | 6.67 |
-| gpt-4o-mini | 33 | 0 | 0 |
+| claude-haiku-4-5-20251001 | 5 | 0 | 0 |
+| gpt-4o-mini | 34 | 0 | 0 |
 
 **4) Cost by customer tier** — the tier comes from the row's own tags, with no join:
 
 | tier | traces | cost_usd | cost_per_trace |
 |---|--:|--:|--:|
-| free | 15 | 0.029991 | 0.001999 |
-| pro | 13 | 0.028379 | 0.002183 |
-| enterprise | 12 | 0.015094 | 0.001258 |
+| free | 17 | 0.0305 | 0.001794 |
+| pro | 14 | 0.028601 | 0.002043 |
+| enterprise | 14 | 0.01566 | 0.001119 |
 
 **5) Satisfaction from scores.**
-- Thumbs-up by tier: enterprise 75%, free 73.3%, pro 84.6%.
-- Overall: thumbs votes **40**, thumbs-up **77.5%**, average grounding **0.808**.
+- Thumbs-up by tier: enterprise 78.6%, free 76.5%, pro 85.7%.
+- Overall: thumbs votes **45**, thumbs-up **80%**, average grounding **0.806**.
 
 **6) Per-user spend leaderboard** (top rows):
 
 | user | sessions | requests | cost |
 |---|--:|--:|--:|
-| `user_005` | 4 | 5 | $0.0135 |
+| `user_005` | 4 | 6 | $0.0139 |
 | `user_011` | 4 | 4 | $0.0124 |
 | `user_012` | 3 | 3 | $0.0106 |
 
-**7) Daily trend:** `2026-10-01` (UTC) → 40 traces, 12 unique users, $0.073464.
+**7) Daily trend:** `2026-10-06` (UTC) → 45 traces, 12 unique users, $0.074761.
 
-**8) Session depth:** 32 sessions with 1 turn, 4 sessions with 2 turns.
+**8) Session depth:** 31 sessions with 1 turn, 7 sessions with 2 turns.
 
 ---
 
@@ -265,7 +285,7 @@ $ ./05-ee-activate.sh
 . ready.
 ▶ Verifying Enterprise activation via the Instance Management API…
 ✅ Enterprise active. Admin API reachable. Current organizations:
-{"organizations":[{"id":"ch-workshop","name":"ClickHouse Workshop","createdAt":"2026-10-01T23:22:33.651Z","metadata":{},"projects":[{"id":"llm-observability","name":"LLM Observability", …}]}]}
+{"organizations":[{"id":"ch-workshop","name":"ClickHouse Workshop","createdAt":"2026-10-06T11:00:22.821Z","metadata":{},"projects":[{"id":"llm-observability","name":"LLM Observability", …}]}]}
 ```
 
 The overlay injects `LANGFUSE_EE_LICENSE_KEY` into **both** containers, plus `ADMIN_API_KEY`. `/api/admin/organizations` only answers HTTP 200 when a valid license is present. CI checks that both containers get the key in every overlay set.
@@ -275,15 +295,15 @@ The overlay injects `LANGFUSE_EE_LICENSE_KEY` into **both** containers, plus `AD
 ```console
 $ ./06-ee-rbac-scim.sh
 ════ 1. Create an organization (Instance Management API, Bearer auth) ════
-  org id = cmuq5uv6f0002pg07oduk61r1
+  org id = cmuwkjkks0002kf07h1sggl5x
 ════ 2. Mint an organization-scoped API key ════
-  org public key = pk-lf-4e4bddb2-…            (secret not printed)
+  org public key = pk-lf-3438f4c5-…
 ════ 3. Create a project under the org ════
-  project id = cmuq5uvc40008pg07e5qs643d
-════ 4. Mint a project API key ════
-  project public key = pk-lf-7bb1fd6d-…
+  project id = cmuwkjkw90008kf07lzpx6cnl
+════ 4. Mint a project API key (this is what an app would use to send traces) ════
+  project public key = pk-lf-f01fe10f-…
 ════ 5. SCIM: provision two users (as an IdP like Okta/Entra would) ════
-  alice id = cmuq5uvhs…   bob id = cmuq5uviw…
+  alice id = cmuwkjl1o…   bob id = cmuwkjl2h…
 ════ 6. Assign ORGANIZATION-level roles ════
   alice=MEMBER (org), bob=VIEWER (org)
 ════ 7. PROJECT-LEVEL role override (Enterprise feature) ════
@@ -302,23 +322,28 @@ The EE feature is the last line: **Bob is `VIEWER` org-wide but `ADMIN` on one p
 ```console
 $ ./07-ee-audit-retention.sh
 ════════════════ A) Data Retention ════════════════
+▶ Minting an org-scoped key for 'ch-workshop' to call the projects API…
 ▶ Setting 14-day retention on project 'llm-observability'…
 { "id": "llm-observability", "name": "LLM Observability", "retentionDays": 14 }
 
 ════════════════ B) Audit Logs ════════════════
-  table = audit_logs           (stored in Postgres, snake_case columns)
-▶ Most recent audit events:
+▶ Audit logs are stored in Postgres. Discovering the table…
+  table = audit_logs
+▶ Schema:
+ …
+▶ Most recent audit events (who did what, when) — including the org/project/
+  membership changes lab 06 just made (columns are snake_case in Postgres):
        created_at        | action | resource_type |  actor
 -------------------------+--------+---------------+-----------
- 2026-10-01 23:23:59.722 | create | apiKey        | ADMIN_KEY
- 2026-10-01 23:23:59.39  | create | orgMembership | cmuq5uvas…
- 2026-10-01 23:23:59.348 | create | orgMembership | cmuq5uvas…
- 2026-10-01 23:23:59.298 | create | apiKey        | ORG_KEY
- 2026-10-01 23:23:59.096 | create | apiKey        | ADMIN_KEY
- 2026-10-01 23:23:58.94  | create | organization  | ADMIN_KEY
+ 2026-10-06 11:01:44.61  | create | apiKey        | ADMIN_KEY
+ 2026-10-06 11:01:43.916 | create | orgMembership | cmuwkjkur…
+ 2026-10-06 11:01:43.887 | create | orgMembership | cmuwkjkur…
+ 2026-10-06 11:01:43.841 | create | apiKey        | ORG_KEY
+ 2026-10-06 11:01:43.637 | create | apiKey        | ADMIN_KEY
+ 2026-10-06 11:01:43.281 | create | organization  | ADMIN_KEY
 ```
 
-A non-zero retention value requires the data-retention entitlement. A nightly worker then deletes event data older than the window. The audit log is the immutable who / what / when, and it captured **every action lab 06 performed**.
+A non-zero retention value requires the data-retention entitlement. A nightly worker then deletes event data older than the window. The audit log is the immutable who / what / when. The six most recent events are the lab-06 organization create, its API-key mints and the two memberships, plus the org-scoped key that lab 07 itself minted (the top row, 11:01:44.61). The six rows do not include the project create, the SCIM users or the project-level role override, so this run does not show that every lab-06 action is audited.
 
 ---
 
@@ -335,7 +360,7 @@ On v4 that scan has to read `events_full`, the table with the full payloads. `ev
 $ ./08-ee-data-masking.sh
 ▶ Bringing up the masking sidecar + wiring the worker to it…
 ▶ Sending PII-laden traces (secrets embedded in input/output/metadata)…
-  (using interpreter: .venv/bin/python)
+  (using interpreter: .venv-v4/bin/python)
 ✓ Connected. Sending 12 PII-laden traces to the OTLP endpoint…
 ▶ Letting the worker ingest + mask (async)…
 ▶ Verifying against ClickHouse (events_full) — raw secrets should be GONE, [REDACTED_*] present:
@@ -345,9 +370,9 @@ pii-demo rows present	24
 ── pii-demo rows carrying a [REDACTED_*] placeholder (want > 0) ──
 24	24
 ── sample masked observation payloads ──
-name:            support-request
-input_sample:    {"question": "My card [REDACTED_CC] was charged twice, please refund."}
-output_sample:   {"answer": "I've opened a refund for the card ending in the number you sent ([REDACTED_CC])."}
+name:            answer-generation
+input_sample:    [{"role": "system", "content": "You are a support assistant. Never echo secrets."}, {"role": "user", "content": "Reset my login for [REDACTED_EMAIL]."}]
+output_sample:   A reset link was sent to [REDACTED_EMAIL].
 meta_raw_email:  [REDACTED_EMAIL]
 meta_raw_rrn:    [REDACTED_KR_RRN]
 …
@@ -356,7 +381,7 @@ verdict	PASS	24	24	0
 ```
 
 ```console
-$ docker logs langfuse-hols-masking-1
+$ docker logs --tail 60 langfuse-hols-v4-masking-1
 masking-callback listening on :3100 (POST /mask, GET /health)
 [mask] project=llm-observability redactions=108
 ```
@@ -377,7 +402,7 @@ verdict	FAIL	0	0	0
 ✅ Selftest OK: the empty table produced verdict FAIL, so a PASS means something.
 ```
 
-Planted cases, each checked against the same SQL:
+Planted cases, each checked against the same SQL. Case 0 was re-run on 2026-10-06 (the selftest above). Cases A–G were last run on 2026-10-02 (Langfuse 4.48.0) and were not re-run on 2026-10-06, so their verdicts below are the earlier results:
 
 ```
 0. empty table                                             -> verdict=FAIL
@@ -405,8 +430,8 @@ $ ./09-ee-protected-prompts.sh
 ════ 4. Prompts are OLTP → stored in POSTGRES, not ClickHouse ════
  version |       labels        |       created_at
 ---------+---------------------+-------------------------
-       1 | {}                  | 2026-10-01 23:24:18.902
-       2 | {production,latest} | 2026-10-01 23:24:18.948
+       1 | {}                  | 2026-10-06 11:02:04.045
+       2 | {production,latest} | 2026-10-06 11:02:04.081
 ════ 5. Every label change was AUDITED (ties to lab 07) ════
  create | prompt   (×2)
 ```
@@ -420,7 +445,7 @@ The EE capstone, a UI toggle, marks `production` as **protected** so that lab 06
 ```console
 $ ./10-ee-instance-governance.sh
 ▶ Redeploying langfuse-web with the governance overlay…
-time="…" level=warning msg="Found orphan containers (langfuse-hols-masking-1) …"
+time="…" level=warning msg="Found orphan containers (langfuse-hols-v4-masking-1) …"
 ▶ Proving the governance env is injected into the running container:
 LANGFUSE_ALLOWED_ORGANIZATION_CREATORS=admin@example.com
 LANGFUSE_UI_DOCUMENTATION_HREF=https://clickhouse.com/docs
@@ -428,7 +453,7 @@ LANGFUSE_UI_FEEDBACK_HREF=https://github.com/ClickHouse/clickhouse-hols/issues
 LANGFUSE_UI_LOGO_DARK_MODE_HREF=https://clickhouse.com/favicon.ico
 LANGFUSE_UI_LOGO_LIGHT_MODE_HREF=https://clickhouse.com/favicon.ico
 LANGFUSE_UI_SUPPORT_HREF=https://clickhouse.com/support
-✅ Governance config active.
+✅ Governance config active. …
 ```
 
 Both controls are env-driven and license-gated. The script proves injection by `exec`-ing `env` inside the running container.
@@ -440,6 +465,7 @@ The **orphan-container warning is expected**. Lab 10's overlay set does not incl
 ```console
 $ ./11-ee-parquet-export.sh
 ════════════ A) Configure a scheduled Parquet export (Langfuse Org API) ════════════
+▶ Minting an org-scoped key for 'ch-workshop'…
 ▶ PUT /api/public/integrations/blob-storage → try Parquet first…
   ✅ Parquet scheduled export configured:
 {
@@ -454,13 +480,13 @@ $ ./11-ee-parquet-export.sh
 
 ════════════ B) The ClickHouse primitive, live (INSERT INTO FUNCTION s3 → read back) ════════════
 ▶ ClickHouse version (Parquet export failures surface reliably on >= 25.11):
-26.8.15.10
+26.8.18.2
 ▶ Writing active observations (events_full) to Parquet on MinIO…
 ▶ Reading the Parquet back from MinIO (round-trip proof):
   rows in events_full (FINAL, active) = 182
   rows read back from the Parquet     = 182
   ✅ 182 == 182
-▶ Schema ClickHouse inferred from the exported Parquet:
+▶ Schema ClickHouse inferred from the exported Parquet (first 15 columns):
  1. │ project_id      │ String                         │
  2. │ trace_id        │ String                         │
  …
@@ -469,9 +495,11 @@ $ ./11-ee-parquet-export.sh
 15. │ tags            │ Array(String)                  │
 ```
 
-**Part A.** On 4.48.0 the integration API **accepts `fileType: PARQUET`**, with the enriched `OBSERVATIONS_V2` export source. On v3.197.1 the same request returned HTTP 400 (`JSON` / `CSV` / `JSONL` only). The scheduled job runs hourly and had not fired before teardown, so this run proves the configuration, not the scheduled files.
+**Part A.** On 4.52.0 the integration API **accepts `fileType: PARQUET`**, with the enriched `OBSERVATIONS_V2` export source. On v3.197.1 the same request returned HTTP 400 (`JSON` / `CSV` / `JSONL` only). The scheduled job runs hourly. This run did not look for the scheduled files, and the next step purged the stack, so it proves the configuration, not the scheduled files.
 
 **Part B.** This is the primitive the scheduled exporter uses: `INSERT INTO FUNCTION s3(...) … 'Parquet'`, then read it back. The ClickHouse-backed store can archive itself to object storage and stay queryable by ClickHouse, DuckDB, Athena or Spark. It pairs with lab 07 as **archive-then-delete**.
+
+182 equals the 158 rows of lab 03 plus the 24 `pii-demo` rows of lab 08.
 
 ---
 
@@ -479,23 +507,23 @@ $ ./11-ee-parquet-export.sh
 
 1. **v4 writes somewhere else.** Observations land in `events_full` / `events_core`; the v3 `traces` / `observations` tables still exist and get **0 rows**. Any v3-era query returns empty results instead of an error. That is why lab 03 prints the v3 row counts next to the v4 ones.
 
-2. **A negative check needs a positive control.** "0 leaked secrets" on an empty table is not a result. The masking proof now ends in a verdict that requires PII rows and placeholders to exist, and it was shown to FAIL on an empty table and on six other planted cases (leaks, a missing placeholder, no PII rows). Masking stays provable in the warehouse: 0 leaks, 24 masked rows, 108 redactions.
+2. **A negative check needs a positive control.** "0 leaked secrets" on an empty table is not a result. The masking proof now ends in a verdict that requires PII rows and placeholders to exist. It was shown to FAIL on an empty table on 2026-10-06. On 2026-10-02 it was also shown to FAIL on six other planted cases (leaks, a missing placeholder, no PII rows); those were not re-run on 2026-10-06. Masking stays provable in the warehouse: 0 leaks, 24 masked rows, 108 redactions.
 
 3. **No joins for trace context.** v4 writes `trace_name`, `user_id`, `session_id`, `tags` and metadata onto every observation row. The roots are `is_app_root = true`. Cost by tier or user is now a single-table `GROUP BY`.
 
-4. **Cost depends on the usage key names.** Langfuse prices usage keys that match the model's price definition. Measured on 4.48.0 with a throwaway stack:
+4. **Cost depends on the usage key names.** Langfuse prices usage keys that match the model's price definition. Measured on 4.48.0 with a throwaway stack on 2026-10-02 (not re-run on 2026-10-06):
    - `gpt-4o-mini` with `input` / `output` → priced
    - `gpt-4o-mini` with `input_tokens` / `output_tokens` → `total_cost = 0`
    - `claude-haiku-4-5` → priced with either
-   - `claude-3-5-sonnet-20241022` (used before this run) → no price definition at all
+   - `claude-3-5-sonnet-20241022` (used before that run) → no price definition at all
 
-   The generator now sends `input` / `output` and simulates only priced models.
+   The generator now sends `input` / `output` and simulates only priced models. On 2026-10-06 every model in the lab-04 cost table came out priced.
 
-5. **ReplacingMergeTree, reconsidered.** The v4 events table is "mostly immutable": raw rows equalled `FINAL` (137 = 137), where v3's `traces` had 41 raw rows for 40 traces. Keep reading with `FINAL` + `is_deleted = 0` anyway; retention deletes and updates still create versions.
+5. **ReplacingMergeTree, reconsidered.** The v4 events table is "mostly immutable": raw rows equalled `FINAL` (158 = 158), where v3's `traces` had 41 raw rows for 40 traces. Keep reading with `FINAL` + `is_deleted = 0` anyway; retention deletes and updates still create versions.
 
-6. **Pin, then re-check the drift on each pin.** On v3.197.1 the integration API rejected `PARQUET` with HTTP 400 although the public OpenAPI spec listed it. On 4.48.0 it is accepted, with the `OBSERVATIONS_V2` source. The finding that lasts is the habit: pin the image, and validate the API surface against the *running* version.
+6. **Pin, then re-check the drift on each pin.** On v3.197.1 the integration API rejected `PARQUET` with HTTP 400 although the public OpenAPI spec listed it. On 4.52.0 it is accepted, with the `OBSERVATIONS_V2` source. The finding that lasts is the habit: pin the image, and validate the API surface against the *running* version.
 
-7. **Real model calls are just another OTel producer.** The official Anthropic SDK, instrumented by `opentelemetry-instrumentation-anthropic`, lands as `GENERATION` rows. They carry the dated model ID `claude-haiku-4-5-20251001`, which Langfuse's model definition matches, so they are priced. The whole run's Anthropic spend was about **$0.017** at list price.
+7. **Real model calls are just another OTel producer.** The official Anthropic SDK, instrumented by `opentelemetry-instrumentation-anthropic`, lands as `GENERATION` rows. They carry the dated model ID `claude-haiku-4-5-20251001`, which Langfuse's model definition matches, so they are priced. Lab 02's 5 real calls were priced by Langfuse at **$0.001278**. The eval lab's real calls ran in the same session; their cost was not summed here.
 
 8. **Deployment labels move.** Creating prompt v2 with `production` cleared the label from v1 (`labels = {}`). That is why protected labels exist.
 
@@ -505,16 +533,16 @@ $ ./11-ee-parquet-export.sh
 
 ```bash
 # from the repository root
-python3.12 -m venv .venv && .venv/bin/pip install -r _base/requirements.txt   # Python 3.10+
-labs/langfuse-ee/01-up.sh            # OSS stack; creates _base/.env from _base/.env.example
+python3.12 -m venv .venv-v4 && .venv-v4/bin/pip install -r _base/v4/requirements.txt   # Python 3.10+
+labs/v4/langfuse-ee/01-up.sh         # = _base/bin/up.sh v4; OSS stack, creates _base/.env from _base/.env.example
 # set LANGFUSE_EE_LICENSE_KEY (and ADMIN_API_KEY) in _base/.env for 05–11;
 # ANTHROPIC_API_KEY is optional (real model calls)
-_base/bin/check.sh
+_base/bin/check.sh v4
 
-cd labs/langfuse-ee
-../../.venv/bin/python 02-generate-traces.py
-docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse --multiquery < 03-clickhouse-explore.sql
-docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse --multiquery < 04-clickhouse-analytics.sql
+cd labs/v4/langfuse-ee
+../../../.venv-v4/bin/python 02-generate-traces.py
+docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse --multiquery < 03-clickhouse-explore.sql
+docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --password clickhouse --multiquery < 04-clickhouse-analytics.sql
 
 ./05-ee-activate.sh                  # → EE
 ./06-ee-rbac-scim.sh
@@ -524,7 +552,7 @@ docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --pass
 ./10-ee-instance-governance.sh
 ./11-ee-parquet-export.sh            # Parquet ↔ ClickHouse round-trip
 
-./99-cleanup.sh --purge              # tear down + wipe volumes
+./99-cleanup.sh --purge              # = _base/bin/down.sh v4 --purge; tear down + wipe volumes
 ```
 
 ---
@@ -538,7 +566,7 @@ docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --pass
 1. **왜 이 글인가**
    - 대부분의 Langfuse 튜토리얼은 "Cloud에 trace 보내기"에서 끝난다.
    - 이 글은 셀프호스팅과, 그 밑을 떠받치는 **ClickHouse 백엔드**를 SA 관점에서 직접 열어 본다.
-   - 환경: Langfuse v4.48.0 / ClickHouse 26.8.15.10 / SDK 4.16.0.
+   - 환경: Langfuse v4.52.0 / ClickHouse 26.8.18.2 / SDK 4.17.0.
 2. **아키텍처 한 장**
    - 구성: web·worker, Postgres(OLTP: 사용자·조직·프롬프트·감사 로그), **ClickHouse(OLAP)**, Redis, MinIO.
    - v4에서는 observation이 `events_full`·`events_core`에 쌓인다.
@@ -556,23 +584,23 @@ docker exec -i langfuse-hols-clickhouse-1 clickhouse-client -u clickhouse --pass
    - 데이터 보존과 감사 로그.
 6. **하이라이트: 서버측 마스킹을 ClickHouse로 *증명***
    - 결과: `events_full`에서 원문 누출 0건, `[REDACTED_*]` 24행, 마스킹 108회.
-   - 핵심은 **판정(verdict)**이다. 빈 테이블과 일부러 만든 다른 6가지 경우(누출, 플레이스홀더 없음, PII 행 없음)에서는 FAIL이 나와야 PASS를 믿을 수 있다. (발견 #2)
+   - 핵심은 **판정(verdict)**이다. 빈 테이블에서는 FAIL이 나오는 것을 2026-10-06에 다시 확인했다. 그 밖의 계획된 6가지 경우(누출, 플레이스홀더 없음, PII 행 없음)는 2026-10-02 실행에서 확인했고 이번에는 다시 돌리지 않았다. FAIL이 나와야 PASS를 믿을 수 있다. (발견 #2)
 7. **프롬프트 거버넌스** — `production` 라벨이 v1에서 v2로 **이동**하는 것을 보면, 왜 protected label이 필요한지 이어진다. (발견 #8)
 8. **데이터 반출: Parquet와 ClickHouse 라운드트립**
    - `INSERT INTO FUNCTION s3(...)`로 쓰고 되읽어 **182 == 182**를 확인한다. archive-then-delete 패턴이다.
-   - v3.197.1에서 400이던 `PARQUET`가 4.48.0에서는 받아들여진다. 교훈은 버전을 고정하고, 고정할 때마다 실행 중인 버전으로 다시 확인하는 것이다. (발견 #6)
-9. **실제 모델 호출** — Anthropic SDK를 OTel로 계측하면 GENERATION 행이 남고 비용도 계산된다. 이번 실행 비용은 약 $0.017. (발견 #7)
+   - v3.197.1에서 400이던 `PARQUET`가 4.52.0에서는 받아들여진다. 교훈은 버전을 고정하고, 고정할 때마다 실행 중인 버전으로 다시 확인하는 것이다. (발견 #6)
+9. **실제 모델 호출** — Anthropic SDK를 OTel로 계측하면 GENERATION 행이 남고 비용도 계산된다. 랩 02의 실제 호출 5건은 Langfuse 가격 기준 $0.001278이었다(eval 랩의 실제 호출 비용은 합산하지 않았다). (발견 #7)
 10. **마무리** — 셀프호스팅 Langfuse는 사실상 실전 ClickHouse 애플리케이션이다. ClickHouse가 있으면 관측성과 컴플라이언스(마스킹·보존·반출)를 *데이터로* 증명할 수 있다.
 
 **추천 코드/캡처:**
 - v3 테이블 0행과 v4 테이블 행 수
-- 마스킹 판정 표(0–G)
-- usage 키별 비용 비교
+- 마스킹 판정 표(0–G; 0만 2026-10-06에 재실행)
+- usage 키별 비용 비교(2026-10-02 측정)
 - `PARQUET` 응답(v3 400 → v4 200)
 - `s3()` 182 == 182
 
-모두 위 로그에서 그대로 인용할 수 있습니다.
+위 로그에서 그대로 인용할 수 있습니다. 단, 2026-10-02 측정으로 표시한 항목은 이번 실행에서 다시 돌리지 않았습니다.
 
 ---
 
-*Generated 2026-10-02 by running every script in this directory end to end on the pinned stack. The console blocks are trimmed excerpts of that run's logs.*
+*Generated 2026-10-06 by running every script in this directory end to end on the pinned stack (Langfuse v4.52.0 / SDK 4.17.0 / ClickHouse 26.8.18.2). The console blocks are trimmed excerpts of that run's logs.*

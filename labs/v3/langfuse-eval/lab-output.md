@@ -2,12 +2,15 @@
 
 > Working material for a tech blog titled **"Evaluating Models in Langfuse"**.
 > It bundles the narrative, the code, and the **real execution logs** captured while
-> building & verifying [`usecase/langfuse-eval/`](./README.md).
+> building & verifying [`labs/v3/langfuse-eval/`](./README.md).
 >
-> **Verified environment (2026-07-26):** Langfuse server **v3.197.1** · Python SDK
-> `langfuse` **3.7.0** · **ClickHouse 25.11.2.24** · Python 3.9 · self-hosted Docker
-> stack (web · worker · postgres · clickhouse · redis · minio). Fully offline — **no
-> LLM API key** used.
+> **Verified environment (2026-10-06):** Langfuse server **v3.225.11** · Python SDK
+> `langfuse` **3.15.0** · **ClickHouse 26.8.18.2** (the track pin in `_base/v3/versions.env`)
+> · Python 3.12.14 · self-hosted Docker stack (web · worker · postgres · clickhouse · redis
+> · minio). Fully offline — **no LLM API key** used: the v3 track makes no model call as
+> long as `OPENAI_API_KEY` is empty, and it was empty; the OpenAI real-call path was
+> **not** run. The earlier run (2026-07-26: v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24,
+> Python 3.9) is mentioned only where it differs, and is marked as not re-run.
 
 ---
 
@@ -50,19 +53,50 @@ quality analytics (agreement, drift, A/B) a plain `SELECT`.
 
 ## 3. Setup
 
-The lab reuses a running self-hosted stack (the sibling `langfuse-ee` lab). Bring it up
-and install the SDK:
+The lab runs on the shared self-hosted stack in `_base/` (the same stack the sibling
+`langfuse-ee` lab uses). Bring it up and install the SDK:
 
 ```bash
+# from the repository root
+cp _base/.env.example _base/.env     # edit the # CHANGEME secrets for anything non-local
+
 # 1) stack (postgres · clickhouse · redis · minio · web · worker)
-cd usecase/langfuse-ee && ./01-up.sh
+_base/bin/up.sh v3
+_base/bin/check.sh v3
 #    → http://localhost:3000   login admin@example.com / workshop-admin-pw
 #    → project "LLM Observability"  (public key pk-lf-workshop-public)
 
 # 2) SDK
-cd ../langfuse-eval
-python -m venv .venv && source .venv/bin/activate
-pip install "langfuse>=3" openai
+python3.12 -m venv .venv-v3 && source .venv-v3/bin/activate
+pip install -r _base/v3/requirements.txt      # pins langfuse==3.15.0
+cd labs/v3/langfuse-eval
+```
+
+The run started from a purged stack (`_base/bin/down.sh v3 --purge` removed the network
+and all five data volumes), so the only data in the project is what this lab creates.
+`check.sh` after `up.sh`:
+
+```console
+$ _base/bin/check.sh v3
+
+stack: langfuse-hols-v3  (env file: _base/.env)
+
+PASS  container langfuse-web running
+PASS  container langfuse-worker running
+PASS  container postgres running, healthy
+PASS  container clickhouse running, healthy
+PASS  container redis running, healthy
+PASS  container minio running, healthy
+PASS  web http://localhost:3000/api/public/health -> 200 (Langfuse 3.225.11)
+PASS  web version 3.225.11 equals LANGFUSE_VERSION (v3 pin or override)
+PASS  worker http://localhost:3030/api/health -> 200
+PASS  ClickHouse migrations finished (applied 37, shipped 37, dirty 0)
+PASS  SDK keys accepted (http://localhost:3000/api/public/projects -> 200)
+SKIP  masking sidecar
+     not running -- only lab 08 (docker-compose.masking.yml) starts it
+
+1 check(s) skipped -- a skip is not a pass.
+stack is ready.
 ```
 
 A tiny `_common.py` centralizes the boring parts — `.env` loading, the client, a REST
@@ -95,7 +129,13 @@ python 01-seed-traces.py 20
   …10/20 traces
   …20/20 traces
 ✓ Done. Open http://localhost:3000 → Tracing → Traces.
+  Then run the ClickHouse labs:  03-clickhouse-explore.sql, 04-clickhouse-analytics.sql
+→ Seeding 20 traces with the shared trace generator:
+  _base/v3/seed_traces.py
 ```
+
+(`01-seed-traces.py` is a thin wrapper around the shared generator in `_base/v3/`; the
+`→ Seeding` lines come last in the captured log.)
 
 ---
 
@@ -200,18 +240,59 @@ res_v2 = dataset.run_experiment(name="prompt-v2", task=make_task(prompt_v2, "v2"
 ```
 
 ```text
-🧪 Experiment: prompt-v1   (10 items)
-Average Scores:
-  • answered:       0.000
-  • keyword-recall: 0.000
-  • length-ok:      1.000
+Running experiments over 'support-golden-qa' (offline / simulated)…
 
-🧪 Experiment: prompt-v2   (10 items)
+──────── prompt-v1 ────────
+Individual Results: Hidden (10 items)
+💡 Set include_item_results=True to view them
+
+──────────────────────────────────────────────────
+🧪 Experiment: prompt-v1
+📋 Run name: prompt-v1 - 2026-10-06T11:09:46.941999Z - Terse v1 system prompt
+10 items
+Evaluations:
+  • keyword-recall
+  • length-ok
+  • answered
+
 Average Scores:
-  • answered:       1.000
+  • keyword-recall: 0.000
+  • length-ok: 1.000
+  • answered: 0.000
+
+🔗 Dataset Run:
+   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/0c568dac-48da-487a-94d0-9375680e6d6f
+
+──────── prompt-v2 ────────
+Individual Results: Hidden (10 items)
+💡 Set include_item_results=True to view them
+
+──────────────────────────────────────────────────
+🧪 Experiment: prompt-v2
+📋 Run name: prompt-v2 - 2026-10-06T11:09:47.070777Z - Guard-railed v2 system prompt
+10 items
+Evaluations:
+  • keyword-recall
+  • length-ok
+  • answered
+
+Average Scores:
   • keyword-recall: 1.000
-  • length-ok:      1.000
+  • length-ok: 1.000
+  • answered: 1.000
+
+🔗 Dataset Run:
+   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/b1059b60-7f41-45a8-9042-4781644e33b1
+
+✓ Two runs created. UI → Datasets → support-golden-qa → Runs: compare prompt-v1 vs prompt-v2 side by side.
+  Tip: swap MODEL in make_task to also compare models on the same dataset.
 ```
+
+> **SDK 3.15.0 quirk.** `ExperimentResult.format()` builds its summary with escaped
+> `\\n` (`langfuse/experiment.py:528` in the installed SDK), so it prints a literal `\n`
+> instead of a line break and each summary is one long line in the captured log. The
+> blocks above and in step 05 are the decoded text — every `\n` replaced by a newline,
+> nothing else changed.
 
 The guard-railed v2 answers on-topic and grounded; the terse v1 deflects. In the UI,
 **Datasets → Runs** shows the two runs side by side.
@@ -234,14 +315,51 @@ def llm_judge(*, input, output, expected_output, **kwargs):
 ```
 
 ```text
-🧪 judge-prompt-v1 → llm-judge-correctness: 0.000
-🧪 judge-prompt-v2 → llm-judge-correctness: 1.000
+Judging both prompt versions with the offline rubric judge…
+
+──────── judge-prompt-v1 ────────
+…
+
+──────────────────────────────────────────────────
+🧪 Experiment: judge-prompt-v1
+📋 Run name: judge-prompt-v1 - 2026-10-06T11:09:49.693331Z - LLM judge on v1
+10 items
+Evaluations:
+  • llm-judge-correctness
+
+Average Scores:
+  • llm-judge-correctness: 0.000
+
+🔗 Dataset Run:
+   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/37c3251d-1092-47cc-bc42-3434078082cf
+
+──────── judge-prompt-v2 ────────
+…
+
+──────────────────────────────────────────────────
+🧪 Experiment: judge-prompt-v2
+📋 Run name: judge-prompt-v2 - 2026-10-06T11:09:50.700350Z - LLM judge on v2
+10 items
+Evaluations:
+  • llm-judge-correctness
+
+Average Scores:
+  • llm-judge-correctness: 1.000
+
+🔗 Dataset Run:
+   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/2dfbf2f1-7edb-4f5f-98d0-ed440266923a
+
+✓ LLM-judge scores written (name: llm-judge-correctness, source=API via SDK).
+  Managed evaluators (Hallucination/Toxicity/…, source=EVAL): 05-llm-as-a-judge.md
 ```
+
+(Decoded as in step 04; the `Individual Results: Hidden …` lines are elided with `…`.)
 
 **Managed judges.** Langfuse also ships maintained evaluator templates (Hallucination,
 Toxicity, Context-Relevance, Helpfulness, Ragas) that run *continuously* on production
 traces or dataset runs and write `source = 'EVAL'`. They require a structured-output
-model in the UI's *LLM Connections*. (Covered in `05-llm-as-a-judge.md`.)
+model in the UI's *LLM Connections*. (Covered in `05-llm-as-a-judge.md`; **not run on
+2026-10-06** — this run was offline and used no LLM connection.)
 
 ---
 
@@ -272,14 +390,15 @@ for tid in trace_ids:
 ```
 
 ```text
-✓ score configs: answer-quality=4f8a86d6… factually-correct=079dec7c…
-✓ queue 'human-review' = cms1d591m001ctb07351x8lfb
+✓ score configs: answer-quality=cbd1cbbe… factually-correct=7b26113b…
+✓ queue 'human-review' = cmuwku3l4000oqn07e35et0qk
 ✓ enqueued 8 traces for human review
 ✓ wrote demo review scores on 8 traces
 ```
 
 Real reviewers score in the keyboard-driven **UI → Annotations** queue; those scores
-arrive with `source = 'ANNOTATION'`.
+arrive with `source = 'ANNOTATION'`. (A manual UI step — **not performed on 2026-10-06**;
+every score in step 07 below is `source = API`, including the script's demo review scores.)
 
 ---
 
@@ -289,7 +408,7 @@ Now the SA moment: plain SQL on the `scores` table. Langfuse tables are
 `ReplacingMergeTree`, so read with `FINAL` + `WHERE is_deleted = 0`.
 
 ```bash
-docker exec -i langfuse-ee-clickhouse-1 clickhouse-client \
+docker exec -i langfuse-hols-v3-clickhouse-1 clickhouse-client \
   -u clickhouse --password clickhouse --multiquery < 07-scores-in-clickhouse.sql
 ```
 
@@ -312,49 +431,56 @@ GROUP BY source, name ORDER BY source, name;
 ```text
 source  name                      data_type  n    avg_value
 API     answered                  NUMERIC    20   0.5
-API     hallucination-check       NUMERIC    36   0.788
+API     hallucination-check       NUMERIC    19   0.817
 API     human-answer-quality      NUMERIC     8   0.875
 API     human-factually-correct   BOOLEAN     8   0.75
 API     keyword-recall            NUMERIC    20   0.5
 API     length-ok                 NUMERIC    20   1
 API     llm-judge-correctness     NUMERIC    20   0.5
-API     pii-demo                  BOOLEAN    12   1      ← from a sibling lab in the same project
-API     user-thumbs               BOOLEAN    40   0.75
+API     user-thumbs               BOOLEAN    20   0.8
 ```
 
 > Note: offline, everything is `source = API` (written via the SDK). Langfuse's
 > **managed** evaluators write `EVAL`; **UI** annotations write `ANNOTATION`. One table,
-> three provenances. (`pii-demo` here comes from a neighboring lab sharing the project —
-> a nice live illustration that *all* signals land together.)
+> three provenances. This run started from a purged stack, so only this lab's own
+> signals appear (the seed traces' `user-thumbs` / `hallucination-check` plus the
+> lab's evaluator, judge and demo-review series). On the 2026-07-26 shared stack a
+> `pii-demo` series from the sibling lab also showed up there; that was not re-run.
 
 ### 10.2 Volume by data type
 
 ```sql
-SELECT data_type, count() AS n FROM scores FINAL WHERE is_deleted = 0 GROUP BY data_type;
+SELECT data_type, count() AS n,
+       countIf(value IS NOT NULL) AS numeric_vals,
+       countIf(string_value != '') AS string_vals
+FROM scores FINAL WHERE is_deleted = 0
+GROUP BY data_type ORDER BY n DESC;
 ```
 
 ```text
-NUMERIC   124
-BOOLEAN    60
+data_type  n    numeric_vals  string_vals
+NUMERIC    107  107           0
+BOOLEAN     28   28           28
 ```
 
 ### 10.3 Numeric distribution per metric (p50/p90)
 
 ```sql
 SELECT name, count() n, round(avg(value),3) mean,
-       round(quantile(0.5)(value),3) p50, round(quantile(0.9)(value),3) p90
+       round(quantile(0.5)(value),3) p50, round(quantile(0.9)(value),3) p90,
+       round(min(value),3) min, round(max(value),3) max
 FROM scores FINAL WHERE is_deleted = 0 AND data_type = 'NUMERIC'
 GROUP BY name ORDER BY name;
 ```
 
 ```text
-name                   n    mean   p50   p90
-answered               20   0.5    0.5   1
-hallucination-check    36   0.788  0.78  0.955
-human-answer-quality    8   0.875  1     1
-keyword-recall         20   0.5    0.5   1
-length-ok              20   1      1     1
-llm-judge-correctness  20   0.5    0.5   1
+name                   n    mean   p50   p90    min  max
+answered               20   0.5    0.5   1      0    1
+hallucination-check    19   0.817  0.8   0.972  0.6  1
+human-answer-quality    8   0.875  1     1      0.5  1
+keyword-recall         20   0.5    0.5   1      0    1
+length-ok              20   1      1     1      1    1
+llm-judge-correctness  20   0.5    0.5   1      0    1
 ```
 
 ### 10.4 Experiment A/B — reconstructed in ClickHouse
@@ -422,14 +548,14 @@ want surfaced. That's the analysis the UI doesn't give you and ClickHouse does.
 ### 10.6 Daily trend
 
 ```sql
-SELECT toDate(timestamp) AS day, count() AS n, round(avg(value),3) AS avg_llm_judge
+SELECT toDate(timestamp) AS day, count() AS n_scores, round(avg(value),3) AS avg_llm_judge
 FROM scores FINAL WHERE is_deleted = 0 AND name = 'llm-judge-correctness'
 GROUP BY day ORDER BY day;
 ```
 
 ```text
-day          n    avg_llm_judge
-2026-07-26   20   0.5
+day          n_scores  avg_llm_judge
+2026-10-06   20        0.5
 ```
 
 ---
@@ -439,29 +565,37 @@ day          n    avg_llm_judge
 These are the non-obvious behaviors we hit and had to design around. They make good
 "here's what the docs don't tell you" material.
 
-1. **Experiment scores are `source = API`, not `EVAL`.** In SDK 3.7.0, scores written by
-   `run_experiment` evaluators (including an in-code LLM judge) land as `source=API`.
+1. **Experiment scores are `source = API`, not `EVAL`.** In SDK 3.15.0 (this run; the
+   earlier run on SDK 3.7.0 saw the same), scores written by `run_experiment` evaluators
+   (including an in-code LLM judge) land as `source=API` — every row of §10.1 is `API`.
    Only Langfuse's *managed* evaluators write `EVAL`; only UI annotations write
-   `ANNOTATION`. Query by `source` accordingly.
+   `ANNOTATION` (neither was run on 2026-10-06). Query by `source` accordingly.
 
-2. **`dataset_run_id` is not populated on scores in ClickHouse.** The column exists but
-   is empty for evaluator scores — the run linkage lives in Postgres. To reconstruct an
-   A/B in ClickHouse, **tag the experiment trace** (`lf.update_current_trace(tags=…)`) and
-   join `scores → traces`.
+2. **`dataset_run_id` is not populated on scores in ClickHouse.** The column exists (it
+   is in the `DESCRIBE` output above) but was found empty for evaluator scores on the
+   2026-07-26 run — the run linkage lives in Postgres. That emptiness was **not
+   re-checked on 2026-10-06** (`07-scores-in-clickhouse.sql` does not query the column).
+   To reconstruct an A/B in ClickHouse, **tag the experiment trace**
+   (`lf.update_current_trace(tags=…)`) and join `scores → traces` — §10.4 does exactly
+   that on this run's data.
 
 3. **`config_id` binding is strictly typed.** A `create_score(config_id=…)` whose
    `data_type` doesn't match the config's is silently dropped at ingestion (a NUMERIC
    score against a CATEGORICAL config just vanished). Either match the type exactly or
-   leave the score unbound.
+   leave the score unbound. *(Seen while developing the lab on the earlier run; no step
+   in the 2026-10-06 run exercises it — not re-run.)*
 
 4. **Scores ingest asynchronously.** They flow SDK → worker → ClickHouse; allow a few
-   seconds (we saw ~seconds to ~2 min under load) before querying `scores`. Poll, don't
-   assume.
+   seconds before querying `scores`. Poll, don't assume. (The earlier run saw ~seconds
+   to ~2 min under load; on 2026-10-06 a 10 s pause before the SQL step was enough for
+   every series in §10.1 to be complete.)
 
 5. **Trace names are not unique across labs on a shared stack.** Selecting "recent
    traces named `support-request`" picked up a *neighboring* lab's PII traces (same
    name), so a cross-signal join found nothing in common. Fix: **select traces by a score
-   they carry** (`GET /api/public/v2/scores?name=user-thumbs`), not by name.
+   they carry** (`GET /api/public/v2/scores?name=user-thumbs`), not by name. *(Hit on the
+   2026-07-26 shared stack. The 2026-10-06 run started from a purged stack with no
+   neighbouring data, so it did not reproduce the clash — not re-run.)*
 
 6. **Two databases, two jobs.** Prompts, datasets, and annotation queues live in
    **Postgres**; traces, observations, and **scores** live in **ClickHouse**. If a stack
@@ -472,17 +606,23 @@ These are the non-obvious behaviors we hit and had to design around. They make g
 
 ## 12. Verification table
 
-| Step | Result |
-|---|---|
-| `01` seed | 20 traces ingested |
-| `02` prompts | v1 + v2 + chat; `production` label moved to v2; compile + `prompt=` link OK |
-| `03` dataset | 10 items upserted (`golden-00…09`), idempotent |
-| `04` experiments | prompt-v1 `answered 0.0 / keyword-recall 0.0` → prompt-v2 `1.0 / 1.0` |
-| `05` LLM-judge | `judge-v1 = 0.0`, `judge-v2 = 1.0` (offline rubric) |
-| `06` annotation | 2 score configs + `human-review` queue + 8 traces enqueued + demo scores |
-| `07` ClickHouse | unified model + tag-join A/B (v2 ≫ v1 on 3 metrics) + per-trace agreement |
+One row per step; `rc` = exit code, `s` = seconds. The run paused 10 s after step 06 so the
+worker could finish ingesting before step 07.
 
-Environment: Langfuse v3.197.1 · SDK `langfuse` 3.7.0 · ClickHouse 25.11.2.24 · offline.
+| Step | rc | s | Result |
+|---|--:|--:|---|
+| reset (`down.sh v3 --purge`) | 0 | 6 | ✅ stack, network and 5 volumes removed |
+| up (`up.sh v3`) | 0 | 19 | ✅ `Langfuse is up after ~15s` |
+| check (`check.sh v3`) | 0 | 1 | ✅ 11 PASS, 1 SKIP (masking sidecar, lab 08 only); `Langfuse 3.225.11` |
+| `01` seed | 0 | 19 | ✅ 20 traces generated |
+| `02` prompts | 0 | 4 | ✅ v1 + v2 + chat; `production` label moved to v2; compile + `prompt=` link OK |
+| `03` dataset | 0 | 4 | ✅ 10 items upserted (`golden-00…09`), idempotent |
+| `04` experiments | 0 | 2 | ✅ prompt-v1 `answered 0.000 / keyword-recall 0.000` → prompt-v2 `1.000 / 1.000` |
+| `05` LLM-judge | 0 | 5 | ✅ `judge-prompt-v1 = 0.000`, `judge-prompt-v2 = 1.000` (offline rubric) |
+| `06` annotation | 0 | 4 | ✅ 2 score configs + `human-review` queue + 8 traces enqueued + demo scores |
+| `07` ClickHouse | 0 | 0 | ✅ unified model (8 series, all `API`) + tag-join A/B (v2 ≫ v1 on 3 metrics) + per-trace agreement (8 traces) |
+
+Environment: Langfuse v3.225.11 · SDK `langfuse` 3.15.0 · ClickHouse 26.8.18.2 · Python 3.12.14 · offline.
 
 ---
 
@@ -504,5 +644,5 @@ ones) and the §10.5 agreement table (the `3e2b…` all-signals-agree row).
 
 ---
 
-*Source lab: [`usecase/langfuse-eval/`](./README.md) · Governance sibling:
-[`usecase/langfuse-ee/`](../langfuse-ee/README.md) · Author: Ken Lee (ClickHouse SA).*
+*Source lab: [`labs/v3/langfuse-eval/`](./README.md) · Governance sibling:
+[`labs/v3/langfuse-ee/`](../langfuse-ee/README.md) · Author: Ken Lee (ClickHouse SA).*

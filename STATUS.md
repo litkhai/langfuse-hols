@@ -1,19 +1,19 @@
 # STATUS.md
 
 **As of 2026-10-06** — the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
-[#33](https://github.com/litkhai/langfuse-hols/issues/33)), and the v4 pins moved to Langfuse 4.52.0 / SDK 4.17.0. Neither track has run on its new pins yet
+[#33](https://github.com/litkhai/langfuse-hols/issues/33)), and both tracks were run end to end on their pins
 ([#34](https://github.com/litkhai/langfuse-hols/issues/34)). As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
 [litkhai/clickhouse-hols](https://github.com/litkhai/clickhouse-hols/tree/pre-split-2026-10) with history.
 
 ## Verification
 
-Each track keeps its last real end-to-end run until #34 runs it on the pins below. Both runs
-happened at the old paths (`labs/langfuse-*`), before the split into tracks.
+Both tracks were run end to end on **2026-10-06** at their current paths, on fresh volumes, with
+a real enterprise licence key (Docker 29.8.2, Compose v5.5.1, Python 3.12.14).
 
-| Track | Last verified | Against | How |
+| Track | Verified against | Labs | Model calls |
 |---|---|---|---|
-| v4 — [langfuse-ee](labs/v4/langfuse-ee/README.md), [langfuse-eval](labs/v4/langfuse-eval/README.md) | 2026-10-02 | Langfuse v4.48.0 / SDK 4.16.0 / ClickHouse 26.8.15.10 | real enterprise licence key; real Anthropic calls for the optional path |
-| v3 — [langfuse-ee](labs/v3/langfuse-ee/README.md), [langfuse-eval](labs/v3/langfuse-eval/README.md) | 2026-07-26 (`langfuse-ee` 01–07: 2026-06-25) | Langfuse v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24 | real enterprise licence key; offline (no model key) |
+| v4 — [langfuse-ee](labs/v4/langfuse-ee/README.md), [langfuse-eval](labs/v4/langfuse-eval/README.md) | Langfuse v4.52.0 / SDK 4.17.0 / ClickHouse 26.8.18.2 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline, and real Anthropic `claude-haiku-4-5` for `langfuse-ee` 02 and `langfuse-eval` 04–05 (managed evaluator included) |
+| v3 — [langfuse-ee](labs/v3/langfuse-ee/README.md), [langfuse-eval](labs/v3/langfuse-eval/README.md) | Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline only; the OpenAI path was not run |
 
 The per-lab results are in each lab's README, and the logs in each lab's `lab-output.md`.
 

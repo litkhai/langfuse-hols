@@ -144,25 +144,26 @@ Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-07-26** against **Langfuse v3.197.1**, **Python SDK
-`langfuse` 3.7.0**, **ClickHouse 25.11.2.24** (the sibling lab's Docker stack), fully
-offline (no LLM key):
+Verified **end-to-end on 2026-10-06** against **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2** (track v3, [#34](https://github.com/litkhai/langfuse-hols/issues/34)), on the pinned shared stack in [`_base/`](../../../_base/README.md) (`_base/v3/versions.env`), fresh volumes, Python 3.12.14, fully offline (no LLM key; the OpenAI path and the managed judge were not run). Earlier run: 2026-07-26 on v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24. The full log is in [lab-output.md](lab-output.md).
 
 | Step | Result |
 |---|---|
-| `01` seed | 20 traces ingested (reusing the sibling generator) |
+| `01` seed | 20 traces ingested through the shared generator (`_base/v3/seed_traces.py`) |
 | `02` prompts | v1 + v2 + chat created; `production` label moved to v2; compile + `prompt=` link OK |
 | `03` dataset | 10 items upserted (`golden-00…09`), idempotent |
 | `04` experiments | prompt-v1 → `answered 0.0 / keyword-recall 0.0`; prompt-v2 → `1.0 / 1.0` |
 | `05` LLM-judge | offline rubric: `judge-v1 = 0.0`, `judge-v2 = 1.0` |
 | `06` annotation | 2 score configs + `human-review` queue + 8 traces enqueued + demo scores |
-| `07` ClickHouse | all sections run; A/B via tag-join shows v2 ≫ v1 across 3 metrics; per-trace agreement populated |
+| `07` ClickHouse | all six sections return rows; A/B via tag-join shows v2 ≫ v1 across 3 metrics (0 → 1 each); per-trace agreement populated |
 
 Runtime findings baked into the labs: **(1)** `run_experiment` evaluator scores are
 `source=API` (not `EVAL`) and do **not** populate `dataset_run_id` in ClickHouse →
 lab 04 tags traces with the variant and lab 07 joins `scores → traces`. **(2)** a
 `create_score` with a `config_id` whose `data_type` mismatches the config is dropped
 at ingestion → demo scores are written unbound. **(3)** scores ingest asynchronously.
+**(4)** SDK 3.15.0's experiment summary (`ExperimentResult.format()`) prints a literal
+`\n` instead of each newline (`langfuse/experiment.py:528` in the installed package), so
+steps 04 and 05 print their summary on one long line. The scores are unaffected.
 
 ### 🔍 Resources
 - [Prompt Management](https://langfuse.com/docs/prompt-management/overview)
@@ -319,24 +320,25 @@ rubric, `OPENAI_API_KEY` 가 있으면 실제 채점 호출. Langfuse의 완전 
 
 ### 📝 검증 상태
 
-**2026-07-26**에 **Langfuse v3.197.1**, **Python SDK `langfuse` 3.7.0**, **ClickHouse
-25.11.2.24**(자매 랩 Docker 스택)에서 LLM 키 없이 완전 오프라인으로 **end-to-end
-검증**했습니다:
+**2026-10-06**에 **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2**에서 **end-to-end 검증**했습니다(v3 트랙, [#34](https://github.com/litkhai/langfuse-hols/issues/34)). [`_base/`](../../../_base/README.md)의 고정 공유 스택(`_base/v3/versions.env`), 새 볼륨, Python 3.12.14로 LLM 키 없이 완전 오프라인으로 돌렸습니다(OpenAI 경로와 관리형 judge는 실행하지 않음). 이전 실행은 2026-07-26에 v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24에서 했습니다. 전체 로그는 [lab-output.md](lab-output.md)에 있습니다.
 
 | 단계 | 결과 |
 |---|---|
-| `01` 시드 | trace 20건 적재(자매 랩 생성기 재사용) |
+| `01` 시드 | 공유 생성기(`_base/v3/seed_traces.py`)로 trace 20건 적재 |
 | `02` 프롬프트 | v1 + v2 + chat 생성; `production` 라벨 v2로 이동; compile + `prompt=` 링크 정상 |
 | `03` 데이터셋 | 10개 아이템 upsert(`golden-00…09`), 멱등 |
 | `04` 실험 | prompt-v1 → `answered 0.0 / keyword-recall 0.0`; prompt-v2 → `1.0 / 1.0` |
 | `05` LLM 판정 | 오프라인 rubric: `judge-v1 = 0.0`, `judge-v2 = 1.0` |
 | `06` 어노테이션 | score config 2개 + `human-review` 큐 + trace 8건 적재 + 데모 스코어 |
-| `07` ClickHouse | 전 섹션 실행; 태그 조인 A/B가 3개 지표에서 v2 ≫ v1; trace별 일치도 채워짐 |
+| `07` ClickHouse | 여섯 섹션 모두 결과 반환; 태그 조인 A/B가 3개 지표에서 v2 ≫ v1(각각 0 → 1); trace별 일치도 채워짐 |
 
 랩에 반영한 런타임 발견: **(1)** `run_experiment` 평가자 스코어는 `source=API`(EVAL 아님)이며
 ClickHouse `dataset_run_id`를 채우지 **않음** → 랩 04가 trace에 variant를 태그하고 랩 07이
 `scores → traces` 조인. **(2)** `config_id`의 `data_type`이 config와 불일치하는 `create_score`는
 적재 시 드롭됨 → 데모 스코어는 미연결로 기록. **(3)** 스코어는 비동기 적재됨.
+**(4)** SDK 3.15.0의 실험 요약(`ExperimentResult.format()`)은 줄바꿈 대신 문자 그대로 `\n`을
+찍습니다(설치된 패키지의 `langfuse/experiment.py:528`). 그래서 04와 05는 요약을 긴 한 줄로
+출력합니다. 점수 값에는 영향이 없습니다.
 
 ### 🔍 추가 자료
 - [Prompt Management](https://langfuse.com/docs/prompt-management/overview)

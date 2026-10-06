@@ -1,6 +1,6 @@
 # STATUS.md
 
-**As of 2026-10-06** — the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
+**As of 2026-10-07** — v4 `langfuse-eval` was re-run end to end ([#45](https://github.com/litkhai/langfuse-hols/issues/45)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
 [#33](https://github.com/litkhai/langfuse-hols/issues/33)), and both tracks were run end to end on their pins
 ([#34](https://github.com/litkhai/langfuse-hols/issues/34)). Lab 11 changed after that run ([#37](https://github.com/litkhai/langfuse-hols/issues/37)) and was re-checked alone.
 The notes-site export (`docs/labs.json`) now publishes `labs/v4/langfuse-ee`; `labs/v3/` is not
@@ -31,6 +31,13 @@ Lab 11 alone was re-run on a fresh EE stack per track. Both tracks behaved the s
 - After seeding 10 traces it passes: `10 == 10` on v3 and `34 == 34` on v4.
 
 That is a targeted check, so the end-to-end claim above still names the 2026-10-06 run.
+
+**Re-run since.** v4 `langfuse-eval` 01–07 was run end to end again on **2026-10-07** on the same
+pins and fresh volumes, with real `claude-haiku-4-5` calls for 04–05 and the managed evaluator
+([#45](https://github.com/litkhai/langfuse-hols/issues/45)). The offline results matched. The
+real-model numbers moved but kept their direction: keyword-recall v1 → v2 went from 0.345 → 0.152
+to 0.311 → 0.110, and the judge from 0.420 → 0.250 to 0.450 → 0.235. That lab's README and
+`lab-output.md` now carry this run.
 
 ## CI
 

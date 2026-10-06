@@ -73,6 +73,8 @@ paths = [
     # Synthetic records for the PII/secret-detection demos. The "keys" in these
     # files are fabricated on purpose — detecting them is the point of the lab.
     '''labs/langfuse-ee/08-generate-pii-traces\.py$''',
+    # The same file in each track (#33). The line above stays for the history before the split.
+    '''labs/v[34]/langfuse-ee/08-generate-pii-traces\.py$''',
 ]
 
 regexes = [

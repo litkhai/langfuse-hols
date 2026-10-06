@@ -10,12 +10,16 @@ Self-hosting Langfuse on ClickHouse (OSS and Enterprise tracks) and Langfuse's e
 
 ### 🧪 Labs (`labs/`)
 
-| Lab | What it covers |
-|-----|----------------|
-| [labs/langfuse-ee](labs/langfuse-ee/) | Self-hosting Langfuse on ClickHouse (OSS + Enterprise) |
-| [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
+Each lab comes in two tracks, one per Langfuse major version. Pick the one your deployment
+runs. **v4 is the current track**; Langfuse v3 gets security patches only until 2027-01-31.
 
-Both labs run on the shared stack in [`_base/`](_base/).
+| Lab | Langfuse v4 | Langfuse v3 | What it covers |
+|-----|---|---|----------------|
+| langfuse-ee | [labs/v4/langfuse-ee](labs/v4/langfuse-ee/) | [labs/v3/langfuse-ee](labs/v3/langfuse-ee/) | Self-hosting Langfuse on ClickHouse (OSS + Enterprise) |
+| langfuse-eval | [labs/v4/langfuse-eval](labs/v4/langfuse-eval/) | [labs/v3/langfuse-eval](labs/v3/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
+
+All four run on the shared stack in [`_base/`](_base/). The track is the first argument of
+its scripts (`_base/bin/up.sh v4`), and its pins are in `_base/<track>/versions.env`.
 
 ### 📖 Reading (`reading/`)
 
@@ -41,8 +45,8 @@ git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
 ./.github/scripts/check_syntax.sh
 python3 tools/labs_json.py --check
-./.github/scripts/check_compose.sh   # merges every compose overlay set; needs docker compose
-./.github/scripts/check_sql.sh       # parses the .sql files in the ClickHouse image; needs docker
+./.github/scripts/check_compose.sh   # merges every compose overlay set of each track; needs docker compose
+./.github/scripts/check_sql.sh       # parses each track's .sql files in that track's ClickHouse image; needs docker
 ```
 
 `docs/labs.json` lists the labs whose `lab.yaml` sets `web: true`, for the notes site, which
@@ -63,12 +67,16 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 
 ### 🧪 실습 (`labs/`)
 
-| 실습 | 내용 |
-|-----|----------------|
-| [labs/langfuse-ee](labs/langfuse-ee/) | ClickHouse 기반 Langfuse 자체 호스팅 (OSS + Enterprise) |
-| [labs/langfuse-eval](labs/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
+실습마다 Langfuse 메이저 버전별로 트랙이 두 개 있습니다. 운영 중인 버전에 맞는 트랙을
+고르세요. **현재 트랙은 v4**이고, Langfuse v3 보안 패치는 2027-01-31까지만 나옵니다.
 
-두 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다.
+| 실습 | Langfuse v4 | Langfuse v3 | 내용 |
+|-----|---|---|----------------|
+| langfuse-ee | [labs/v4/langfuse-ee](labs/v4/langfuse-ee/) | [labs/v3/langfuse-ee](labs/v3/langfuse-ee/) | ClickHouse 기반 Langfuse 자체 호스팅 (OSS + Enterprise) |
+| langfuse-eval | [labs/v4/langfuse-eval](labs/v4/langfuse-eval/) | [labs/v3/langfuse-eval](labs/v3/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
+
+네 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다. 트랙은 스크립트의 첫 번째
+인자(`_base/bin/up.sh v4`)이고, 트랙별 버전 고정은 `_base/<track>/versions.env`에 있습니다.
 
 ### 📖 읽기 자료 (`reading/`)
 
@@ -94,8 +102,8 @@ git config core.hooksPath .githooks
 python3 .github/scripts/check_links.py
 ./.github/scripts/check_syntax.sh
 python3 tools/labs_json.py --check
-./.github/scripts/check_compose.sh   # compose 오버레이 조합을 모두 병합; docker compose 필요
-./.github/scripts/check_sql.sh       # ClickHouse 이미지로 .sql 파일을 파싱; docker 필요
+./.github/scripts/check_compose.sh   # 트랙마다 compose 오버레이 조합을 모두 병합; docker compose 필요
+./.github/scripts/check_sql.sh       # 트랙마다 그 트랙의 ClickHouse 이미지로 .sql 파일을 파싱; docker 필요
 ```
 
 `docs/labs.json`에는 `lab.yaml`에 `web: true`가 있는 실습만 담기며, 노트 사이트가 `main`에서

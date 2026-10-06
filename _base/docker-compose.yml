@@ -1,11 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  Langfuse v4 self-hosted — workshop stack (single-node Docker Compose)
+#  Langfuse self-hosted — workshop stack, two tracks (single-node Docker Compose)
 #
 #  This is a lightly annotated copy of the upstream Langfuse docker-compose.yml
 #  (https://github.com/langfuse/langfuse/blob/main/docker-compose.yml) tuned for
 #  this workshop. It is NOT highly-available — for production use Kubernetes/Helm.
 #
-#  Architecture (v4 keeps the v3 "scale" architecture: 5 stateful backends):
+#  Architecture (the same on both tracks — the v3 "scale" architecture, 5 stateful backends):
 #    langfuse-web     UI + public API (Next.js)            :3000
 #    langfuse-worker  async ingestion / background jobs     :3030
 #    postgres         OLTP: users, orgs, projects, prompts, audit_log
@@ -13,29 +13,33 @@
 #    redis            queue (BullMQ) + API-key/prompt cache
 #    minio            S3-compatible blob store: raw events, media, batch exports
 #
-#  v4 data model: observations land in default.events_full / default.events_core
-#  (trace attributes sit on every observation row); the v3 traces / observations
-#  tables stay empty in the default events_only mode. scores still fills.
+#  Two tracks share this file; the track decides the image pins and the data model:
+#    v3  writes traces / observations / scores
+#    v4  writes events_full / events_core / scores, and leaves the v3 tables empty in
+#        its default events_only mode (trace attributes sit on every observation row)
+#  The pins live in `_base/<track>/versions.env`; start a track with `_base/bin/up.sh <track>`.
 #  ClickHouse: v4 requires >= 25.12 and recommends 26.4.
 #
 #  Shared by every lab in this repository. It lives in `_base/`, so all lab scripts
 #  start it with `-f _base/docker-compose.yml` first, then optional overlays
 #  (docker-compose.ee.yml · .masking.yml · .governance.yml) — see _base/README.md.
-#  The project name below is fixed, so container names do not depend on the
-#  directory the stack was started from (e.g. `langfuse-hols-clickhouse-1`).
+#  The project name is fixed per track, so container names do not depend on the
+#  directory the stack was started from (e.g. `langfuse-hols-v4-clickhouse-1`).
+#  Both tracks publish the same host ports, so only one runs at a time.
 #
 #  Secrets are read from `_base/.env` (see _base/.env.example) — compose takes
 #  `.env` from the directory of the FIRST -f file. Defaults let it boot as-is.
-#  Image versions are pinned (#6): Langfuse 4.48.0, ClickHouse 26.8.15.10, Redis
-#  7.2.16, Postgres 17.11, MinIO by digest, the masking sidecar on python 3.12.14.
-#  Override with LANGFUSE_VERSION, CLICKHOUSE_VERSION, REDIS_VERSION,
-#  POSTGRES_VERSION (see .env.example).
+#  Image versions are pinned (#6, #33): Langfuse and ClickHouse per track in
+#  `_base/<track>/versions.env`; Redis 7.2.16, Postgres 17.11, MinIO by digest and the
+#  masking sidecar on python 3.12.15 are shared. Override with LANGFUSE_VERSION,
+#  CLICKHOUSE_VERSION, REDIS_VERSION, POSTGRES_VERSION in `_base/.env` or the shell
+#  (see .env.example).
 # ─────────────────────────────────────────────────────────────────────────────
-name: langfuse-hols
+name: langfuse-hols-${LF_TRACK:?LF_TRACK is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}
 
 services:
   langfuse-worker:
-    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:-4.48.0}   # pinned (#6)
+    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:?LANGFUSE_VERSION is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}   # pinned per track (#33)
     restart: always
     depends_on: &langfuse-depends-on
       postgres:
@@ -92,7 +96,7 @@ services:
       REDIS_TLS_ENABLED: ${REDIS_TLS_ENABLED:-false}
 
   langfuse-web:
-    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:-4.48.0}        # pinned (#6)
+    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:?LANGFUSE_VERSION is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}   # pinned per track (#33)
     restart: always
     depends_on: *langfuse-depends-on
     ports:
@@ -113,7 +117,7 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
 
   clickhouse:
-    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-26.8.15.10}   # Langfuse v4 requires ClickHouse >= 25.12 (26.4 recommended); pinned (#6)
+    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:?CLICKHOUSE_VERSION is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}   # Langfuse v4 requires ClickHouse >= 25.12 (26.4 recommended); pinned per track (#33)
     restart: always
     user: "101:101"
     environment:
@@ -135,8 +139,8 @@ services:
 
   minio:
     # No version tag is published (only `latest` / `latest-dev`), so pinned by digest (#6):
-    # RELEASE.2026-09-22T19-25-18Z, resolved 2026-10-02 from the cgr.dev registry API.
-    image: cgr.dev/chainguard/minio@sha256:4692462f35d97d7e82c30371d82f057703c5d9489bcae726010594c812f2d285
+    # index digest of `latest`, resolved 2026-10-06 from the cgr.dev manifest API.
+    image: cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034
     restart: always
     entrypoint: sh
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'

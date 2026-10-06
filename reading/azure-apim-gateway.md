@@ -200,7 +200,7 @@ apply:
   are Enterprise Edition on self-hosted.
 - Organizations and their API keys can be created through the Instance Management API
   (`ADMIN_API_KEY`, Enterprise Edition).
-- [Lab 06 in `labs/langfuse-ee`](../labs/langfuse-ee/README.md) walks through the Org API and
+- [Lab 06 in `labs/v4/langfuse-ee`](../labs/v4/langfuse-ee/README.md) walks through the Org API and
   SCIM endpoints on a local stack.
 
 ### Where ClickHouse runs
@@ -485,7 +485,7 @@ OpenAI 호환 엔드포인트를 지원합니다. 그래서 Playground와 LLM-as
   Enterprise Edition입니다.
 - 조직과 조직 API 키는 Instance Management API(`ADMIN_API_KEY`, Enterprise Edition)로 만들 수
   있습니다.
-- [`labs/langfuse-ee`의 랩 06](../labs/langfuse-ee/README.md)에서 로컬 스택으로 Org API와 SCIM
+- [`labs/v4/langfuse-ee`의 랩 06](../labs/v4/langfuse-ee/README.md)에서 로컬 스택으로 Org API와 SCIM
   엔드포인트를 따라가 볼 수 있습니다.
 
 ### ClickHouse를 어디서 운영할까

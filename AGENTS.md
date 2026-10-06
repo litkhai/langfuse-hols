@@ -21,21 +21,31 @@ Differences from the core repository:
 
 ## Rules for this repository
 
-- Both labs run on the shared stack in `_base/` (decision D8, #7). Lab-specific code stays in its lab; anything a second lab needs moves to `_base/`.
+- Both labs come in two tracks, `labs/v3/` and `labs/v4/` (#33), and all of them run on the shared
+  stack in `_base/` (decision D8, #7). Lab-specific code stays in its lab; anything a second lab
+  needs moves to `_base/`; what differs by track goes to `_base/<track>/` (`versions.env`,
+  `requirements.txt`, `seed_traces.py`). The track is an explicit argument (`_base/bin/up.sh v4`,
+  `. _base/lib/env.sh v3`), never a default.
+- v4 is the primary track. v3 keeps what it had at `1a93628` and gets no backports from v4; it is
+  removed when v3 support ends (#35).
 - Verification lines name Langfuse, the Python SDK and ClickHouse versions
-  (e.g. *Langfuse v4.48.0 / SDK 4.16.0 / CH 26.8.15.10*).
-- `labs/langfuse-ee/08-generate-pii-traces.py` fabricates PII on purpose and is allowlisted
-  in `.gitleaks.toml`. Do not widen that allowlist to a directory.
+  (e.g. *Langfuse v4.48.0 / SDK 4.16.0 / CH 26.8.15.10*). Each track has its own.
+- `labs/v3/langfuse-ee/08-generate-pii-traces.py` and its `labs/v4/` copy fabricate PII on
+  purpose and are allowlisted in `.gitleaks.toml` by exact path. Do not widen that allowlist to a directory.
 
 ## Where things came from
 
 Paths were renamed by `git filter-repo`, so `git log --follow` works across the
 split. The original locations:
 
-| In clickhouse-hols | Here |
-|---|---|
-| `usecase/langfuse-ee/` | `labs/langfuse-ee/` |
-| `usecase/langfuse-eval/` | `labs/langfuse-eval/` |
+| In clickhouse-hols | Here, until #33 | Here, since #33 |
+|---|---|---|
+| `usecase/langfuse-ee/` | `labs/langfuse-ee/` | `labs/v4/langfuse-ee/` (moved), `labs/v3/langfuse-ee/` (restored) |
+| `usecase/langfuse-eval/` | `labs/langfuse-eval/` | `labs/v4/langfuse-eval/` (moved), `labs/v3/langfuse-eval/` (restored) |
+
+`labs/v4/` was moved with `git mv`, so `--follow` reaches back through the v4 port. `labs/v3/`
+was written from `git show 1a93628:…`, so its own history starts at #33; for what came before,
+run `git log 1a93628 -- labs/langfuse-ee`.
 
 <!-- harness:core start — khai-harness core@49e8c24 · context public · 손으로 고치지 마세요 -->
 **Context: public.** Public sources only — nothing from company connectors, internal hosts, internal wikis or

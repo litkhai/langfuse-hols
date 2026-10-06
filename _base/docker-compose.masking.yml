@@ -5,9 +5,11 @@
 #  on every OTLP-ingested event — BEFORE the trace is written to ClickHouse.
 #
 #  Layer it on top of the base + EE overlays (08-ee-data-masking.sh does this):
-#    docker compose -f _base/docker-compose.yml -f _base/docker-compose.ee.yml \
+#    . _base/lib/env.sh v4 && lf_compose ee masking -- up -d      (the track: v3 or v4)
+#  by hand, the track's versions.env is required (#33):
+#    docker compose --env-file _base/v4/versions.env --env-file _base/.env \
+#                   -f _base/docker-compose.yml -f _base/docker-compose.ee.yml \
 #                   -f _base/docker-compose.masking.yml up -d
-#  or, from a lab script:  lf_compose ee masking -- up -d      (see _base/lib/env.sh)
 #
 #  Kept as its OWN overlay (not folded into docker-compose.ee.yml) so labs 05–07
 #  never route ingestion through the callback. FAIL_CLOSED=true is the secure
@@ -16,7 +18,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 services:
   masking:
-    image: docker.io/python:3.12.14-slim
+    image: docker.io/python:3.12.15-slim
     restart: always
     command: python /app/masking_service.py
     volumes:

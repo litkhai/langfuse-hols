@@ -319,7 +319,7 @@ Created: 2026-06-25 · EE track (labs 08–11) added: 2026-07-26
 
 **Happy Tracing! 🔭**
 
-For questions, see the main [clickhouse-hols README](../../../README.md).
+For questions, see the main [langfuse-hols README](../../../README.md).
 
 ---
 
@@ -638,4 +638,4 @@ Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
 
 **Happy Tracing! 🔭**
 
-질문이나 이슈는 메인 [clickhouse-hols README](../../../README.md)를 참조하세요.
+질문이나 이슈는 메인 [langfuse-hols README](../../../README.md)를 참조하세요.

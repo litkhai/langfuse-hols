@@ -519,9 +519,9 @@ human review, all on the same seed traces.
 
 ```sql
 SELECT trace_id,
-       anyIf(value, name='user-thumbs')          AS user_thumbs,
-       anyIf(value, name='hallucination-check')  AS halluc_check,
-       anyIf(value, name='human-answer-quality') AS human_quality
+       anyIfOrNull(value, name='user-thumbs')          AS user_thumbs,
+       anyIfOrNull(value, name='hallucination-check')  AS halluc_check,
+       anyIfOrNull(value, name='human-answer-quality') AS human_quality
 FROM scores FINAL WHERE is_deleted = 0
   AND name IN ('user-thumbs','hallucination-check','human-answer-quality')
 GROUP BY trace_id
@@ -533,7 +533,7 @@ ORDER BY trace_id LIMIT 20;
 trace_id                          user_thumbs  halluc_check  human_quality
 07f194f9c1156d6d0a4e5b70a6d964a3       1           0.93           1
 269cd696236c7b8714a0bccb8a476a87       1           0.83           1
-3e2b6091a092f52ad4a057a7b0cc1b3b       0           0              0.5     ← all signals agree: weak
+3e2b6091a092f52ad4a057a7b0cc1b3b       0           \N             0.5     ← error trace: no check
 a2086977a9f2533683f4a9a948a639d0       0           0.88           1
 ab3b4d37560c95ee638c254c076e2bba       1           0.98           1
 b841d0a01fe771d6d9178793a9d3c2e6       1           0.77           1
@@ -541,9 +541,16 @@ eadf50853fcb75468eb225790cdb1ca4       1           0.71           0.5
 f86c2ca2e08596db1d8709660710d430       1           0.6            1
 ```
 
-The trace where the user thumbed-down (`0`), the hallucination check scored `0`, and the
-human graded it `0.5` — three independent signals converging — is exactly the row you
-want surfaced. That's the analysis the UI doesn't give you and ClickHouse does.
+The `\N` row is an error trace: the seeder writes a thumbs-down and no `hallucination-check`
+for it, and `anyIfOrNull` shows the missing score as `NULL`. Plain `anyIf` returned the
+`Float64` default `0` there, which earlier versions of this page read as "the hallucination
+check scored 0" ([#46](https://github.com/litkhai/langfuse-hols/issues/46)). So two signals
+flag `3e2b6091…` (the user's thumbs-down and the human's `0.5`), not three. That cross-signal
+view is the analysis the UI doesn't give you and ClickHouse does.
+
+The table above is from a targeted re-run on 2026-10-07 (v3.225.11 / SDK 3.15.0 / CH 26.8.18.2,
+fresh volumes, offline 01–07): the seeder is deterministic, so the trace ids and every other
+cell match the 2026-10-06 run, and only `halluc_check` on `3e2b6091…` changed.
 
 ### 10.6 Daily trend
 
@@ -640,7 +647,7 @@ Environment: Langfuse v3.225.11 · SDK `langfuse` 3.15.0 · ClickHouse 26.8.18.2
 9. **Try it yourself** — link the lab, note it's OSS and runs offline
 
 **Recommended hero visuals:** the §10.4 A/B result (prompt-v1 vs v2, all zeros → all
-ones) and the §10.5 agreement table (the `3e2b…` all-signals-agree row).
+ones) and the §10.5 agreement table (the `3e2b…` row, where the user and the reviewer both flag a weak answer).
 
 ---
 

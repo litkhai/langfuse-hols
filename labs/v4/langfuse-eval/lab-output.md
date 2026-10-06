@@ -453,19 +453,21 @@ against the human review, all on the same seed traces.
 
 ```text
 trace_id                          user_thumbs  halluc_check  human_quality
-16352933e2c9e1e67d84a1204390c2a0       0           0              1       ← error trace: no check
+16352933e2c9e1e67d84a1204390c2a0       0           \N             1       ← error trace: no check
 23231c3a7e5e584210612bd8d224815b       1           0.86           1
 383ba807d5772d6d46633f4db590b4b2       1           0.94           0.5
 555aa4fdc94d21995d1d633c1214672d       1           0.95           1
-55c558950763e1f3137f03f7ea38e7ab       0           0              0.5     ← error trace: no check
+55c558950763e1f3137f03f7ea38e7ab       0           \N             0.5     ← error trace: no check
 573f100a408a55dc6c5b4c2bb9590020       1           0.84           1
 68f5fd5e994d51b4f242804793c25b2a       1           0.88           1
 77c89496ccdac13d553f0a9eb8d9a09c       1           0.71           1
 ```
 
-The two `0 / 0` rows are error traces. For those the seeder writes a thumbs-down and no
-`hallucination-check`, and `anyIf` returns its type's default, `0`, for a value that is not
-there. Read that `0` as *absent*, not as a failed check.
+The two `\N` rows are error traces. For those the seeder writes a thumbs-down and no
+`hallucination-check`. The query pivots with `anyIfOrNull`, so a missing score shows as
+`NULL` (`\N`). Plain `anyIf` would return the `Float64` default `0` there, which reads like a
+failed check ([#46](https://github.com/litkhai/langfuse-hols/issues/46)). The rows above are
+from re-running step 07 with `anyIfOrNull` on the same data; only those two cells changed.
 
 Of the eight traces, `55c55895…` is the row you want surfaced: the user gave a thumbs-down
 and the human graded it `0.5`. On `383ba807…` the reviewer was less satisfied (`0.5`) than

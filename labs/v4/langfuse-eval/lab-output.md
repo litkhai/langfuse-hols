@@ -4,7 +4,7 @@
 > It bundles the narrative, the code and the **real execution logs** captured while
 > verifying [`labs/v4/langfuse-eval/`](./README.md).
 >
-> **Verified environment (2026-10-06):**
+> **Verified environment (2026-10-07; the run's UTC timestamps are 2026-10-06T23:1x):**
 > - Langfuse server **v4.52.0**
 > - Python SDK `langfuse` **4.17.0** on Python 3.12.14
 > - **ClickHouse 26.8.18.2**
@@ -212,14 +212,14 @@ Offline (`ANTHROPIC_API_KEY` empty) — the simulation answers from the KB for v
 🧪 Experiment: prompt-v1
 10 items
 Average Scores:
-  • keyword-recall: 0.000
   • length-ok: 1.000
+  • keyword-recall: 0.000
   • answered: 0.000
 🧪 Experiment: prompt-v2
 10 items
 Average Scores:
-  • keyword-recall: 1.000
   • length-ok: 1.000
+  • keyword-recall: 1.000
   • answered: 1.000
 ```
 
@@ -231,14 +231,14 @@ Running experiments over 'support-golden-qa' (REAL Anthropic claude-haiku-4-5)�
 10 items
 Average Scores:
   • length-ok: 1.000
-  • keyword-recall: 0.345
   • answered: 1.000
+  • keyword-recall: 0.311
 🧪 Experiment: prompt-v2
 10 items
 Average Scores:
   • length-ok: 1.000
-  • keyword-recall: 0.152
   • answered: 1.000
+  • keyword-recall: 0.110
 ```
 
 **The real run disagrees with the simulation**, and that is the point of running it. A real
@@ -269,7 +269,7 @@ def llm_judge(*, input, output, expected_output, **kwargs):
 
 ```text
 offline:  judge-prompt-v1 → llm-judge-correctness: 0.000   judge-prompt-v2 → 1.000
-real:     judge-prompt-v1 → llm-judge-correctness: 0.420   judge-prompt-v2 → 0.250
+real:     judge-prompt-v1 → llm-judge-correctness: 0.450   judge-prompt-v2 → 0.235
 ```
 
 The real judge agrees with the real keyword evaluator: on this golden set the
@@ -287,7 +287,7 @@ three pieces:
 Seeding five more traces then produced:
 
 ```text
-EVAL scores: 5 (after a 90 s wait)
+EVAL scores: 5 (already there on the first poll, as the seed finished)
 source  name                        n  avg
 EVAL    support-answer-helpfulness  5  0.96
 ```
@@ -324,8 +324,8 @@ for tid in trace_ids:
 ```
 
 ```text
-✓ score configs: answer-quality=2a515630… factually-correct=a351c9e8…
-✓ queue 'human-review' = cmuwkon7t0011ms07gvwczm5w
+✓ score configs: answer-quality=6cc5dfa4… factually-correct=e85d1e41…
+✓ queue 'human-review' = cmuxap2gr000op507x02xlcp6
 ✓ enqueued 8 traces (as their root observations) for human review
 ✓ wrote demo review scores on 8 traces
 ```
@@ -369,9 +369,9 @@ API     answered                    NUMERIC    40   0.75
 API     hallucination-check         NUMERIC    23   0.787
 API     human-answer-quality        NUMERIC     8   0.875
 API     human-factually-correct     BOOLEAN     8   0.75
-API     keyword-recall              NUMERIC    40   0.374
+API     keyword-recall              NUMERIC    40   0.355
 API     length-ok                   NUMERIC    40   1
-API     llm-judge-correctness       NUMERIC    40   0.418
+API     llm-judge-correctness       NUMERIC    40   0.421
 API     user-thumbs                 BOOLEAN    25   0.8
 EVAL    support-answer-helpfulness  NUMERIC     5   0.96   ← the managed evaluator (step 05)
 ```
@@ -397,9 +397,9 @@ name                        n    mean   p50    p90
 answered                    40   0.75   1      1
 hallucination-check         23   0.787  0.74   0.948
 human-answer-quality         8   0.875  1      1
-keyword-recall              40   0.374  0.268  1
+keyword-recall              40   0.355  0.155  1
 length-ok                   40   1      1      1
-llm-judge-correctness       40   0.418  0.25   1
+llm-judge-correctness       40   0.421  0.25   1
 support-answer-helpfulness   5   0.96   1      1
 ```
 
@@ -407,8 +407,8 @@ support-answer-helpfulness   5   0.96   1      1
 
 Evaluator scores did not carry the dataset-run id in ClickHouse on the 2026-10-02 run (0 of 40
 experiment scores had `dataset_run_id`, although all 40 carried `observation_id`); this was not
-re-queried on 2026-10-06. Step 04 tagged each experiment's root row with its variant, so a
-scores → root-row join reconstructs the A/B (the result below is from 2026-10-06):
+re-queried in the later runs. Step 04 tagged each experiment's root row with its variant, so a
+scores → root-row join reconstructs the A/B (the result below is from 2026-10-07):
 
 ```sql
 SELECT multiIf(has(e.tags,'variant:v1'),'prompt-v1',
@@ -427,10 +427,10 @@ GROUP BY variant, metric ORDER BY metric, variant;
 variant     metric                 n    avg_value
 prompt-v1   answered               20   0.5
 prompt-v2   answered               20   1
-prompt-v1   keyword-recall         20   0.172
-prompt-v2   keyword-recall         20   0.576
-prompt-v1   llm-judge-correctness  20   0.21
-prompt-v2   llm-judge-correctness  20   0.625
+prompt-v1   keyword-recall         20   0.156
+prompt-v2   keyword-recall         20   0.555
+prompt-v1   llm-judge-correctness  20   0.225
+prompt-v2   llm-judge-correctness  20   0.617
 ```
 
 **Read it as two runs, not one.** Each `n = 20` is the offline run (10) plus the real run
@@ -439,7 +439,7 @@ prompt-v2   llm-judge-correctness  20   0.625
 | | keyword-recall v1 → v2 | judge v1 → v2 |
 |---|---|---|
 | Offline simulation | 0 → 1 | 0 → 1 |
-| Real `claude-haiku-4-5` | 0.345 → 0.152 | 0.420 → 0.250 |
+| Real `claude-haiku-4-5` | 0.311 → 0.110 | 0.450 → 0.235 |
 
 To keep the two apart in ClickHouse, add the run to the `GROUP BY`. v4's event tables have
 `experiment_id` / `experiment_name` columns (see the schema in `langfuse-ee` lab 03), a second
@@ -453,25 +453,30 @@ against the human review, all on the same seed traces.
 
 ```text
 trace_id                          user_thumbs  halluc_check  human_quality
-231b80224dab4d811fefb60f2f588771       1           0.99           1
-27bae3fab4b3118b16187319ea6ab1dd       1           0.88           1
-3dbcdfde06601f83a2732da65106132d       1           0.78           0.5
-5a0d25293884ec6e233abbf202ee5d49       1           0.68           1
-98d43c4120127bc7493f47b82c998e7e       0           0.69           0.5     ← user and reviewer agree: weak
-b97780d5b02c372fb691c29183abe35e       1           0.94           1
-bb24bdb4663f65a7f05914c6c28459a1       1           0.95           1
-ef85f2048320e982c7a32e27af8b6351       1           0.73           1
+16352933e2c9e1e67d84a1204390c2a0       0           0              1       ← error trace: no check
+23231c3a7e5e584210612bd8d224815b       1           0.86           1
+383ba807d5772d6d46633f4db590b4b2       1           0.94           0.5
+555aa4fdc94d21995d1d633c1214672d       1           0.95           1
+55c558950763e1f3137f03f7ea38e7ab       0           0              0.5     ← error trace: no check
+573f100a408a55dc6c5b4c2bb9590020       1           0.84           1
+68f5fd5e994d51b4f242804793c25b2a       1           0.88           1
+77c89496ccdac13d553f0a9eb8d9a09c       1           0.71           1
 ```
 
-The trace where the user gave a thumbs-down (`0`) and the human graded it `0.5` is the
-row you want surfaced. The automated check scored it `0.69`, which is lower than most.
-That is the analysis the UI doesn't give you and ClickHouse does.
+The two `0 / 0` rows are error traces. For those the seeder writes a thumbs-down and no
+`hallucination-check`, and `anyIf` returns its type's default, `0`, for a value that is not
+there. Read that `0` as *absent*, not as a failed check.
+
+Of the eight traces, `55c55895…` is the row you want surfaced: the user gave a thumbs-down
+and the human graded it `0.5`. On `383ba807…` the reviewer was less satisfied (`0.5`) than
+the user and the automated check (`0.94`). That cross-signal view is the analysis the UI
+doesn't give you and ClickHouse does.
 
 ### 10.6 Daily trend
 
 ```text
 day          n_scores  avg_llm_judge
-2026-10-06   40        0.418          (UTC)
+2026-10-06   40        0.421          (UTC; the run was on the morning of 2026-10-07 KST)
 ```
 
 ---
@@ -479,13 +484,13 @@ day          n_scores  avg_llm_judge
 ## 11. Field notes — what the SDK actually does (blog-worthy gotchas)
 
 These are the non-obvious behaviours we hit and had to design around: good "here's what
-the docs don't tell you" material. Notes 1, 2, 4 and 6 were re-observed in the 2026-10-06 run
+the docs don't tell you" material. Notes 1, 2, 4 and 6 were re-observed in the 2026-10-07 run
 (Langfuse 4.52.0, SDK 4.17.0). Notes 3, 5, 7 and 8 contain claims from the 2026-10-02 run
 (Langfuse 4.48.0, SDK 4.16.0) that this run did not measure; those claims are marked.
 
 1. **Simulation and a real model can disagree — run both.** Offline, the guard-railed
    prompt wins on every metric by construction. With `claude-haiku-4-5` it *lost*:
-   keyword-recall 0.345 → 0.152, and the judge 0.420 → 0.250. Two independent
+   keyword-recall 0.311 → 0.110, and the judge 0.450 → 0.235. Two independent
    evaluators agree that the "escalate if unsure" wording costs correctness on this set.
 
 2. **Experiment scores are `source = API`; managed evaluators write `EVAL`.** Scores from
@@ -493,16 +498,16 @@ the docs don't tell you" material. Notes 1, 2, 4 and 6 were re-observed in the 2
    managed observation-level evaluator wrote `EVAL`. UI annotations write `ANNOTATION`.
 
 3. **Scores attach to observations now.** On v4, experiment scores join to the root row by
-   `trace_id`, and the A/B join in §10.4 returned n = 20 per variant and metric on 2026-10-06.
+   `trace_id`, and the A/B join in §10.4 returned n = 20 per variant and metric on 2026-10-07.
    The 2026-10-02 run also found `observation_id` set and `dataset_run_id` empty on all 40
-   experiment scores; that was not re-queried on 2026-10-06. Reconstruct an A/B by the root
+   experiment scores; that was not re-queried in the later runs. Reconstruct an A/B by the root
    row's tags, or by `experiment_id` on the event rows.
 
 4. **Tag around `run_experiment()`, not inside the task.** `propagate_attributes()` inside
    the task starts one level below the root `experiment-item-run` observation. The A/B
    join reads the root row, so wrap the experiment call instead.
 
-5. **v4 REST changes.** Step 06 ran clean on 2026-10-06 using the calls below. The 404s and the
+5. **v4 REST changes.** Step 06 ran clean on 2026-10-07 using the calls below. The 404s and the
    missing linkage were observed on 2026-10-02 and not re-tested.
    - `/api/public/v2/scores` and `/api/public/scores` answer 404 (2026-10-02).
    - `/v3/scores` leaves the trace linkage out unless you request `fields=subject` (2026-10-02).
@@ -514,13 +519,13 @@ the docs don't tell you" material. Notes 1, 2, 4 and 6 were re-observed in the 2
 
 7. **Trace names are not unique across labs on a shared stack.** Select traces by a score
    they carry (`/v3/scores?name=user-thumbs`), not by name. The neighbouring lab's PII
-   traces share the `support-request` name. This was seen on 2026-10-02; the 2026-10-06 run
+   traces share the `support-request` name. This was seen on 2026-10-02; the 2026-10-07 run
    started from a purged stack, so it was not re-observed.
 
 8. **Two databases, two jobs.** Prompts, datasets and annotation queues live in
    **Postgres**. Observations (`events_full` / `events_core`) and **scores** live in
    **ClickHouse**. Step 07 here read scores and the events tables from ClickHouse; the
-   Postgres side was not queried on 2026-10-06 (the `langfuse-ee` run did show prompts there).
+   Postgres side was not queried on 2026-10-07 (the `langfuse-ee` run did show prompts there).
 
 9. **`config_id` binding is strictly typed** (seen on SDK 3.7.0; not re-tested on v4).
    A score whose `data_type` doesn't match its config's was dropped at ingestion. The lab
@@ -535,13 +540,13 @@ the docs don't tell you" material. Notes 1, 2, 4 and 6 were re-observed in the 2
 | `01` seed | 20 traces ingested through the shared generator |
 | `02` prompts | v1 + v2 + chat; `production` label moved to v2; compile + `prompt=` link OK |
 | `03` dataset | 10 items upserted (`golden-00…09`), idempotent |
-| `04` experiments | Offline: v1 `answered 0 / keyword-recall 0` → v2 `1 / 1`. Real `claude-haiku-4-5`: keyword-recall v1 0.345 → v2 0.152 |
-| `05` LLM-judge | Offline `0 → 1`. Real judge `0.420 → 0.250`. Managed observation-level evaluator: 5 `EVAL` scores, avg 0.96 |
+| `04` experiments | Offline: v1 `answered 0 / keyword-recall 0` → v2 `1 / 1`. Real `claude-haiku-4-5`: keyword-recall v1 0.311 → v2 0.110 |
+| `05` LLM-judge | Offline `0 → 1`. Real judge `0.450 → 0.235`. Managed observation-level evaluator: 5 `EVAL` scores, avg 0.96 |
 | `06` annotation | 2 score configs + `human-review` queue + 8 root observations enqueued + demo scores |
 | `07` ClickHouse | unified model (API + EVAL), A/B via root-row join, per-trace agreement, daily trend |
 
 Environment: Langfuse v4.52.0 · SDK `langfuse` 4.17.0 · ClickHouse 26.8.18.2 · offline and
-real (`claude-haiku-4-5`). This lab's real-call cost was not summed on 2026-10-06. The 5 real
+real (`claude-haiku-4-5`). This lab's real-call cost was not summed on 2026-10-07. The 5 real
 calls of `langfuse-ee` lab 02 were priced by Langfuse at $0.001278
 ([lab-output](../langfuse-ee/lab-output.md)).
 
@@ -560,8 +565,8 @@ calls of `langfuse-ee` lab 02 were priced by Langfuse at $0.001278
 9. **Try it yourself.** Link the lab, and note that it is OSS and runs offline.
 
 **Recommended hero visuals:**
-- The §10.4 two-runs table: offline 0 → 1, real 0.345 → 0.152.
-- The §10.5 agreement table, with the row where the user and the reviewer both flag a weak answer.
+- The §10.4 two-runs table: offline 0 → 1, real 0.311 → 0.110.
+- The §10.5 agreement table, with the row where the user and the reviewer both flag a weak answer (`55c55895…`).
 
 ---
 

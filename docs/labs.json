@@ -1,5 +1,16 @@
 {
   "repo": "langfuse-hols",
-  "generated": "2026-10-02T15:21:20Z",
-  "labs": []
+  "generated": "2026-10-06T08:06:45Z",
+  "labs": [
+    {
+      "path": "labs/langfuse-ee",
+      "title_ko": "ClickHouse 위에서 Langfuse 셀프호스팅 워크숍 (OSS + Enterprise)",
+      "summary_ko": "Langfuse를 직접 띄우고 ClickHouse 백엔드를 SQL로 들여다본 뒤, 엔터프라이즈 기능(RBAC, SCIM, 감사 로그, 데이터 마스킹 등)을 실습합니다.",
+      "title_en": "Self-Hosting Langfuse on ClickHouse: Workshop (OSS + Enterprise)",
+      "summary_en": "Self-host Langfuse, query its ClickHouse backend with SQL, then exercise the enterprise features: RBAC, SCIM, audit logs, retention and data masking.",
+      "category": "third-party",
+      "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/langfuse-ee/README.md#한국어",
+      "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/langfuse-ee/README.md#english"
+    }
+  ]
 }

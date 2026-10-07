@@ -1,6 +1,6 @@
 # STATUS.md
 
-**As of 2026-10-07** — v4 `langfuse-eval` was re-run end to end ([#45](https://github.com/litkhai/langfuse-hols/issues/45)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
+**As of 2026-10-07** — v4 `langfuse-eval` was re-run end to end ([#45](https://github.com/litkhai/langfuse-hols/issues/45)), and its step 07 shows a missing score as `NULL` ([#46](https://github.com/litkhai/langfuse-hols/issues/46)). Langfuse 4.53.0 and ClickHouse 26.8.19.9 are out; the bump and the re-run are [#49](https://github.com/litkhai/langfuse-hols/issues/49). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
 [#33](https://github.com/litkhai/langfuse-hols/issues/33)), and both tracks were run end to end on their pins
 ([#34](https://github.com/litkhai/langfuse-hols/issues/34)). Lab 11 changed after that run ([#37](https://github.com/litkhai/langfuse-hols/issues/37)) and was re-checked alone.
 The notes-site export (`docs/labs.json`) now publishes `labs/v4/langfuse-ee`; `labs/v3/` is not
@@ -58,13 +58,20 @@ to 0.311 → 0.110, and the judge from 0.420 → 0.250 to 0.450 → 0.235. That 
 
 GitHub secret scanning and push protection are on.
 
-Last result: every job green on the heads of #36 (`1a6e4c9`), #38 (`c6ac9a9`) and #39 (`d9c55d4`).
+Last result: every job green on the heads of #36 (`1a6e4c9`), #38 (`c6ac9a9`), #39 (`d9c55d4`), #42 (`86b72e4`),
+#44 (`014e82a`), #47 (`8ec4744`) and #48 (`c36f1dd`). The workflow runs on pull requests only, not on pushes to `main`.
 
 ## Pins
 
 What differs by track is in `_base/<track>/versions.env` and `_base/<track>/requirements.txt`.
 The shared images are the `${VAR:-default}` defaults in [`_base/docker-compose.yml`](_base/docker-compose.yml), or
 fixed tags and digests there. A run can override any of them without editing a file.
+
+The table was the latest on 2026-10-06. On 2026-10-07, two pins have newer releases:
+`langfuse/langfuse` 4.53.0 (GitHub releases API) and `clickhouse/clickhouse-server` 26.8.19.9
+(Docker Hub tags). Both were published later on 2026-10-06. Bumping them and re-running both tracks is [#49](https://github.com/litkhai/langfuse-hols/issues/49).
+Still the latest on 2026-10-07: Langfuse v3 3.225.11, PyPI `langfuse` 3.15.0 / 4.17.0, `anthropic` 1.11.0 and
+`opentelemetry-instrumentation-anthropic` 0.62.4. Redis, Postgres, MinIO and the `python` image were not re-checked.
 
 | Pin | v3 | v4 | Why |
 |---|---|---|---|
@@ -95,6 +102,6 @@ The v4 minimum versions and the v3 support end date come from Langfuse's
 ## Open work
 
 Tracked as issues, not here: [all open](https://github.com/litkhai/langfuse-hols/issues) ·
-[needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify) (none open on 2026-10-06).
-Open on 2026-10-06: [#35](https://github.com/litkhai/langfuse-hols/issues/35) (remove the v3 track after 2027-01-31),
+[needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify) ([#49](https://github.com/litkhai/langfuse-hols/issues/49) on 2026-10-07).
+Open on 2026-10-07: [#49](https://github.com/litkhai/langfuse-hols/issues/49) (bump Langfuse 4.53.0 / ClickHouse 26.8.19.9 and re-run), [#35](https://github.com/litkhai/langfuse-hols/issues/35) (remove the v3 track after 2027-01-31),
 [#12](https://github.com/litkhai/langfuse-hols/issues/12) (revisit D7 past four labs), [#8](https://github.com/litkhai/langfuse-hols/issues/8) (roadmap).

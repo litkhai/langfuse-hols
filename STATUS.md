@@ -32,6 +32,12 @@ Lab 11 alone was re-run on a fresh EE stack per track. Both tracks behaved the s
 
 That is a targeted check, so the end-to-end claim above still names the 2026-10-06 run.
 
+`langfuse-eval/07-scores-in-clickhouse.sql` section 5 (both tracks) now pivots with
+`anyIfOrNull`, so a trace without a `hallucination-check` shows `NULL`, not `0`
+([#46](https://github.com/litkhai/langfuse-hols/issues/46)). Step 07 was re-run per track on 2026-10-07:
+on v4 against the data of the re-run below, and on v3 after an offline 01–06 on fresh volumes.
+Only the error-trace cells changed (two on v4, one on v3). The v3 claim above still names the 2026-10-06 run.
+
 **Re-run since.** v4 `langfuse-eval` 01–07 was run end to end again on **2026-10-07** on the same
 pins and fresh volumes, with real `claude-haiku-4-5` calls for 04–05 and the managed evaluator
 ([#45](https://github.com/litkhai/langfuse-hols/issues/45)). The offline results matched. The

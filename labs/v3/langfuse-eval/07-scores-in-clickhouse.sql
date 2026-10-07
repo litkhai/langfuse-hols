@@ -76,11 +76,13 @@ ORDER BY metric, variant;
 SELECT '── 5) Per-trace agreement of signals that co-occur (seed traces) ──' AS section;
 -- user feedback (01) vs automated hallucination-check (01) vs demo human review (06),
 -- all attached to the same seed traces. Pivot to one row per trace.
+-- -OrNull: a trace without that score shows NULL, not the Float64 default 0
+-- (error traces get no hallucination-check).
 SELECT
     trace_id,
-    anyIf(value, name = 'user-thumbs')            AS user_thumbs,
-    anyIf(value, name = 'hallucination-check')    AS halluc_check,
-    anyIf(value, name = 'human-answer-quality')   AS human_quality
+    anyIfOrNull(value, name = 'user-thumbs')            AS user_thumbs,
+    anyIfOrNull(value, name = 'hallucination-check')    AS halluc_check,
+    anyIfOrNull(value, name = 'human-answer-quality')   AS human_quality
 FROM scores FINAL
 WHERE is_deleted = 0
   AND name IN ('user-thumbs', 'hallucination-check', 'human-answer-quality')

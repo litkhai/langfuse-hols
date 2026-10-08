@@ -8,6 +8,8 @@
 
 > **Langfuse v3 track.** The stack versions are pinned in [`_base/v3/versions.env`](../../../_base/v3/versions.env). This is the lab as it was before the v4 port, kept for Langfuse v3 deployments; v3 gets security patches only until 2027-01-31. For v4 use [`labs/v4/langfuse-ee`](../../v4/langfuse-ee/README.md).
 
+> **Related notes** (Korean): [Langfuse, 그리고 ClickHouse: LLM 옵저버빌리티 데이터 스택 해부](https://clickhouse.litkhai.dev/articles/third-party/langfuse-clickhouse-llm/)
+
 A hands-on, end-to-end workshop for **self-hosting [Langfuse](https://langfuse.com)** — the open-source LLM observability platform — and then looking *under the hood* at the **ClickHouse backend** that powers it.
 
 Langfuse v3 stores all of its OLTP state (users, orgs, projects, prompts, the audit log) in **Postgres**, but every **trace, observation, and score** lands in **ClickHouse**. That makes Langfuse a real, production-grade ClickHouse application you can stand up in minutes — and a great way to *feel* why ClickHouse is the right OLAP engine for high-volume, append-only LLM telemetry.
@@ -326,6 +328,8 @@ For questions, see the main [langfuse-hols README](../../../README.md).
 ## 한국어
 
 > **Langfuse v3 트랙.** 스택 버전은 [`_base/v3/versions.env`](../../../_base/v3/versions.env)에 고정되어 있습니다. v4 포팅 이전의 실습을 Langfuse v3 운영 환경을 위해 남겨 둔 것입니다. v3 보안 패치는 2027-01-31까지만 나옵니다. v4는 [`labs/v4/langfuse-ee`](../../v4/langfuse-ee/README.md)를 쓰세요.
+
+> **관련 글**: [Langfuse, 그리고 ClickHouse: LLM 옵저버빌리티 데이터 스택 해부](https://clickhouse.litkhai.dev/articles/third-party/langfuse-clickhouse-llm/)
 
 **[Langfuse](https://langfuse.com) self-hosting** — 오픈소스 LLM 관측가능성(observability) 플랫폼 — 을 직접 구축하고, 그 내부를 떠받치는 **ClickHouse 백엔드**까지 들여다보는 종단간 실습입니다.
 

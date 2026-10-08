@@ -1,0 +1,8 @@
+# Publishing keys (tools/lab.schema.md) — published 2026-10-08
+web: true
+title_ko: "Langfuse 품질 루프: 프롬프트, 데이터셋, 실험, 평가 (Langfuse v4)"
+summary_ko: "Langfuse v4에서 프롬프트 관리, 데이터셋, 실험, LLM-as-a-judge, 사람 주석을 차례로 돌려 보고, 모든 품질 점수가 ClickHouse 백엔드에 어떻게 쌓이는지 확인합니다. 라이선스 키는 필요 없습니다."
+title_en: "The Langfuse quality loop: prompts, datasets, experiments and evals (Langfuse v4)"
+summary_en: "Walk Langfuse's prompt management, datasets, experiments, LLM-as-a-judge and human annotation on the v4 stack, where observations are the unit stored in ClickHouse, and see how every quality score lands there."
+category: third-party
+tags: [langfuse, llm]

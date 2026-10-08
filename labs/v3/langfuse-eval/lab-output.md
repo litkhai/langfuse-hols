@@ -4,8 +4,8 @@
 > It bundles the narrative, the code, and the **real execution logs** captured while
 > building & verifying [`labs/v3/langfuse-eval/`](./README.md).
 >
-> **Verified environment (2026-10-06):** Langfuse server **v3.225.11** · Python SDK
-> `langfuse` **3.15.0** · **ClickHouse 26.8.18.2** (the track pin in `_base/v3/versions.env`)
+> **Verified environment (2026-10-08):** Langfuse server **v3.225.11** · Python SDK
+> `langfuse` **3.15.0** · **ClickHouse 26.8.19.9** (the track pin in `_base/v3/versions.env`)
 > · Python 3.12.14 · self-hosted Docker stack (web · worker · postgres · clickhouse · redis
 > · minio). Fully offline — **no LLM API key** used: the v3 track makes no model call as
 > long as `OPENAI_API_KEY` is empty, and it was empty; the OpenAI real-call path was
@@ -248,20 +248,20 @@ Individual Results: Hidden (10 items)
 
 ──────────────────────────────────────────────────
 🧪 Experiment: prompt-v1
-📋 Run name: prompt-v1 - 2026-10-06T11:09:46.941999Z - Terse v1 system prompt
+📋 Run name: prompt-v1 - 2026-10-08T06:01:52.176278Z - Terse v1 system prompt
 10 items
 Evaluations:
   • keyword-recall
-  • length-ok
   • answered
+  • length-ok
 
 Average Scores:
   • keyword-recall: 0.000
-  • length-ok: 1.000
   • answered: 0.000
+  • length-ok: 1.000
 
 🔗 Dataset Run:
-   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/0c568dac-48da-487a-94d0-9375680e6d6f
+   http://localhost:3000/project/llm-observability/datasets/cmuz4pla70009mm07ipgytetm/runs/998adb92-306c-4c7d-b48b-ccc4d4805d2d
 
 ──────── prompt-v2 ────────
 Individual Results: Hidden (10 items)
@@ -269,20 +269,20 @@ Individual Results: Hidden (10 items)
 
 ──────────────────────────────────────────────────
 🧪 Experiment: prompt-v2
-📋 Run name: prompt-v2 - 2026-10-06T11:09:47.070777Z - Guard-railed v2 system prompt
+📋 Run name: prompt-v2 - 2026-10-08T06:01:52.303998Z - Guard-railed v2 system prompt
 10 items
 Evaluations:
   • keyword-recall
-  • length-ok
   • answered
+  • length-ok
 
 Average Scores:
   • keyword-recall: 1.000
-  • length-ok: 1.000
   • answered: 1.000
+  • length-ok: 1.000
 
 🔗 Dataset Run:
-   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/b1059b60-7f41-45a8-9042-4781644e33b1
+   http://localhost:3000/project/llm-observability/datasets/cmuz4pla70009mm07ipgytetm/runs/4f45afa9-d1d5-4ec0-8347-5323b32b41b6
 
 ✓ Two runs created. UI → Datasets → support-golden-qa → Runs: compare prompt-v1 vs prompt-v2 side by side.
   Tip: swap MODEL in make_task to also compare models on the same dataset.
@@ -322,7 +322,7 @@ Judging both prompt versions with the offline rubric judge…
 
 ──────────────────────────────────────────────────
 🧪 Experiment: judge-prompt-v1
-📋 Run name: judge-prompt-v1 - 2026-10-06T11:09:49.693331Z - LLM judge on v1
+📋 Run name: judge-prompt-v1 - 2026-10-08T06:01:54.553382Z - LLM judge on v1
 10 items
 Evaluations:
   • llm-judge-correctness
@@ -331,14 +331,14 @@ Average Scores:
   • llm-judge-correctness: 0.000
 
 🔗 Dataset Run:
-   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/37c3251d-1092-47cc-bc42-3434078082cf
+   http://localhost:3000/project/llm-observability/datasets/cmuz4pla70009mm07ipgytetm/runs/6bfe7633-1a93-40e3-a2a7-7770442e8fb4
 
 ──────── judge-prompt-v2 ────────
 …
 
 ──────────────────────────────────────────────────
 🧪 Experiment: judge-prompt-v2
-📋 Run name: judge-prompt-v2 - 2026-10-06T11:09:50.700350Z - LLM judge on v2
+📋 Run name: judge-prompt-v2 - 2026-10-08T06:01:55.557845Z - LLM judge on v2
 10 items
 Evaluations:
   • llm-judge-correctness
@@ -347,7 +347,7 @@ Average Scores:
   • llm-judge-correctness: 1.000
 
 🔗 Dataset Run:
-   http://localhost:3000/project/llm-observability/datasets/cmuwktuub0009qn07suot3ivk/runs/2dfbf2f1-7edb-4f5f-98d0-ed440266923a
+   http://localhost:3000/project/llm-observability/datasets/cmuz4pla70009mm07ipgytetm/runs/dbba8051-3405-44f4-b6a9-1cab4ba222c5
 
 ✓ LLM-judge scores written (name: llm-judge-correctness, source=API via SDK).
   Managed evaluators (Hallucination/Toxicity/…, source=EVAL): 05-llm-as-a-judge.md
@@ -359,7 +359,7 @@ Average Scores:
 Toxicity, Context-Relevance, Helpfulness, Ragas) that run *continuously* on production
 traces or dataset runs and write `source = 'EVAL'`. They require a structured-output
 model in the UI's *LLM Connections*. (Covered in `05-llm-as-a-judge.md`; **not run on
-2026-10-06** — this run was offline and used no LLM connection.)
+2026-10-08** — this run was offline and used no LLM connection.)
 
 ---
 
@@ -390,14 +390,14 @@ for tid in trace_ids:
 ```
 
 ```text
-✓ score configs: answer-quality=cbd1cbbe… factually-correct=7b26113b…
-✓ queue 'human-review' = cmuwku3l4000oqn07e35et0qk
+✓ score configs: answer-quality=482801cc… factually-correct=cd2b66db…
+✓ queue 'human-review' = cmuz4pvhc000omm07am8v3z9c
 ✓ enqueued 8 traces for human review
 ✓ wrote demo review scores on 8 traces
 ```
 
 Real reviewers score in the keyboard-driven **UI → Annotations** queue; those scores
-arrive with `source = 'ANNOTATION'`. (A manual UI step — **not performed on 2026-10-06**;
+arrive with `source = 'ANNOTATION'`. (A manual UI step — **not performed on 2026-10-08**;
 every score in step 07 below is `source = API`, including the script's demo review scores.)
 
 ---
@@ -548,9 +548,7 @@ check scored 0" ([#46](https://github.com/litkhai/langfuse-hols/issues/46)). So 
 flag `3e2b6091…` (the user's thumbs-down and the human's `0.5`), not three. That cross-signal
 view is the analysis the UI doesn't give you and ClickHouse does.
 
-The table above is from a targeted re-run on 2026-10-07 (v3.225.11 / SDK 3.15.0 / CH 26.8.18.2,
-fresh volumes, offline 01–07): the seeder is deterministic, so the trace ids and every other
-cell match the 2026-10-06 run, and only `halluc_check` on `3e2b6091…` changed.
+The seeder is deterministic, so these trace ids and values are the same on every fresh run.
 
 ### 10.6 Daily trend
 
@@ -562,7 +560,7 @@ GROUP BY day ORDER BY day;
 
 ```text
 day          n_scores  avg_llm_judge
-2026-10-06   20        0.5
+2026-10-08   20        0.5
 ```
 
 ---
@@ -576,12 +574,12 @@ These are the non-obvious behaviors we hit and had to design around. They make g
    earlier run on SDK 3.7.0 saw the same), scores written by `run_experiment` evaluators
    (including an in-code LLM judge) land as `source=API` — every row of §10.1 is `API`.
    Only Langfuse's *managed* evaluators write `EVAL`; only UI annotations write
-   `ANNOTATION` (neither was run on 2026-10-06). Query by `source` accordingly.
+   `ANNOTATION` (neither was run on 2026-10-08). Query by `source` accordingly.
 
 2. **`dataset_run_id` is not populated on scores in ClickHouse.** The column exists (it
    is in the `DESCRIBE` output above) but was found empty for evaluator scores on the
    2026-07-26 run — the run linkage lives in Postgres. That emptiness was **not
-   re-checked on 2026-10-06** (`07-scores-in-clickhouse.sql` does not query the column).
+   re-checked on 2026-10-08** (`07-scores-in-clickhouse.sql` does not query the column).
    To reconstruct an A/B in ClickHouse, **tag the experiment trace**
    (`lf.update_current_trace(tags=…)`) and join `scores → traces` — §10.4 does exactly
    that on this run's data.
@@ -590,18 +588,18 @@ These are the non-obvious behaviors we hit and had to design around. They make g
    `data_type` doesn't match the config's is silently dropped at ingestion (a NUMERIC
    score against a CATEGORICAL config just vanished). Either match the type exactly or
    leave the score unbound. *(Seen while developing the lab on the earlier run; no step
-   in the 2026-10-06 run exercises it — not re-run.)*
+   in the 2026-10-08 run exercises it — not re-run.)*
 
 4. **Scores ingest asynchronously.** They flow SDK → worker → ClickHouse; allow a few
    seconds before querying `scores`. Poll, don't assume. (The earlier run saw ~seconds
-   to ~2 min under load; on 2026-10-06 a 10 s pause before the SQL step was enough for
+   to ~2 min under load; on 2026-10-08 a 10 s pause before the SQL step was enough for
    every series in §10.1 to be complete.)
 
 5. **Trace names are not unique across labs on a shared stack.** Selecting "recent
    traces named `support-request`" picked up a *neighboring* lab's PII traces (same
    name), so a cross-signal join found nothing in common. Fix: **select traces by a score
    they carry** (`GET /api/public/v2/scores?name=user-thumbs`), not by name. *(Hit on the
-   2026-07-26 shared stack. The 2026-10-06 run started from a purged stack with no
+   2026-07-26 shared stack. The 2026-10-08 run started from a purged stack with no
    neighbouring data, so it did not reproduce the clash — not re-run.)*
 
 6. **Two databases, two jobs.** Prompts, datasets, and annotation queues live in
@@ -618,18 +616,18 @@ worker could finish ingesting before step 07.
 
 | Step | rc | s | Result |
 |---|--:|--:|---|
-| reset (`down.sh v3 --purge`) | 0 | 6 | ✅ stack, network and 5 volumes removed |
-| up (`up.sh v3`) | 0 | 19 | ✅ `Langfuse is up after ~15s` |
+| reset (`down.sh v3 --purge`) | 0 | 7 | ✅ stack, network and 5 volumes removed |
+| up (`up.sh v3`) | 0 | 22 | ✅ `Langfuse is up after ~15s` |
 | check (`check.sh v3`) | 0 | 1 | ✅ 11 PASS, 1 SKIP (masking sidecar, lab 08 only); `Langfuse 3.225.11` |
 | `01` seed | 0 | 19 | ✅ 20 traces generated |
-| `02` prompts | 0 | 4 | ✅ v1 + v2 + chat; `production` label moved to v2; compile + `prompt=` link OK |
-| `03` dataset | 0 | 4 | ✅ 10 items upserted (`golden-00…09`), idempotent |
-| `04` experiments | 0 | 2 | ✅ prompt-v1 `answered 0.000 / keyword-recall 0.000` → prompt-v2 `1.000 / 1.000` |
-| `05` LLM-judge | 0 | 5 | ✅ `judge-prompt-v1 = 0.000`, `judge-prompt-v2 = 1.000` (offline rubric) |
+| `02` prompts | 0 | 1 | ✅ v1 + v2 + chat; `production` label moved to v2; compile + `prompt=` link OK |
+| `03` dataset | 0 | 3 | ✅ 10 items upserted (`golden-00…09`), idempotent |
+| `04` experiments | 0 | 3 | ✅ prompt-v1 `answered 0.000 / keyword-recall 0.000` → prompt-v2 `1.000 / 1.000` |
+| `05` LLM-judge | 0 | 4 | ✅ `judge-prompt-v1 = 0.000`, `judge-prompt-v2 = 1.000` (offline rubric) |
 | `06` annotation | 0 | 4 | ✅ 2 score configs + `human-review` queue + 8 traces enqueued + demo scores |
 | `07` ClickHouse | 0 | 0 | ✅ unified model (8 series, all `API`) + tag-join A/B (v2 ≫ v1 on 3 metrics) + per-trace agreement (8 traces) |
 
-Environment: Langfuse v3.225.11 · SDK `langfuse` 3.15.0 · ClickHouse 26.8.18.2 · Python 3.12.14 · offline.
+Environment: Langfuse v3.225.11 · SDK `langfuse` 3.15.0 · ClickHouse 26.8.19.9 · Python 3.12.14 · offline.
 
 ---
 

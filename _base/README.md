@@ -14,7 +14,7 @@ Every lab exists once per Langfuse major version, in `labs/v3/` and `labs/v4/` (
 
 | | v3 (`_base/v3/`) | v4 (`_base/v4/`) |
 |---|---|---|
-| Image pins (`versions.env`) | Langfuse 3.225.11, ClickHouse 26.8.18.2 | Langfuse 4.52.0, ClickHouse 26.8.18.2 |
+| Image pins (`versions.env`) | Langfuse 3.225.11, ClickHouse 26.8.19.9 | Langfuse 4.53.0, ClickHouse 26.8.19.9 |
 | Python deps (`requirements.txt`) | `langfuse==3.15.0` | `langfuse==4.17.0`, `anthropic`, `opentelemetry-instrumentation-anthropic` |
 | Trace generator (`seed_traces.py`) | SDK v3, optional real OpenAI calls | SDK v4, optional real Anthropic calls |
 | Where ClickHouse puts traces | `traces`, `observations`, `scores` | `events_full` / `events_core` (one wide row per observation, a trace is its root observation `is_app_root`) and `scores`; the v3 tables stay empty |
@@ -128,9 +128,9 @@ Per track, in `_base/<track>/versions.env`: `LANGFUSE_VERSION` (`langfuse/langfu
 
 Two images are not variables. MinIO (`cgr.dev/chainguard/minio`) publishes no version tag, so it is pinned by the digest of `latest` (`@sha256:4cf4831a…`, resolved 2026-10-06). The masking sidecar runs `python:3.12.15-slim`.
 
-Langfuse v4 needs ClickHouse 25.12 or newer and recommends 26.4 ([ClickHouse deployment guide](https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse)). 26.8.18.2 is the newest patch of the current long-term-support line (2026-10-06). Langfuse 3.225.11 applied all 37 of its ClickHouse migrations on it in a throwaway run (2026-10-06), so both tracks share it. Why each pin is what it is: [STATUS.md](../STATUS.md#pins).
+Langfuse v4 needs ClickHouse 25.12 or newer and recommends 26.4 ([ClickHouse deployment guide](https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse)). 26.8.19.9 is the newest patch of the current long-term-support line (Docker Hub tags, read 2026-10-07). Langfuse 3.225.11 applied all 37 of its ClickHouse migrations on it, none dirty, in the v3 run's `check.sh` (2026-10-08), so both tracks share it. Why each pin is what it is: [STATUS.md](../STATUS.md#pins).
 
-Override a pin in the shell or in `_base/.env`, for example `LANGFUSE_VERSION=4.52.0 _base/bin/up.sh v4`. A value in `_base/.env` applies to both tracks.
+Override a pin in the shell or in `_base/.env`, for example `LANGFUSE_VERSION=4.53.0 _base/bin/up.sh v4`. A value in `_base/.env` applies to both tracks.
 
 ### Python dependencies
 
@@ -179,7 +179,7 @@ docker stop $(docker ps -q --filter label=com.docker.compose.project=langfuse-ho
 
 | | v3 (`_base/v3/`) | v4 (`_base/v4/`) |
 |---|---|---|
-| 이미지 버전 고정 (`versions.env`) | Langfuse 3.225.11, ClickHouse 26.8.18.2 | Langfuse 4.52.0, ClickHouse 26.8.18.2 |
+| 이미지 버전 고정 (`versions.env`) | Langfuse 3.225.11, ClickHouse 26.8.19.9 | Langfuse 4.53.0, ClickHouse 26.8.19.9 |
 | Python 의존성 (`requirements.txt`) | `langfuse==3.15.0` | `langfuse==4.17.0`, `anthropic`, `opentelemetry-instrumentation-anthropic` |
 | trace 생성기 (`seed_traces.py`) | SDK v3, 선택적으로 실제 OpenAI 호출 | SDK v4, 선택적으로 실제 Anthropic 호출 |
 | ClickHouse의 trace 저장 위치 | `traces`, `observations`, `scores` | `events_full` / `events_core`(observation마다 넓은 행 하나, trace는 루트 observation `is_app_root`)와 `scores`. v3 테이블은 비어 있음 |
@@ -293,9 +293,9 @@ SKIP은 통과가 아닙니다.
 
 변수가 아닌 이미지가 둘 있습니다. MinIO(`cgr.dev/chainguard/minio`)는 버전 태그를 배포하지 않아 `latest`의 다이제스트로 고정했습니다(`@sha256:4cf4831a…`, 2026-10-06에 확인). 마스킹 사이드카는 `python:3.12.15-slim`을 씁니다.
 
-Langfuse v4는 ClickHouse 25.12 이상을 요구하고 26.4를 권장합니다([ClickHouse 배포 가이드](https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse)). 26.8.18.2는 현재 장기 지원(LTS) 계열의 최신 패치입니다(2026-10-06). 임시 스택으로 돌려 보니 Langfuse 3.225.11이 이 버전에서 ClickHouse 마이그레이션 37개를 모두 적용했습니다(2026-10-06). 그래서 두 트랙이 같은 버전을 씁니다. 각 버전을 고른 이유는 [STATUS.md](../STATUS.md#pins)에 있습니다.
+Langfuse v4는 ClickHouse 25.12 이상을 요구하고 26.4를 권장합니다([ClickHouse 배포 가이드](https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse)). 26.8.19.9는 현재 장기 지원(LTS) 계열의 최신 패치입니다(Docker Hub 태그, 2026-10-07 확인). v3 실행의 `check.sh`에서 Langfuse 3.225.11이 이 버전에 ClickHouse 마이그레이션 37개를 dirty 없이 모두 적용했습니다(2026-10-08). 그래서 두 트랙이 같은 버전을 씁니다. 각 버전을 고른 이유는 [STATUS.md](../STATUS.md#pins)에 있습니다.
 
-고정 버전은 셸이나 `_base/.env`에서 덮어쓸 수 있습니다. 예: `LANGFUSE_VERSION=4.52.0 _base/bin/up.sh v4`. `_base/.env`에 둔 값은 두 트랙에 모두 적용됩니다.
+고정 버전은 셸이나 `_base/.env`에서 덮어쓸 수 있습니다. 예: `LANGFUSE_VERSION=4.53.0 _base/bin/up.sh v4`. `_base/.env`에 둔 값은 두 트랙에 모두 적용됩니다.
 
 ### Python 의존성
 

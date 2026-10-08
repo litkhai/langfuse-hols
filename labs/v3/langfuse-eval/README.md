@@ -144,7 +144,7 @@ Pure SQL on the `scores` table (read with `FINAL` + `is_deleted = 0`):
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-10-06** against **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2** (track v3, [#34](https://github.com/litkhai/langfuse-hols/issues/34)), on the pinned shared stack in [`_base/`](../../../_base/README.md) (`_base/v3/versions.env`), fresh volumes, Python 3.12.14, fully offline (no LLM key; the OpenAI path and the managed judge were not run). Earlier run: 2026-07-26 on v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24. The full log is in [lab-output.md](lab-output.md).
+Verified **end-to-end on 2026-10-08** against **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.19.9** (track v3, [#49](https://github.com/litkhai/langfuse-hols/issues/49)), on the pinned shared stack in [`_base/`](../../../_base/README.md) (`_base/v3/versions.env`), fresh volumes, Python 3.12.14, fully offline (no LLM key; the OpenAI path and the managed judge were not run). Earlier run: 2026-07-26 on v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24. The full log is in [lab-output.md](lab-output.md).
 
 | Step | Result |
 |---|---|
@@ -320,7 +320,7 @@ rubric, `OPENAI_API_KEY` 가 있으면 실제 채점 호출. Langfuse의 완전 
 
 ### 📝 검증 상태
 
-**2026-10-06**에 **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2**에서 **end-to-end 검증**했습니다(v3 트랙, [#34](https://github.com/litkhai/langfuse-hols/issues/34)). [`_base/`](../../../_base/README.md)의 고정 공유 스택(`_base/v3/versions.env`), 새 볼륨, Python 3.12.14로 LLM 키 없이 완전 오프라인으로 돌렸습니다(OpenAI 경로와 관리형 judge는 실행하지 않음). 이전 실행은 2026-07-26에 v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24에서 했습니다. 전체 로그는 [lab-output.md](lab-output.md)에 있습니다.
+**2026-10-08**에 **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.19.9**에서 **end-to-end 검증**했습니다(v3 트랙, [#49](https://github.com/litkhai/langfuse-hols/issues/49)). [`_base/`](../../../_base/README.md)의 고정 공유 스택(`_base/v3/versions.env`), 새 볼륨, Python 3.12.14로 LLM 키 없이 완전 오프라인으로 돌렸습니다(OpenAI 경로와 관리형 judge는 실행하지 않음). 이전 실행은 2026-07-26에 v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24에서 했습니다. 전체 로그는 [lab-output.md](lab-output.md)에 있습니다.
 
 | 단계 | 결과 |
 |---|---|

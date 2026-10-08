@@ -279,7 +279,7 @@ Pairs with lab 07 as **archive-then-delete**: export before retention deletes. S
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-10-06** against **Langfuse v4.52.0 / SDK 4.17.0 / ClickHouse 26.8.18.2** (track v4, [#34](https://github.com/litkhai/langfuse-hols/issues/34)).
+Verified **end-to-end on 2026-10-08** against **Langfuse v4.53.0 / SDK 4.17.0 / ClickHouse 26.8.19.9** (track v4, [#49](https://github.com/litkhai/langfuse-hols/issues/49)).
 
 - **Stack:** the pinned stack in [`_base/`](../../../_base/README.md) (`_base/v4/versions.env`): Docker 29.8.2, Compose v5.5.1, Python 3.12.14, fresh volumes, default `events_only` write mode.
 - **EE:** a real enterprise license key.
@@ -289,8 +289,8 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 
 | Step | Result |
 |---|---|
-| `01` stack up | 6 containers; `/api/public/health` → version `4.52.0`; `_base/bin/check.sh v4` all PASS, including the health version equal to the pin and ClickHouse migrations applied 50 / shipped 50 |
-| `02` generate traces | 40 traces offline + 5 with real `claude-haiku-4-5` calls (traced by OpenTelemetry, priced by Langfuse at $0.001278 for the 5) |
+| `01` stack up | 6 containers; `/api/public/health` → version `4.53.0`; `_base/bin/check.sh v4` all PASS, including the health version equal to the pin and ClickHouse migrations applied 50 / shipped 50 |
+| `02` generate traces | 40 traces offline + 5 with real `claude-haiku-4-5` calls (traced by OpenTelemetry, priced by Langfuse at $0.001333 for the 5) |
 | `03` explore | data in `events_full` / `events_core` (158 rows each) and `scores` (88); the v3 `traces` / `observations` tables exist and hold **0** rows |
 | `04` analytics | all 8 queries return rows from `events_core`; per-model cost non-zero for every model, the real `claude-haiku-4-5-20251001` calls included; no joins needed |
 | `05` EE activate | Instance Management API `/api/admin/organizations` → HTTP 200 (license valid) |
@@ -301,7 +301,7 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `10` governance | all `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` confirmed in the container env |
 | `11` parquet export | the integration API **accepts `fileType: PARQUET`** with the `OBSERVATIONS_V2` export source; CH `s3()` round-trip **182 == 182**. The hourly job had not fired before teardown, so its files are not proven |
 
-> **Version drift (lab 11), resolved by the pin.** On v3.197.1 the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. v4.48.0 accepted it, and so does the pinned **v4.52.0** (2026-10-06). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
+> **Version drift (lab 11), resolved by the pin.** On v3.197.1 the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. v4.48.0 accepted it, and so does the pinned **v4.53.0** (2026-10-08). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
 
 Confirmed at runtime and built into the labs:
 
@@ -616,7 +616,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 
 ### 📝 검증 상태
 
-**2026-10-06**에 **Langfuse v4.52.0 / SDK 4.17.0 / ClickHouse 26.8.18.2**에서 **end-to-end 검증**했습니다(v4 트랙, [#34](https://github.com/litkhai/langfuse-hols/issues/34)).
+**2026-10-08**에 **Langfuse v4.53.0 / SDK 4.17.0 / ClickHouse 26.8.19.9**에서 **end-to-end 검증**했습니다(v4 트랙, [#49](https://github.com/litkhai/langfuse-hols/issues/49)).
 
 - **스택:** [`_base/`](../../../_base/README.md)의 고정 스택(`_base/v4/versions.env`)입니다. Docker 29.8.2, Compose v5.5.1, Python 3.12.14, 새 볼륨, 기본 `events_only` 쓰기 모드를 썼습니다.
 - **EE:** 실제 엔터프라이즈 라이선스 키를 썼습니다.
@@ -626,8 +626,8 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 
 | 단계 | 결과 |
 |---|---|
-| `01` 스택 기동 | 컨테이너 6개; `/api/public/health` → 버전 `4.52.0`; `_base/bin/check.sh v4` 전부 PASS(health 버전이 고정 버전과 같음, ClickHouse 마이그레이션 50/50 포함) |
-| `02` 트레이스 생성 | 오프라인 40건 + 실제 `claude-haiku-4-5` 호출 5건(OpenTelemetry로 트레이스되고, Langfuse가 계산한 비용은 5건에 $0.001278) |
+| `01` 스택 기동 | 컨테이너 6개; `/api/public/health` → 버전 `4.53.0`; `_base/bin/check.sh v4` 전부 PASS(health 버전이 고정 버전과 같음, ClickHouse 마이그레이션 50/50 포함) |
+| `02` 트레이스 생성 | 오프라인 40건 + 실제 `claude-haiku-4-5` 호출 5건(OpenTelemetry로 트레이스되고, Langfuse가 계산한 비용은 5건에 $0.001333) |
 | `03` 탐색 | 데이터는 `events_full`·`events_core`(각 158행)와 `scores`(88행)에 있음. v3 `traces`·`observations` 테이블은 있으나 **0행** |
 | `04` 분석 | 8개 쿼리 모두 `events_core`에서 결과 반환; 실제 `claude-haiku-4-5-20251001` 호출을 포함해 모든 모델의 비용이 0이 아님; 조인 불필요 |
 | `05` EE 활성화 | Instance Management API `/api/admin/organizations` → HTTP 200 (라이선스 유효) |
@@ -638,7 +638,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 | `10` 거버넌스 | 컨테이너 env에서 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
 | `11` parquet 반출 | 통합 API가 `OBSERVATIONS_V2` export source와 함께 **`fileType: PARQUET`를 허용**; CH `s3()` 라운드트립 **182 == 182**. 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
 
-> **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). v4.48.0에서 허용됐고, 고정한 **v4.52.0**에서도 허용됩니다(2026-10-06). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
+> **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). v4.48.0에서 허용됐고, 고정한 **v4.53.0**에서도 허용됩니다(2026-10-08). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
 
 런타임에서 확인해 랩에 반영한 두 가지:
 

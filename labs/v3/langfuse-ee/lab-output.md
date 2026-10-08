@@ -4,15 +4,15 @@ A complete, captured end-to-end run of every lab in [`labs/v3/langfuse-ee/`](./R
 
 > Language note: the run log below is English (the console output is language-neutral). A ready-to-use **Korean blog outline (한국어 블로그 아웃라인)** is at the end.
 
-> Scope of this run (2026-10-06): every step ran **offline**. The v3 track makes no model call as long as `OPENAI_API_KEY` is empty, and it was empty; the OpenAI real-call path was **not** run. Labs 05–11 ran with a real enterprise licence key (the value is never shown). Where this file mentions the earlier run (2026-07-26, Langfuse v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24), it says so and marks it as not re-run.
+> Scope of this run (2026-10-08): every step ran **offline**. The v3 track makes no model call as long as `OPENAI_API_KEY` is empty, and it was empty; the OpenAI real-call path was **not** run. Labs 05–11 ran with a real enterprise licence key (the value is never shown). Where this file mentions the earlier run (2026-07-26, Langfuse v3.197.1 / SDK 3.7.0 / ClickHouse 25.11.2.24), it says so and marks it as not re-run.
 
 ---
 
 ## TL;DR
 
-- Self-hosted **Langfuse v3.225.11** stores every trace/observation/score in **ClickHouse 26.8.18.2**. We stood the stack up, pushed traces with the Python SDK, and ran cost/latency/quality analytics straight on ClickHouse.
+- Self-hosted **Langfuse v3.225.11** stores every trace/observation/score in **ClickHouse 26.8.19.9**. We stood the stack up, pushed traces with the Python SDK, and ran cost/latency/quality analytics straight on ClickHouse.
 - Then we activated an **Enterprise license** and ran the seven Enterprise labs (05–11) end-to-end — the highlight being **server-side data masking, *proven* absent in ClickHouse with SQL**, and a **Parquet export ↔ ClickHouse `s3()` round-trip** (52 rows read back).
-- The scripted steps add up to 128 s, including a 20 s pause for ingestion (the longest step, lab 02, took 39 s). Findings worth a blog section came out of the run: the masking proof, RMT dedup, prompt-label movement, a **version drift that the newer image closes** (scheduled Parquet export: rejected on v3.197.1, accepted on v3.225.11), and object-storage archival.
+- The scripted steps add up to 125 s, including a 10 s pause for ingestion (the longest step, lab 02, took 41 s). Findings worth a blog section came out of the run: the masking proof, RMT dedup, prompt-label movement, a **version drift that the newer image closes** (scheduled Parquet export: rejected on v3.197.1, accepted on v3.225.11), and object-storage archival.
 
 ## Environment
 
@@ -22,34 +22,34 @@ A complete, captured end-to-end run of every lab in [`labs/v3/langfuse-ee/`](./R
 | Docker Engine | 29.8.2 |
 | Docker Compose | v5.5.1 |
 | Langfuse (web + worker) | **v3.225.11** (pinned in `_base/v3/versions.env`; `check.sh` reports `Langfuse 3.225.11`) |
-| ClickHouse | **26.8.18.2** (`SELECT version()` in lab 11) |
+| ClickHouse | **26.8.19.9** (`SELECT version()` in lab 11) |
 | Postgres / Redis / MinIO | image pins in `_base/docker-compose.yml` (not captured in this run's logs) |
 | Masking sidecar | stdlib-only Python callback, `_base/masking/masking_service.py` |
 | Python | 3.12.14 (venv `.venv-v3`, `pip install -r _base/v3/requirements.txt`) |
 | Python SDK | `langfuse` **3.15.0** (OpenTelemetry-native) |
 | Licence | real enterprise licence key for labs 05–11 (value not shown) |
-| Run date | 2026-10-06 |
+| Run date | 2026-10-08 (UTC 05:58–06:01) |
 
 ## Run summary
 
-One row per step, from the run's exit codes and timings (`rc` = exit code, `s` = seconds). The run paused 20 s after lab 02 so the worker could finish ingesting before lab 03.
+One row per step, from the run's exit codes and timings (`rc` = exit code, `s` = seconds). The run paused 10 s after lab 02 so the worker could finish ingesting before lab 03.
 
 | Step | Feature | rc | s | Result |
 |---|---|--:|--:|---|
 | Reset | `_base/bin/down.sh v3 --purge` | 0 | 0 | ✅ `Stack v3 down, volumes removed.` |
-| 01 up | Stack up (6 containers) | 0 | 21 | ✅ `Langfuse is up after ~15s` |
-| 01 check | `_base/bin/check.sh v3` | 0 | 1 | ✅ 11 PASS, 1 SKIP (masking sidecar not started yet); `Langfuse 3.225.11`; migrations applied 37 / shipped 37 |
-| 02 | Generate traces (SDK) | 0 | 39 | ✅ 40 traces generated (offline mode) |
-| 03 | Explore CH backend | 0 | 0 | ✅ `traces`/`observations`/`scores` = `ReplacingMergeTree`, monthly partitions; 41 raw → 40 deduped traces |
+| 01 up | Stack up (6 containers) | 0 | 25 | ✅ `Langfuse is up after ~15s` |
+| 01 check | `_base/bin/check.sh v3` | 0 | 0 | ✅ 11 PASS, 1 SKIP (masking sidecar not started yet); `Langfuse 3.225.11`; migrations applied 37 / shipped 37 |
+| 02 | Generate traces (SDK) | 0 | 41 | ✅ 40 traces generated (offline mode) |
+| 03 | Explore CH backend | 0 | 0 | ✅ `traces`/`observations`/`scores` = `ReplacingMergeTree`, monthly partitions; 42 raw → 40 deduped traces |
 | 04 | Analytics on CH | 0 | 0 | ✅ 8 queries — cost/latency p95/quality/leaderboard |
 | 05 | Activate Enterprise | 0 | 12 | ✅ `Enterprise active. Admin API reachable.` |
 | 06 | RBAC & SCIM | 0 | 1 | ✅ org + project + 2 SCIM users + project-level role override |
 | 07 | Data retention + audit | 0 | 1 | ✅ 14-day retention; audit log shows 6 rows from lab 06/07 |
-| 08 | **Server-side data masking** | 0 | 19 | ✅ **leak counts = 0 in ClickHouse; 24 rows carry `[REDACTED_*]`** |
+| 08 | **Server-side data masking** | 0 | 20 | ✅ **leak counts = 0 in ClickHouse; 24 rows carry `[REDACTED_*]`** |
 | 08 logs | Sidecar log | 0 | 0 | ✅ `redactions=84` |
 | 09 | Prompt labels | 0 | 1 | ✅ v1→v2 label move; prompts in Postgres; 2 audit rows. The protected-label UI step is printed, not exercised |
 | 10 | Instance governance | 0 | 11 | ✅ UI + org-creator vars injected & shown in the container env |
-| 11 | Parquet export ↔ CH | 0 | 2 | ✅ integration API **accepted** `PARQUET`; CH `s3()` wrote Parquet and read **52** rows back |
+| 11 | Parquet export ↔ CH | 0 | 3 | ✅ integration API **accepted** `PARQUET`; CH `s3()` round-trip **52 == 52** (source count = read-back count) |
 
 ---
 
@@ -171,18 +171,18 @@ Row counts, and the **ReplacingMergeTree gotcha** — raw rows can exceed the de
 
 ```
 scores        76
-traces        41
-observations 130
+traces        42
+observations 132
 
 raw_rows   deduped_active
-   41            40          -- FINAL + WHERE is_deleted = 0 gives the truth
+   42            40          -- FINAL + WHERE is_deleted = 0 gives the truth
 ```
 
-The duplicate is visible in the five newest `traces` rows: id `7d8242641ba362e7afa415e56d204496` appears twice, once complete and once as a half-populated version (empty name, `\N` user and session, no tags):
+One of the two duplicates is visible in the five newest `traces` rows: id `2cabd7e7cc6b66e5402adf9c8a4b8f7c` appears twice, once complete and once as a half-populated version (empty name, `\N` user and session, no tags):
 
 ```
-7d8242641ba362e7afa415e56d204496	support-request	user_008	sess_user_008_7	['env:staging','feature:search-assist','tier:free']	default	2026-10-06 11:07:42.972
-7d8242641ba362e7afa415e56d204496		\N	\N	[]	default	2026-10-06 11:07:42.972
+2cabd7e7cc6b66e5402adf9c8a4b8f7c		\N	\N	[]	default	2026-10-08 05:59:54.386
+2cabd7e7cc6b66e5402adf9c8a4b8f7c	support-request	user_003	sess_user_003_7	['env:production','feature:search-assist','tier:pro']	default	2026-10-08 05:59:54.386
 ```
 
 Selected columns confirm `input`/`output` are `Nullable(String)` (ZSTD(3)-compressed), `usage_details`/`cost_details` are `Map(...)`, and everything carries `event_ts` / `is_deleted` for RMT versioning + soft-deletes.
@@ -198,41 +198,41 @@ $ docker exec -i langfuse-hols-v3-clickhouse-1 clickhouse-client \
 
 | model | calls | input_tok | output_tok | total_cost_usd | avg_cost/call |
 |---|--:|--:|--:|--:|--:|
-| claude-3-5-sonnet-20241022 | 10 | 9,311 | 3,292 | 0.077313 | 0.007731 |
-| gpt-4o | 15 | 10,795 | 3,171 | 0.058698 | 0.003913 |
-| gpt-4o-mini | 25 | 12,456 | 2,827 | 0.003565 | 0.000143 |
+| claude-3-5-sonnet-20241022 | 9 | 7,863 | 3,139 | 0.070674 | 0.007853 |
+| gpt-4o | 16 | 12,891 | 3,320 | 0.065428 | 0.004089 |
+| gpt-4o-mini | 27 | 12,875 | 2,837 | 0.003633 | 0.000135 |
 
-**2) Latency p50/p95/p99 per model** — `quantile()` over `dateDiff` (the log prints raw floats such as `1597.1999999999998`; shown here rounded to 2 decimals):
+**2) Latency p50/p95/p99 per model** — `quantile()` over `dateDiff` (the log prints raw floats such as `1627.2800000000002`; shown here rounded to 2 decimals):
 
 | model | calls | avg_ms | p50 | p95 | p99 |
 |---|--:|--:|--:|--:|--:|
-| claude-3-5-sonnet-20241022 | 10 | 1,170 | 1,106 | 1,597.20 | 1,627.44 |
-| gpt-4o | 15 | 979 | 1,045 | 1,446.90 | 1,515.78 |
-| gpt-4o-mini | 25 | 275 | 217 | 559.00 | 562.28 |
+| claude-3-5-sonnet-20241022 | 9 | 1,146 | 983 | 1,600.40 | 1,627.28 |
+| gpt-4o | 16 | 1,067 | 1,105.50 | 1,541.00 | 1,562.60 |
+| gpt-4o-mini | 27 | 268 | 203 | 557.50 | 560.48 |
 
 **3) Error rate per model** — `countIf(level='ERROR')`:
 
 | model | calls | errors | error_pct |
 |---|--:|--:|--:|
-| gpt-4o | 15 | 2 | 13.33 |
-| claude-3-5-sonnet-20241022 | 10 | 1 | 10.00 |
-| gpt-4o-mini | 25 | 1 | 4.00 |
+| gpt-4o | 16 | 2 | 12.50 |
+| claude-3-5-sonnet-20241022 | 9 | 1 | 11.11 |
+| gpt-4o-mini | 27 | 1 | 3.70 |
 
 **4) Cost & quality by customer tier** — `arrayFirst()` over `tags` + JOIN:
 
 | tier | traces | cost_usd | cost_per_trace |
 |---|--:|--:|--:|
 | enterprise | 13 | 0.050497 | 0.003884 |
-| free | 14 | 0.047938 | 0.003424 |
-| pro | 13 | 0.04114 | 0.003165 |
+| free | 14 | 0.04797 | 0.003426 |
+| pro | 13 | 0.041268 | 0.003174 |
 
-**5) Satisfaction from scores** — `sumIf`/`avgIf`: thumbs votes **40**, thumbs-up **75%**, avg grounding **0.788**.
+**5) Satisfaction from scores** — `sumIf`/`avgIf`: thumbs votes **40**, thumbs-up **75%**, avg grounding **0.801**.
 
-**6) Per-user spend leaderboard** (top rows): `user_005` 4 sessions / 4 req / $0.030281 · `user_003` 5 / 6 / $0.02222 · `user_008` 4 / 4 / $0.015265 …
+**6) Per-user spend leaderboard** (top rows): `user_005` 4 sessions / 4 req / $0.030281 · `user_003` 5 / 6 / $0.02222 · `user_008` 4 / 4 / $0.015298 …
 
-**7) Daily trend**: `2026-10-06` → 40 traces, 12 unique users, $0.139575.
+**7) Daily trend**: `2026-10-08` → 40 traces, 12 unique users, $0.139735.
 
-**8) Session depth**: 26 sessions with 1 turn, 7 sessions with 2 turns.
+**8) Session depth**: 28 sessions with 1 turn, 6 sessions with 2 turns.
 
 ---
 
@@ -245,7 +245,7 @@ $ ./05-ee-activate.sh
  …
 ▶ Verifying Enterprise activation via the Instance Management API…
 ✅ Enterprise active. Admin API reachable. Current organizations:
-{"organizations":[{"id":"ch-workshop","name":"ClickHouse Workshop","createdAt":"2026-10-06T11:06:58.765Z","metadata":{},"projects":[{"id":"llm-observability","name":"LLM Observability", …}]}]}
+{"organizations":[{"id":"ch-workshop","name":"ClickHouse Workshop","createdAt":"2026-10-08T05:59:09.638Z","metadata":{},"projects":[{"id":"llm-observability","name":"LLM Observability", …}]}]}
 ```
 
 The overlay injects `LANGFUSE_EE_LICENSE_KEY` into **both** containers plus `ADMIN_API_KEY` (values not shown). Proof of activation: `/api/admin/organizations` only answers HTTP 200 when a valid license is present — the script prints the success line only on a 200.
@@ -256,15 +256,15 @@ The overlay injects `LANGFUSE_EE_LICENSE_KEY` into **both** containers plus `ADM
 $ ./06-ee-rbac-scim.sh
 
 ════ 1. Create an organization (Instance Management API, Bearer auth) ════
-  org id = cmuwks1mf0002ta07f7bge5ut
+  org id = cmuz4nqd10002qo07xh1zdyh6
 ════ 2. Mint an organization-scoped API key ════
-  org public key = pk-lf-0b592c60-…            (secret not printed)
+  org public key = pk-lf-835cfab7-…            (secret not printed)
 ════ 3. Create a project under the org ════
-  project id = cmuwks1sx0008ta079nqf5d1p
+  project id = cmuz4nqjf0008qo07lo9iarjd
 ════ 4. Mint a project API key (this is what an app would use to send traces) ════
-  project public key = pk-lf-a18c8b87-…
+  project public key = pk-lf-44e79c9d-…
 ════ 5. SCIM: provision two users (as an IdP like Okta/Entra would) ════
-  alice id = cmuwks1y1…   bob id = cmuwks1yv…
+  alice id = cmuz4nqoo…   bob id = cmuz4nqpl…
 ════ 6. Assign ORGANIZATION-level roles ════
   alice=MEMBER (org), bob=VIEWER (org)
 ════ 7. PROJECT-LEVEL role override (Enterprise feature) ════
@@ -297,16 +297,16 @@ $ ./07-ee-audit-retention.sh
   membership changes lab 06 just made (columns are snake_case in Postgres):
        created_at        | action | resource_type |        resource_id        |          org_id           |           actor           
 -------------------------+--------+---------------+---------------------------+---------------------------+---------------------------
- 2026-10-06 11:08:19.751 | create | apiKey        | cmuwks2hw000pta07c36lqga4 | ch-workshop               | ADMIN_KEY
- 2026-10-06 11:08:19.066 | create | orgMembership | cmuwks1yw000ita07b7nhupcw | cmuwks1mf0002ta07f7bge5ut | cmuwks1re0005ta071ub0fwbf
- 2026-10-06 11:08:19.037 | create | orgMembership | cmuwks1y3000eta079pnyzm7n | cmuwks1mf0002ta07f7bge5ut | cmuwks1re0005ta071ub0fwbf
- 2026-10-06 11:08:18.989 | create | apiKey        | cmuwks1wq000ata07q5o4wejy | cmuwks1mf0002ta07f7bge5ut | ORG_KEY
- 2026-10-06 11:08:18.797 | create | apiKey        | cmuwks1re0005ta071ub0fwbf | cmuwks1mf0002ta07f7bge5ut | ADMIN_KEY
- 2026-10-06 11:08:18.626 | create | organization  | cmuwks1mf0002ta07f7bge5ut | cmuwks1mf0002ta07f7bge5ut | ADMIN_KEY
+ 2026-10-08 06:00:23.226 | create | apiKey        | cmuz4nr93000pqo07if7p0hgz | ch-workshop               | ADMIN_KEY
+ 2026-10-08 06:00:22.525 | create | orgMembership | cmuz4nqpn000iqo07dnnyube5 | cmuz4nqd10002qo07xh1zdyh6 | cmuz4nqhs0005qo07qhv4ihj6
+ 2026-10-08 06:00:22.493 | create | orgMembership | cmuz4nqoq000eqo07aygyqmz2 | cmuz4nqd10002qo07xh1zdyh6 | cmuz4nqhs0005qo07qhv4ihj6
+ 2026-10-08 06:00:22.446 | create | apiKey        | cmuz4nqnf000aqo07peldmryo | cmuz4nqd10002qo07xh1zdyh6 | ORG_KEY
+ 2026-10-08 06:00:22.244 | create | apiKey        | cmuz4nqhs0005qo07qhv4ihj6 | cmuz4nqd10002qo07xh1zdyh6 | ADMIN_KEY
+ 2026-10-08 06:00:22.079 | create | organization  | cmuz4nqd10002qo07xh1zdyh6 | cmuz4nqd10002qo07xh1zdyh6 | ADMIN_KEY
 (6 rows)
 ```
 
-The script reports that a nightly job deletes traces/observations/scores older than the window straight from ClickHouse (minimum window 3 days; `0` keeps data forever). That deletion is **not observed in this run** — only the policy write (`retentionDays: 14`) is; and the earlier claim that a non-zero value is rejected on OSS was not re-run on 2026-10-06 (this run was Enterprise-only for lab 07). The audit log is the who/what/when: the six most recent rows are lab 06's organization create, its API-key creates and its two `orgMembership` creates (all in org `cmuwks1mf0002ta07f7bge5ut`), plus one more `apiKey` create in org `ch-workshop` (consistent with lab 07's own org-key mint). The table has `before` / `after` columns for the state change.
+The script reports that a nightly job deletes traces/observations/scores older than the window straight from ClickHouse (minimum window 3 days; `0` keeps data forever). That deletion is **not observed in this run** — only the policy write (`retentionDays: 14`) is; and the earlier claim that a non-zero value is rejected on OSS was not re-run on 2026-10-08 (this run was Enterprise-only for lab 07). The audit log is the who/what/when: the six most recent rows are lab 06's organization create, its API-key creates and its two `orgMembership` creates (all in org `cmuz4nqd10002qo07xh1zdyh6`), plus one more `apiKey` create in org `ch-workshop` (consistent with lab 07's own org-key mint). The table has `before` / `after` columns for the state change.
 
 ---
 
@@ -377,21 +377,21 @@ $ ./09-ee-protected-prompts.sh
 ════ 4. Prompts are OLTP → stored in POSTGRES, not ClickHouse ════
  version |       labels        |       created_at        
 ---------+---------------------+-------------------------
-       1 | {}                  | 2026-10-06 11:08:40.41
-       2 | {production,latest} | 2026-10-06 11:08:40.455
+       1 | {}                  | 2026-10-08 06:00:43.616
+       2 | {production,latest} | 2026-10-08 06:00:43.695
 (2 rows)
 
 ════ 5. Every label change was AUDITED (ties to lab 07) ════
        created_at        | action | resource_type 
 -------------------------+--------+---------------
- 2026-10-06 11:08:40.473 | create | prompt
- 2026-10-06 11:08:40.425 | create | prompt
+ 2026-10-08 06:00:43.727 | create | prompt
+ 2026-10-08 06:00:43.651 | create | prompt
 (2 rows)
 ```
 
 **Nice real-world detail:** after v2 takes `production`+`latest`, **v1's labels become `{}`** — deployment labels are *unique pointers that move*, not tags you accumulate. Prompts live in **Postgres** (OLTP), reinforcing the two-database model.
 
-**Not run on 2026-10-06:** the EE capstone. The script's step 6 only *prints* the instructions for marking `production` **protected** (UI toggle, Owner/Admin, EE licence) and the roles from lab 06 (Bob `VIEWER` / Alice `MEMBER` cannot repoint or delete it; Owner/Admin can). Neither the toggle nor those role behaviours were exercised.
+**Not run on 2026-10-08:** the EE capstone. The script's step 6 only *prints* the instructions for marking `production` **protected** (UI toggle, Owner/Admin, EE licence) and the roles from lab 06 (Bob `VIEWER` / Alice `MEMBER` cannot repoint or delete it; Owner/Admin can). Neither the toggle nor those role behaviours were exercised.
 
 ## Lab 10 — Instance Governance (UI Customization + Org Creators)
 
@@ -431,10 +431,12 @@ $ ./11-ee-parquet-export.sh
 
 ════════════ B) The ClickHouse primitive, live (INSERT INTO FUNCTION s3 → read back) ════════════
 ▶ ClickHouse version (Parquet export failures surface reliably on >= 25.11):
-26.8.18.2
+26.8.19.9
 ▶ Writing active traces to Parquet on MinIO…
 ▶ Reading the Parquet back from MinIO (round-trip proof):
-52
+  rows in traces (FINAL, active)  = 52
+  rows read back from the Parquet = 52
+  ✅ 52 == 52
 ▶ Schema ClickHouse inferred from the exported Parquet (first 15 columns):
     ┌─name────────┬─type─────────────────┐
  1. │ id          │ String               │
@@ -442,11 +444,13 @@ $ ./11-ee-parquet-export.sh
  …  │ …           │ …                    │
 13. │ input       │ Nullable(String)     │
 14. │ output      │ Nullable(String)     │
+15. │ session_id  │ Nullable(String)     │
+    └─────────────┴──────────────────────┘
 ```
 
-> **Two Langfuse versions, two answers.** On **v3.225.11** (this run, 2026-10-06) the blob-storage integration API **accepts** `fileType: PARQUET` — the script's success branch above. On **v3.197.1** (the 2026-07-26 run, **not re-run**) the same call was **rejected with HTTP 400** (`fileType` allowed only `JSON`, `CSV`, `JSONL`) and the script fell back to a scheduled `JSONL` export.
+> **Two Langfuse versions, two answers.** On **v3.225.11** (this run, 2026-10-08) the blob-storage integration API **accepts** `fileType: PARQUET` — the script's success branch above. On **v3.197.1** (the 2026-07-26 run, **not re-run**) the same call was **rejected with HTTP 400** (`fileType` allowed only `JSON`, `CSV`, `JSONL`) and the script fell back to a scheduled `JSONL` export.
 
-Part B prints only the **read-back count: 52** rows. The v3 script does not print a separate source count, so this file makes no equality claim between the two. The separate cross-check from the earlier run (live `traces FINAL` count vs Parquet read-back, and a per-object size query) was **not re-run** on 2026-10-06 and its numbers are not carried over. The inferred-schema box is cut off by the script's `head -18`, so it shows no closing border, and its label still says "first 15 columns" although 17 rows print. Both were fixed after this run (#37): the script now prints the source count next to the read-back count, fails on a mismatch, and cuts the schema box to 15 rows with its border. This log is from before the fix.
+Part B compares the source count (`traces FINAL`, active rows) with the count read back from the Parquet and fails on a mismatch: **52 == 52**. The inferred-schema box shows 15 columns with its closing border. Both came with [#37](https://github.com/litkhai/langfuse-hols/issues/37); this is the first end-to-end run that includes them. The per-object size query from the earlier run was **not re-run** and its numbers are not carried over.
 
 Part B is the exact primitive Langfuse's scheduled exporter uses under the hood — `INSERT INTO FUNCTION s3(...) … 'Parquet'` then read it right back — so the ClickHouse-backed store can archive itself to object storage and stay queryable by ClickHouse, DuckDB, Athena, Spark… Pairs with lab 07 as **archive-then-delete** (the script prints that pattern; the log does not show the hourly job's output files, so they were not inspected).
 
@@ -456,17 +460,17 @@ Part B is the exact primitive Langfuse's scheduled exporter uses under the hood 
 
 1. **Masking is provable in the warehouse, not just claimed.** With server-side masking on, a SQL scan of `traces`/`observations` for the raw secrets returns **0** while `[REDACTED_*]` placeholders are present (24 rows; sidecar logged 84 redactions). ClickHouse turns "we mask PII" into a testable assertion. Scope caveat (script notes): masking only applies to the OTLP endpoint (SDK v3+).
 
-2. **ReplacingMergeTree: raw ≠ truth until merged.** Right after ingestion the `traces` table showed **41 raw rows → 40 deduped** (`FINAL` + `WHERE is_deleted = 0`), and the five newest rows even contained one trace id twice (a complete version and a half-populated one). Every analytics query must read this way or it double-counts half-populated row versions. Sort key `project_id, toDate(timestamp), id`; partition `toYYYYMM(timestamp)`.
+2. **ReplacingMergeTree: raw ≠ truth until merged.** Right after ingestion the `traces` table showed **42 raw rows → 40 deduped** (`FINAL` + `WHERE is_deleted = 0`), and the five newest rows even contained one trace id twice (a complete version and a half-populated one). Every analytics query must read this way or it double-counts half-populated row versions. Sort key `project_id, toDate(timestamp), id`; partition `toYYYYMM(timestamp)`.
 
 3. **Deployment labels *move*.** Creating prompt v2 with `production` silently cleared the label from v1 (`labels = {}`). Labels are unique pointers, which is exactly why the EE "protected label" feature exists — to stop an accidental repoint of production. (The protected-label toggle itself was not exercised in this run.)
 
-4. **Check the API surface of the *running* image, not the docs.** The blob-storage *integration* API on **v3.197.1** (2026-07-26 run, not re-run) accepted `fileType` ∈ `{JSON, CSV, JSONL}` only — `PARQUET` returned HTTP 400, even though the published OpenAPI spec listed `PARQUET`. On **v3.225.11** (2026-10-06) the same call is accepted. Meanwhile **ClickHouse writes true Parquet regardless** (Part B). Lesson for self-hosters: pin versions and validate against the running image — the drift was real on one pin and gone on the next.
+4. **Check the API surface of the *running* image, not the docs.** The blob-storage *integration* API on **v3.197.1** (2026-07-26 run, not re-run) accepted `fileType` ∈ `{JSON, CSV, JSONL}` only — `PARQUET` returned HTTP 400, even though the published OpenAPI spec listed `PARQUET`. On **v3.225.11** (2026-10-08) the same call is accepted. Meanwhile **ClickHouse writes true Parquet regardless** (Part B). Lesson for self-hosters: pin versions and validate against the running image — the drift was real on one pin and gone on the next.
 
-5. **ClickHouse ≥ 25.11 is the script's stated baseline for Parquet exports.** The lab script says that on older ClickHouse, Langfuse's Parquet blob-storage export can "succeed" (manifest written) while producing an invalid/incomplete file, and that failures surface reliably on ≥ 25.11. That is the script's own comment: this run used only ClickHouse **26.8.18.2** and did not test any older version, so the claim is **not re-measured**. Below that baseline, prefer CSV/JSON/JSONL.
+5. **ClickHouse ≥ 25.11 is the script's stated baseline for Parquet exports.** The lab script says that on older ClickHouse, Langfuse's Parquet blob-storage export can "succeed" (manifest written) while producing an invalid/incomplete file, and that failures surface reliably on ≥ 25.11. That is the script's own comment: this run used only ClickHouse **26.8.19.9** and did not test any older version, so the claim is **not re-measured**. Below that baseline, prefer CSV/JSON/JSONL.
 
 6. **Overlays are independent; expect orphan warnings.** Each feature (masking, governance) is a separate compose overlay. Bringing one up recreates `web`/`worker` with *that* overlay's env only — so running lab 10 printed an orphan-container warning for lab 08's masking sidecar and recreated the worker without it. Combine overlays (`-f … -f …`) to run several features at once.
 
-7. **Interpreter auto-detection in lab 08.** The driver picks its Python itself — `.venv/bin/python` in the lab directory if present, else `python3`, else `python` — and the 2026-10-06 log shows `(using interpreter: python3)`. This was added during the 2026-07-26 run, when the driver (hard-coded `python`) failed because macOS does not provide that name; it was not re-tested against a missing `python3`.
+7. **Interpreter auto-detection in lab 08.** The driver picks its Python itself — `.venv/bin/python` in the lab directory if present, else `python3`, else `python` — and the 2026-10-08 log shows `(using interpreter: python3)`. This was added during the 2026-07-26 run, when the driver (hard-coded `python`) failed because macOS does not provide that name; it was not re-tested against a missing `python3`.
 
 ## Reproduce it
 
@@ -504,18 +508,18 @@ _base/bin/down.sh v3 --purge         # tear down + wipe volumes
 
 **제목(안):** "Langfuse를 ClickHouse 위에서 셀프호스팅하기 — 엔터프라이즈 기능까지 직접 돌려본 기록"
 
-1. **왜 이 글인가** — 대부분의 Langfuse 튜토리얼은 "Cloud에 trace 보내기"에서 끝난다. 이 글은 셀프호스팅 + 그 밑을 떠받치는 **ClickHouse 백엔드**를 SA 관점에서 직접 열어본다. (환경표: Langfuse v3.225.11 / ClickHouse 26.8.18.2 / SDK 3.15.0, 2026-10-06 실행)
+1. **왜 이 글인가** — 대부분의 Langfuse 튜토리얼은 "Cloud에 trace 보내기"에서 끝난다. 이 글은 셀프호스팅 + 그 밑을 떠받치는 **ClickHouse 백엔드**를 SA 관점에서 직접 열어본다. (환경표: Langfuse v3.225.11 / ClickHouse 26.8.19.9 / SDK 3.15.0, 2026-10-08 실행)
 2. **아키텍처 한 장** — web·worker + Postgres(OLTP: 사용자·조직·프롬프트·감사로그) + **ClickHouse(OLAP: trace·observation·score)** + Redis + MinIO. "trace는 Postgres에 없다, ClickHouse에 있다."
-3. **OSS 트랙 (01–04)** — headless init로 클릭 없이 부팅 → SDK로 40 trace → **ClickHouse SQL로 비용/지연 p95/품질 분석**. 여기서 **ReplacingMergeTree 함정**(raw 41 → FINAL 40) 설명. (발견 #2)
+3. **OSS 트랙 (01–04)** — headless init로 클릭 없이 부팅 → SDK로 40 trace → **ClickHouse SQL로 비용/지연 p95/품질 분석**. 여기서 **ReplacingMergeTree 함정**(raw 42 → FINAL 40) 설명. (발견 #2)
 4. **Enterprise 트랙 (05–11)** — 라이선스 활성화 → Instance Management API 응답 확인. RBAC/SCIM로 **조직 전체 VIEWER지만 특정 프로젝트만 ADMIN**인 Bob(발견: 프로젝트 단위 RBAC). 데이터 보존 + 감사 로그.
 5. **하이라이트: 서버측 데이터 마스킹을 ClickHouse로 *증명*** — PII/시크릿을 심은 trace 전송 → `position()`으로 원문 부재(=0) + `[REDACTED_*]` 존재(24행, 사이드카 redactions=84) 확인. "마스킹한다"를 **검증 가능한 명제**로 바꾸는 게 핵심. (발견 #1)
 6. **프롬프트 거버넌스** — `production` 라벨이 v1→v2로 **이동**(v1 labels=`{}`)하는 것을 보고 왜 protected label이 필요한지 연결. protected label UI 토글 자체는 이번 실행에서 하지 않았다. (발견 #3)
-7. **데이터 반출: Parquet ↔ ClickHouse 라운드트립** — `INSERT INTO FUNCTION s3(...)` → 되읽기 **52행**(v3 스크립트는 되읽은 행 수만 출력한다). archive-then-delete. 그리고 **버전 드리프트 함정**: 통합 API가 v3.197.1(2026-07-26 실행, 이번에 재실행하지 않음)에서는 `PARQUET`을 거부(400)했고 v3.225.11(2026-10-06 실행)에서는 수락한다 — 공개 OpenAPI 스펙은 실행 이미지보다 앞설 수 있다. + **CH ≥ 25.11** 권장은 스크립트 주석 기준이며 이번에 재검증하지 않았다. (발견 #4, #5)
+7. **데이터 반출: Parquet ↔ ClickHouse 라운드트립** — `INSERT INTO FUNCTION s3(...)` → 원본과 되읽은 행 수를 비교해 **52 == 52**. archive-then-delete. 그리고 **버전 드리프트 함정**: 통합 API가 v3.197.1(2026-07-26 실행, 이번에 재실행하지 않음)에서는 `PARQUET`을 거부(400)했고 v3.225.11(2026-10-08 실행)에서는 수락한다 — 공개 OpenAPI 스펙은 실행 이미지보다 앞설 수 있다. + **CH ≥ 25.11** 권장은 스크립트 주석 기준이며 이번에 재검증하지 않았다. (발견 #4, #5)
 8. **운영 메모** — 오버레이 독립성/orphan 경고(발견 #6), macOS `python` 이식성(발견 #7).
 9. **마무리** — 셀프호스팅 Langfuse는 사실상 실전 ClickHouse 애플리케이션이며, ClickHouse가 있으면 관측성·컴플라이언스(마스킹·보존·반출)를 *데이터로* 증명할 수 있다.
 
-**추천 코드/캡처:** 마스킹 leak=0 SQL, RMT raw vs FINAL, 프롬프트 라벨 이동 테이블, `s3()` 되읽기 52행, 버전별 blob-storage 응답(v3.225.11 수락 — 위 로그, v3.197.1 400 — 이전 실행 기록). (400 응답을 제외하면 모두 위 로그에서 그대로 인용 가능)
+**추천 코드/캡처:** 마스킹 leak=0 SQL, RMT raw vs FINAL, 프롬프트 라벨 이동 테이블, `s3()` 라운드트립 52 == 52, 버전별 blob-storage 응답(v3.225.11 수락 — 위 로그, v3.197.1 400 — 이전 실행 기록). (400 응답을 제외하면 모두 위 로그에서 그대로 인용 가능)
 
 ---
 
-*Captured on 2026-10-06 by running every script in this directory end-to-end (offline, real enterprise licence key) on Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.18.2. The raw per-step logs were kept outside the repository.*
+*Captured on 2026-10-08 by running every script in this directory end-to-end (offline, real enterprise licence key) on Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.19.9. The raw per-step logs were kept outside the repository.*

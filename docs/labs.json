@@ -1,16 +1,64 @@
 {
   "repo": "langfuse-hols",
-  "generated": "2026-10-06T10:33:51Z",
+  "generated": "2026-10-08T13:08:19Z",
   "labs": [
     {
+      "path": "labs/v3/langfuse-ee",
+      "title_ko": "ClickHouse 위에서 Langfuse 셀프호스팅 워크숍 (Langfuse v3)",
+      "summary_ko": "Langfuse v3를 직접 띄우고 ClickHouse 백엔드를 SQL로 들여다본 뒤, 엔터프라이즈 기능(RBAC, SCIM, 감사 로그, 데이터 마스킹 등)을 실습합니다.",
+      "title_en": "Self-Hosting Langfuse on ClickHouse: Workshop (Langfuse v3)",
+      "summary_en": "Self-host Langfuse v3, query its ClickHouse backend with SQL, then exercise the enterprise features: RBAC, SCIM, audit logs, retention and data masking.",
+      "category": "third-party",
+      "tags": [
+        "langfuse",
+        "llm",
+        "observability"
+      ],
+      "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v3/langfuse-ee/README.md#한국어",
+      "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v3/langfuse-ee/README.md#english"
+    },
+    {
+      "path": "labs/v3/langfuse-eval",
+      "title_ko": "Langfuse 품질 루프: 프롬프트, 데이터셋, 실험, 평가 (Langfuse v3)",
+      "summary_ko": "Langfuse의 프롬프트 관리, 데이터셋, 실험, LLM-as-a-judge, 사람 주석을 차례로 돌려 보고, 모든 품질 점수가 ClickHouse 백엔드에 어떻게 쌓이는지 확인합니다. 라이선스 키는 필요 없습니다.",
+      "title_en": "The Langfuse quality loop: prompts, datasets, experiments and evals (Langfuse v3)",
+      "summary_en": "Walk Langfuse's prompt management, datasets, experiments, LLM-as-a-judge and human annotation, then see how every quality score lands in the ClickHouse backend. No license key needed.",
+      "category": "third-party",
+      "tags": [
+        "langfuse",
+        "llm"
+      ],
+      "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v3/langfuse-eval/README.md#한국어",
+      "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v3/langfuse-eval/README.md#english"
+    },
+    {
       "path": "labs/v4/langfuse-ee",
-      "title_ko": "ClickHouse 위에서 Langfuse 셀프호스팅 워크숍 (OSS + Enterprise)",
+      "title_ko": "ClickHouse 위에서 Langfuse 셀프호스팅 워크숍 (OSS + Enterprise, Langfuse v4)",
       "summary_ko": "Langfuse를 직접 띄우고 ClickHouse 백엔드를 SQL로 들여다본 뒤, 엔터프라이즈 기능(RBAC, SCIM, 감사 로그, 데이터 마스킹 등)을 실습합니다.",
-      "title_en": "Self-Hosting Langfuse on ClickHouse: Workshop (OSS + Enterprise)",
+      "title_en": "Self-Hosting Langfuse on ClickHouse: Workshop (OSS + Enterprise, Langfuse v4)",
       "summary_en": "Self-host Langfuse, query its ClickHouse backend with SQL, then exercise the enterprise features: RBAC, SCIM, audit logs, retention and data masking.",
       "category": "third-party",
+      "tags": [
+        "langfuse",
+        "llm",
+        "observability"
+      ],
       "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/langfuse-ee/README.md#한국어",
       "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/langfuse-ee/README.md#english"
+    },
+    {
+      "path": "labs/v4/langfuse-eval",
+      "title_ko": "Langfuse 품질 루프: 프롬프트, 데이터셋, 실험, 평가 (Langfuse v4)",
+      "summary_ko": "Langfuse v4에서 프롬프트 관리, 데이터셋, 실험, LLM-as-a-judge, 사람 주석을 차례로 돌려 보고, 모든 품질 점수가 ClickHouse 백엔드에 어떻게 쌓이는지 확인합니다. 라이선스 키는 필요 없습니다.",
+      "title_en": "The Langfuse quality loop: prompts, datasets, experiments and evals (Langfuse v4)",
+      "summary_en": "Walk Langfuse's prompt management, datasets, experiments, LLM-as-a-judge and human annotation on the v4 stack, where observations are the unit stored in ClickHouse, and see how every quality score lands there.",
+      "category": "third-party",
+      "tags": [
+        "langfuse",
+        "llm"
+      ],
+      "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/langfuse-eval/README.md#한국어",
+      "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/langfuse-eval/README.md#english"
     }
   ]
 }

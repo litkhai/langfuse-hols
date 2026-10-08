@@ -8,6 +8,8 @@
 
 > **Langfuse v3 track.** The stack versions are pinned in [`_base/v3/versions.env`](../../../_base/v3/versions.env). This is the lab as it was before the v4 port, kept for Langfuse v3 deployments; v3 gets security patches only until 2027-01-31. For v4 use [`labs/v4/langfuse-eval`](../../v4/langfuse-eval/README.md).
 
+> **Related notes** (Korean): [Langfuse 중심 기능 - 모델 관제 및 평가](https://clickhouse.litkhai.dev/articles/third-party/langfuse/)
+
 A hands-on tour of Langfuse's **product features for LLM quality** — prompt
 management, datasets, experiments, LLM-as-a-judge, and human annotation — then a
 look at how every quality signal lands in the **ClickHouse** backend.
@@ -186,6 +188,8 @@ Created: 2026-07-26
 ## 한국어
 
 > **Langfuse v3 트랙.** 스택 버전은 [`_base/v3/versions.env`](../../../_base/v3/versions.env)에 고정되어 있습니다. v4 포팅 이전의 실습을 Langfuse v3 운영 환경을 위해 남겨 둔 것입니다. v3 보안 패치는 2027-01-31까지만 나옵니다. v4는 [`labs/v4/langfuse-eval`](../../v4/langfuse-eval/README.md)를 쓰세요.
+
+> **관련 글**: [Langfuse 중심 기능 - 모델 관제 및 평가](https://clickhouse.litkhai.dev/articles/third-party/langfuse/)
 
 Langfuse의 **LLM 품질 관리 제품 기능** — 프롬프트 관리, 데이터셋, 실험,
 LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 품질 신호가 **ClickHouse**

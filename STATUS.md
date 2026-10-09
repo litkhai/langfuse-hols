@@ -32,7 +32,7 @@ The per-lab results are in each lab's README, and the logs in each lab's `lab-ou
 GitHub secret scanning and push protection are on.
 
 Last result: every job green on the heads of #36 (`1a6e4c9`), #38 (`c6ac9a9`), #39 (`d9c55d4`), #42 (`86b72e4`),
-#44 (`014e82a`), #47 (`8ec4744`), #48 (`c36f1dd`), #51 (`7680dbb`) and #52 (`e9a1c3b`). The workflow runs on pull requests only, not on pushes to `main`.
+#44 (`014e82a`), #47 (`8ec4744`), #48 (`c36f1dd`), #51 (`7680dbb`), #52 (`e9a1c3b`) and #60 (`5929652`). The workflow runs on pull requests only, not on pushes to `main`.
 
 ## Pins
 

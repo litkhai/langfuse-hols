@@ -267,7 +267,7 @@ Pairs with lab 07 as **archive-then-delete**: export before retention deletes. S
 
 ### 📝 Verification status
 
-Verified **end-to-end on 2026-10-08** against **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.19.9** (track v3, [#49](https://github.com/litkhai/langfuse-hols/issues/49)).
+Verified **end-to-end on 2026-10-10** against **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.22.13** (track v3, [#55](https://github.com/litkhai/langfuse-hols/issues/55)).
 
 - **Stack:** the pinned stack in [`_base/`](../../../_base/README.md) (`_base/v3/versions.env`): Docker 29.8.2, Compose v5.5.1, Python 3.12.14, fresh volumes.
 - **EE:** a real enterprise license key.
@@ -279,7 +279,7 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 |---|---|
 | `01` stack up | 6 containers; `/api/public/health` → version `3.225.11`; `_base/bin/check.sh v3` all PASS, including the health version equal to the pin and ClickHouse migrations applied 37 / shipped 37 |
 | `02` generate traces | 40 traces ingested via the SDK (offline mode) |
-| `03` explore | tables `traces` / `observations` / `scores` are `ReplacingMergeTree`, monthly-partitioned; `traces` holds 42 raw rows but 40 with `FINAL` + `is_deleted = 0`; 132 `observations` and 76 `scores` rows on disk |
+| `03` explore | tables `traces` / `observations` / `scores` are `ReplacingMergeTree`, monthly-partitioned; `traces` holds 42 raw rows but 40 with `FINAL` + `is_deleted = 0`; 133 `observations` and 76 `scores` rows on disk |
 | `04` analytics | all 8 queries return rows; per-model cost non-zero for the three simulated models |
 | `05` EE activate | Instance Management API `/api/admin/organizations` → HTTP 200 (license valid) |
 | `06` RBAC/SCIM | org + project + 2 SCIM users + project-level role override, all via API |
@@ -289,7 +289,7 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `10` governance | all `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` confirmed in the container env |
 | `11` parquet export | the integration API **accepts `fileType: PARQUET`** on v3.225.11; ClickHouse `s3()` writes the active traces to Parquet on MinIO and reads them back: source count = read-back count, **52 == 52**. The script fails on a mismatch or an empty table (#37). The hourly job had not fired before teardown, so its files are not proven |
 
-> **Version drift (lab 11), closed by the pin.** On v3.197.1 (2026-07-26) the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. The pinned **v3.225.11** accepts it (2026-10-08). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
+> **Version drift (lab 11), closed by the pin.** On v3.197.1 (2026-07-26) the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. The pinned **v3.225.11** accepts it (2026-10-10). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
 >
 > **Portability note (lab 08):** the driver auto-detects the Python interpreter (prefers `.venv/bin/python`, falls back to `python3`, which is the track venv's when `.venv-v3` is activated), so it runs on macOS where bare `python` doesn't exist.
 
@@ -588,7 +588,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 
 ### 📝 검증 상태
 
-**2026-10-08**에 **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.19.9**에서 **end-to-end 검증**했습니다(v3 트랙, [#49](https://github.com/litkhai/langfuse-hols/issues/49)).
+**2026-10-10**에 **Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.22.13**에서 **end-to-end 검증**했습니다(v3 트랙, [#55](https://github.com/litkhai/langfuse-hols/issues/55)).
 
 - **스택:** [`_base/`](../../../_base/README.md)의 고정 스택(`_base/v3/versions.env`)입니다. Docker 29.8.2, Compose v5.5.1, Python 3.12.14, 새 볼륨을 썼습니다.
 - **EE:** 실제 엔터프라이즈 라이선스 키를 썼습니다.
@@ -600,7 +600,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 |---|---|
 | `01` 스택 기동 | 컨테이너 6개; `/api/public/health` → 버전 `3.225.11`; `_base/bin/check.sh v3` 전부 PASS(health 버전이 고정 버전과 같음, ClickHouse 마이그레이션 37/37 포함) |
 | `02` 트레이스 생성 | SDK(오프라인 모드)로 40건 적재 |
-| `03` 탐색 | `traces`/`observations`/`scores`는 `ReplacingMergeTree`, 월별 파티션; `traces`는 원시 42행이지만 `FINAL` + `is_deleted = 0`으로는 40행; 디스크의 `observations` 132행, `scores` 76행 |
+| `03` 탐색 | `traces`/`observations`/`scores`는 `ReplacingMergeTree`, 월별 파티션; `traces`는 원시 42행이지만 `FINAL` + `is_deleted = 0`으로는 40행; 디스크의 `observations` 133행, `scores` 76행 |
 | `04` 분석 | 8개 쿼리 모두 결과 반환; 시뮬레이션한 세 모델 모두 비용이 0이 아님 |
 | `05` EE 활성화 | Instance Management API `/api/admin/organizations` → HTTP 200 (라이선스 유효) |
 | `06` RBAC/SCIM | 조직 + 프로젝트 + SCIM 사용자 2명 + 프로젝트 단위 역할 오버라이드, 전부 API로 |
@@ -610,7 +610,7 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/traces.parquet
 | `10` 거버넌스 | 컨테이너 env에서 `LANGFUSE_UI_*` + `LANGFUSE_ALLOWED_ORGANIZATION_CREATORS` 전부 확인 |
 | `11` parquet 반출 | v3.225.11의 통합 API가 **`fileType: PARQUET`를 허용**; ClickHouse `s3()`가 활성 trace를 MinIO에 Parquet로 쓰고 다시 읽음: 원본 행 수 = 되읽은 행 수, **52 == 52**. 두 값이 다르거나 테이블이 비어 있으면 스크립트가 실패함(#37). 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
 
-> **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1(2026-07-26)에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). 고정한 **v3.225.11**은 허용합니다(2026-10-08). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
+> **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1(2026-07-26)에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). 고정한 **v3.225.11**은 허용합니다(2026-10-10). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
 >
 > **이식성 노트(랩 08):** 드라이버가 Python 인터프리터를 자동 감지합니다. `.venv/bin/python`을 먼저 찾고, 없으면 `python3`를 씁니다(`.venv-v3`를 활성화했다면 그 트랙 venv의 것). 그래서 bare `python`이 없는 macOS에서도 실행됩니다.
 

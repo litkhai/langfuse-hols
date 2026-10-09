@@ -2,10 +2,10 @@
 # Install into a virtual environment (Python 3.10 or newer; langfuse 4.x needs it):
 #   python3.12 -m venv .venv-v4 && .venv-v4/bin/pip install -r _base/v4/requirements.txt
 #
-# Exact pins, resolved from PyPI on 2026-10-06 (anthropic and the instrumentation
-# package are unchanged from the 2026-10-02 resolution). The two Anthropic packages are
+# Exact pins, resolved from PyPI on 2026-10-06 (anthropic re-resolved on 2026-10-10; the
+# instrumentation package is unchanged from the 2026-10-02 resolution). The two Anthropic packages are
 # only used when ANTHROPIC_API_KEY is set (real model calls); without it the labs run
 # fully offline and never import them.
 langfuse==4.17.0
-anthropic==1.11.0
+anthropic==1.12.1
 opentelemetry-instrumentation-anthropic==0.62.4

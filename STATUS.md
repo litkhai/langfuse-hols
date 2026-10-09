@@ -32,7 +32,7 @@ The per-lab results are in each lab's README, and the logs in each lab's `lab-ou
 GitHub secret scanning and push protection are on.
 
 Last result: every job green on the heads of #36 (`1a6e4c9`), #38 (`c6ac9a9`), #39 (`d9c55d4`), #42 (`86b72e4`),
-#44 (`014e82a`), #47 (`8ec4744`), #48 (`c36f1dd`), #51 (`7680dbb`), #52 (`e9a1c3b`) and #60 (`5929652`). The workflow runs on pull requests only, not on pushes to `main`.
+#44 (`014e82a`), #47 (`8ec4744`), #48 (`c36f1dd`), #51 (`7680dbb`), #52 (`e9a1c3b`), #60 (`5929652`) and #61 (`7d3a6ad`). The workflow runs on pull requests only, not on pushes to `main`.
 
 ## Pins
 
@@ -70,5 +70,5 @@ The v4 minimum versions and the v3 support end date come from Langfuse's
 
 Tracked as issues, not here: [all open](https://github.com/litkhai/langfuse-hols/issues) ·
 [needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify) (none open on 2026-10-10).
-Open on 2026-10-10: [#35](https://github.com/litkhai/langfuse-hols/issues/35) (remove the v3 track after 2027-01-31) and
+Open on 2026-10-10: [#62](https://github.com/litkhai/langfuse-hols/issues/62) (bump `anthropic` 1.12.1 → 1.13.0 with the next pin bump), [#35](https://github.com/litkhai/langfuse-hols/issues/35) (remove the v3 track after 2027-01-31) and
 [#12](https://github.com/litkhai/langfuse-hols/issues/12) (revisit D7 past four labs). [#8](https://github.com/litkhai/langfuse-hols/issues/8) (roadmap) was closed as not planned on 2026-10-07.

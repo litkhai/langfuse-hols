@@ -2,8 +2,8 @@
 
 **As of 2026-10-08** — the pins are Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, and both tracks were run end to end on them ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). That run includes the lab 11 changes of [#37](https://github.com/litkhai/langfuse-hols/issues/37) and the step-07 `NULL` handling of [#46](https://github.com/litkhai/langfuse-hols/issues/46). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
 [#33](https://github.com/litkhai/langfuse-hols/issues/33)).
-The notes-site export (`docs/labs.json`) now publishes `labs/v4/langfuse-ee`; `labs/v3/` is not
-published. As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
+As of 2026-10-08: the notes-site export (`docs/labs.json`) publishes all four labs, both tracks
+([#56](https://github.com/litkhai/langfuse-hols/issues/56), [#58](https://github.com/litkhai/langfuse-hols/issues/58)). As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
 [litkhai/clickhouse-hols](https://github.com/litkhai/clickhouse-hols/tree/pre-split-2026-10) with history.
 
 ## Verification
@@ -69,6 +69,6 @@ The v4 minimum versions and the v3 support end date come from Langfuse's
 ## Open work
 
 Tracked as issues, not here: [all open](https://github.com/litkhai/langfuse-hols/issues) ·
-[needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify) (none open on 2026-10-08).
-Open on 2026-10-08: [#35](https://github.com/litkhai/langfuse-hols/issues/35) (remove the v3 track after 2027-01-31) and
+[needs a re-run](https://github.com/litkhai/langfuse-hols/issues?q=is%3Aopen+label%3Are-verify).
+Open on 2026-10-10: [#55](https://github.com/litkhai/langfuse-hols/issues/55) (bump the pins and re-run both tracks; `re-verify`), [#35](https://github.com/litkhai/langfuse-hols/issues/35) (remove the v3 track after 2027-01-31) and
 [#12](https://github.com/litkhai/langfuse-hols/issues/12) (revisit D7 past four labs). [#8](https://github.com/litkhai/langfuse-hols/issues/8) (roadmap) was closed as not planned on 2026-10-07.

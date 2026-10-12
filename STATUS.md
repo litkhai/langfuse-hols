@@ -1,6 +1,6 @@
 # STATUS.md
 
-**As of 2026-10-10** — the pins are Langfuse v4 4.56.0 and ClickHouse 26.8.22.13, and both tracks were run end to end on them ([#55](https://github.com/litkhai/langfuse-hols/issues/55)). As of 2026-10-08: Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, run end to end ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
+**As of 2026-10-12** — `langfuse-ee` v4 has four more steps (12–15: masking failure modes, project isolation, field encryption, ClickHouse row policies), run end to end on the current pins ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). As of 2026-10-10: the pins are Langfuse v4 4.56.0 and ClickHouse 26.8.22.13, and both tracks were run end to end on them ([#55](https://github.com/litkhai/langfuse-hols/issues/55)). As of 2026-10-08: Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, run end to end ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
 [#33](https://github.com/litkhai/langfuse-hols/issues/33)).
 As of 2026-10-08: the notes-site export (`docs/labs.json`) publishes all four labs, both tracks
 ([#56](https://github.com/litkhai/langfuse-hols/issues/56), [#58](https://github.com/litkhai/langfuse-hols/issues/58)). As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
@@ -15,6 +15,8 @@ a real enterprise licence key (Docker 29.8.2, Compose v5.5.1, Python 3.12.14) ([
 |---|---|---|---|
 | v4 — [langfuse-ee](labs/v4/langfuse-ee/README.md), [langfuse-eval](labs/v4/langfuse-eval/README.md) | Langfuse v4.56.0 / SDK 4.17.0 / ClickHouse 26.8.22.13 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline, and real Anthropic `claude-haiku-4-5` for `langfuse-ee` 02 and `langfuse-eval` 04–05 (managed evaluator included) |
 | v3 — [langfuse-ee](labs/v3/langfuse-ee/README.md), [langfuse-eval](labs/v3/langfuse-eval/README.md) | Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.22.13 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline only; the OpenAI path was not run |
+
+On **2026-10-12**, `langfuse-ee` v4 steps 12–15 were run end to end on the same v4 pins, with the licence key and no model calls except step 14's real `claude-haiku-4-5` judge run (2026-10-13, 9 calls), on existing volumes ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). The rest of the table was not re-run.
 
 The per-lab results are in each lab's README, and the logs in each lab's `lab-output.md`.
 
@@ -46,6 +48,7 @@ fixed tags and digests there. A run can override any of them without editing a f
 | `clickhouse/clickhouse-server` | 26.8.22.13 | 26.8.22.13 | Newest patch of the current LTS on 2026-10-10 (tag pushed 2026-10-09T14:51Z; the changelogs of 26.8.20–22 list bug-fix and performance backports only). Langfuse v4 requires ≥ 25.12 and recommends 26.4. Langfuse 3.225.11 applies all 37 of its ClickHouse migrations on it, none dirty, in the v3 run's `check.sh` (2026-10-10) |
 | `langfuse` (PyPI) | 3.15.0 | 4.17.0 | Latest of each SDK major (2026-05-21, 2026-10-05); both need Python ≥ 3.10 |
 | `anthropic`, `opentelemetry-instrumentation-anthropic` (PyPI) | — | 1.12.1, 0.62.4 | v4's optional real calls; latest on 2026-10-10. v3's real-call path uses OpenAI, is not pinned, and is not part of a verification run |
+| `cryptography` (PyPI) | — | 50.0.2 | v4 `langfuse-ee` step 14 (AES-GCM field encryption); latest on PyPI on 2026-10-12 (PyPI JSON, uploaded 2026-09-30) |
 | `redis` | 7.2.16 | 7.2.16 | Langfuse v4 requires ≥ 7.0 and recommends 7.2 |
 | `postgres` | 17.11 | 17.11 | Langfuse v4 requires ≥ 15 (16 recommended); 17 is the upstream compose default and this stack's existing major |
 | `cgr.dev/chainguard/minio` | `@sha256:4cf4831a…0034` | same | The registry publishes only `latest` / `latest-dev`, so the pin is the index digest of `latest`, resolved on 2026-10-06 |

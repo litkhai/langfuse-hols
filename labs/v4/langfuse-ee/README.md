@@ -65,6 +65,14 @@ langfuse-ee/
 ├── 09-ee-protected-prompts.sh   # Versioned prompts + deployment labels + protected labels
 ├── 10-ee-instance-governance.sh # UI customization + organization-creators allowlist
 ├── 11-ee-parquet-export.sh      # Blob-storage Parquet export + ClickHouse s3() round-trip
+├── 12-ee-masking-failure-modes.sh # Masking callback down / slow / 500 × FAIL_CLOSED, per-project rule, legacy path, S3 raw copy
+│   └── 12-send-marker.py        #   ↳ one OTLP trace with a scenario-unique fake secret
+├── 13-ee-project-isolation.sh   # Org NONE + project VIEWER: what a user can and cannot see across projects
+├── 14-field-encryption.sh       # AES-GCM field encryption in the SDK hook, checked in ClickHouse, API and search
+│   ├── 14-field-encryption.py   #   ↳ sender with mask_otel_spans
+│   ├── 14-decrypt-fields.py     #   ↳ reader: public API + per-project key
+│   └── 14-judge-encrypted.sh    #   ↳ real managed LLM-as-a-judge on the encrypted input (claude-haiku-4-5, ~3 calls)
+├── 15-ch-row-policy.sh          # ClickHouse OSS row policy on project_id; CREATE MASKING POLICY on OSS
 └── 99-cleanup.sh                # Wrapper → _base/bin/down.sh v4: tear the stack down (--purge to wipe volumes)
 ```
 
@@ -73,12 +81,12 @@ The stack itself is **shared with the other labs** and lives in [`_base/`](../..
 ```
 _base/
 ├── .env.example                 # Secrets, headless-init, EE license key, SDK keys (copy to _base/.env)
-├── v3/ · v4/                    # Per track: versions.env (image pins) · requirements.txt (v4: langfuse, anthropic, opentelemetry-instrumentation-anthropic) · seed_traces.py
+├── v3/ · v4/                    # Per track: versions.env (image pins) · requirements.txt (v4: langfuse, anthropic, opentelemetry-instrumentation-anthropic, cryptography) · seed_traces.py
 ├── docker-compose.yml           # OSS stack (pinned images): web · worker · postgres · clickhouse · redis · minio
 ├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
 ├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
 ├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
-├── masking/masking_service.py   # Lab 08: tiny stdlib masking-callback sidecar
+├── masking/masking_service.py   # Labs 08, 12: tiny stdlib masking-callback sidecar (+ /mask-slow, /mask-500, per-project rule)
 └── bin/                         # up.sh · check.sh · down.sh (first argument: the track, v3 or v4)
 ```
 
@@ -131,6 +139,10 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./09-ee-protected-prompts.sh # versioned prompts + deployment labels + protected labels
 ./10-ee-instance-governance.sh # UI customization + organization-creators allowlist
 ./11-ee-parquet-export.sh    # Parquet export to object storage + ClickHouse s3() round-trip
+./12-ee-masking-failure-modes.sh  # masking callback down / slow / 500, per-project rule, legacy path, S3 raw copy (~4 min)
+./13-ee-project-isolation.sh # org NONE + project VIEWER: cross-project visibility
+./14-field-encryption.sh     # AES-GCM field encryption in the SDK hook (needs cryptography from requirements.txt)
+./15-ch-row-policy.sh        # ClickHouse OSS row policy on project_id
 ```
 
 ### 🧩 EE feature coverage
@@ -141,16 +153,18 @@ Every Enterprise entitlement listed on the [Langfuse license-key page](https://l
 |---|---|---|
 | Instance Management API | 05 | — |
 | Org Management API & SCIM | 06 | — |
-| Project-level RBAC roles | 06 | — |
+| Project-level RBAC roles | 06, 13 | — |
 | Audit Logs | 07 | (audit log is in Postgres) |
 | Data Retention policies | 07 | nightly worker deletes old rows from ClickHouse |
-| **Server-Side Data Masking** | 08 | **proof runs on ClickHouse** — raw secrets never persist |
+| **Server-Side Data Masking** | 08, 12 | **proof runs on ClickHouse** — raw secrets never persist; 12 shows when they do |
 | **Protected Prompt Labels** | 09 | (prompts are in Postgres) |
 | **UI Customization** | 10 | — |
 | **Organization Creators** | 10 | — |
 | Parquet Blob-Storage Export* | 11 | **ClickHouse `s3()` writes + re-reads the Parquet** |
 
 \* Scheduled blob-storage export is available to all self-hosted projects (not license-gated), but it's the enterprise data-platform / archival story and the most ClickHouse-native lab — so it lives on the enterprise track.
+
+Steps 14 and 15 are not license-gated: 14 uses the Python SDK's `mask_otel_spans` hook, and 15 uses ClickHouse OSS row policies. They are here because regulated deployments ask for them together with 06/08.
 
 ### 📖 Lab Walkthrough
 
@@ -265,6 +279,72 @@ The script prints the source and Parquet row counts side by side and exits `1` i
 
 Pairs with lab 07 as **archive-then-delete**: export before retention deletes. SA gotcha baked in — on self-hosted, **ClickHouse < 25.11** may not surface Parquet export failures (a run can "succeed" with an invalid file); upgrade to ≥ 25.11 or use CSV/JSON for reliable failure detection.
 
+#### 12 — Masking failure modes ([12-ee-masking-failure-modes.sh](12-ee-masking-failure-modes.sh))
+
+Lab 08 shows the happy path; this step breaks the callback. What the 4.56.0 worker does, read from the image
+(`worker/dist/queues/otelIngestionQueue.js`, `@langfuse/shared/.../ingestionMasking/applyIngestionMasking.js`, `env.js`):
+masking runs **only in the OTLP ingestion queue, after the raw payload is downloaded from the S3 event bucket**. The defaults are
+`TIMEOUT_MS=500`, `FAIL_CLOSED=false` and `MAX_RETRIES=1` (2 attempts), and the callback gets `X-Langfuse-Project-Id` / `X-Langfuse-Org-Id`.
+The web container never calls it. The repository overlay sets `FAIL_CLOSED=true` / `2000 ms`, so every scenario sets both explicitly. Measured on 2026-10-12:
+
+| Callback | `FAIL_CLOSED=false` (Langfuse default) | `FAIL_CLOSED=true` |
+|---|---|---|
+| healthy `/mask` | masked (positive control) | — |
+| down (closed port, or sidecar stopped) | **raw secret stored** in ClickHouse | dropped |
+| slow (2 s against a 500 ms timeout) | **raw secret stored** | dropped |
+| HTTP 500 | **raw secret stored** | dropped |
+
+- **Dropped:** a drop is shown by the worker log line `Dropping OTEL event due to masking failure` with its `fileKey`, and by no row after a wait longer than the slowest raw case. The S3 object is still there, so the event can be replayed.
+- **Per-project rules:** one callback can apply different rules per project by reading `X-Langfuse-Project-Id`. With `MASK_STRICT_PROJECT_IDS=<A>`, an account number is redacted in A and kept in B, and `sk-` keys are redacted in both.
+- **Legacy `/api/public/ingestion`:** in the default `events_only` write mode it answers HTTP **207** with a per-event 400 for `trace-create`, `span-create`, `generation-create` and `event-create`. Only `score-create` is accepted, and it skips masking: its raw `comment` lands in `scores`.
+- **Raw copy in S3:** the raw OTLP payload stays in the event bucket at `events/otel/<project>/<yyyy>/<mm>/<dd>/<hh>/<mm>/<uuid>.json`. No masked copy is written back, and legacy score events are kept raw at `events/<project>/score/…`. The event bucket therefore holds the unmasked data and needs the same protection as the source system, plus a lifecycle rule.
+
+#### 13 — Project isolation ([13-ee-project-isolation.sh](13-ee-project-isolation.sh))
+
+New org with projects A and B. Two local users are created with `POST /api/auth/signup`, since SCIM takes no password:
+- a **viewer** with org role `NONE` and `VIEWER` on A only;
+- an **orgadmin** with org role `ADMIN` and no project role.
+
+Both log in over NextAuth credentials (curl cookie jar).
+
+| Surface | Viewer on A | Viewer on B | Orgadmin on A and B |
+|---|---|---|---|
+| session project list | listed | **absent** | both listed |
+| tRPC `traces.byId`, `events.all` | 200 | **401 UNAUTHORIZED** | 200 |
+| tRPC `projectApiKeys.create` | 403 | — | 200 |
+| browser `/project/<id>/traces` | tracing page | **"Project Not Found"** | — |
+
+- **UI deny is client-side:** the page route returns the same static shell to everyone, so the deny happens in the client from the session and tRPC. The browser check (2026-10-12, a viewer set up the same way) showed only A in the organization page.
+- **Public API:** it authenticates with project API keys, not users. Key A reading B's trace returns HTTP 200 with an empty list, and the control (key B) returns the trace.
+
+#### 14 — Field encryption in the SDK hook ([14-field-encryption.sh](14-field-encryption.sh))
+
+**What is encrypted.** `Langfuse(mask_otel_spans=fn)` (SDK 4.17.0) patches span attributes before export. The sender encrypts
+`langfuse.trace.input`, `langfuse.observation.input` and every `*.metadata.account_no` with AES-256-GCM:
+- a random 12-byte nonce;
+- AAD = project id;
+- format `enc:v1:<project_id>:<base64url>`.
+
+The output stays plaintext as the search control, and one control trace is sent without the hook. Per-project keys live in
+`_base/.env.field-keys` (mode 600, ignored by `_base/.gitignore`). If the hook raises, the SDK drops the whole batch rather than sending plaintext.
+
+**Results**
+- **Storage:** ClickHouse `events_full` / `events_core` hold 0 plaintext markers and 4/4 `enc:v1:` rows. The control rows show plaintext, which proves the query can see it.
+- **API:** `GET /api/public/v2/observations` returns the ciphertext the UI renders.
+- **Decryption:** [14-decrypt-fields.py](14-decrypt-fields.py) reads with the project key and decrypts. With another project's key it fails with `InvalidTag`.
+- **UI search** (tRPC `events.all`, `searchType` input / content): the plaintext input finds 0 encrypted traces (the control is found), while the plaintext output finds them. Metadata search was not tested.
+- **LLM-as-a-judge** ([14-judge-encrypted.sh](14-judge-encrypted.sh), real `claude-haiku-4-5` calls, 2026-10-13): a managed observation-level evaluator maps only `{{input}}` on root observations. The judge's own traced call shows the prompt it received was `Question: enc:v1:<project>:…`, the stored ciphertext. It scored both encrypted traces 0 (*"The question text is encrypted ciphertext … not readable"*) and the plaintext control 1. The encrypted traces scored 0 in all 6 judgments over three runs. With the first prompt wording the control once scored 0 too, so the prompt was reworded. One passing run is not proof the control is stable. The script disables its rule on exit so no more paid calls follow.
+
+#### 15 — ClickHouse OSS row policies ([15-ch-row-policy.sh](15-ch-row-policy.sh))
+
+The script creates `analyst_a` (`SELECT ON default.*`) and a `USING project_id = '<A>' TO analyst_a` policy on all 12 tables that have `project_id`.
+The Langfuse ClickHouse user has `access_management=0`, so the script drops a temporary admin user into `users.d` and removes it on exit.
+- **The policy filters analyst_a:** it sees only A on every table with data, and `WHERE project_id='<B>'` returns 0.
+- **No bypass:** `merge()`, `FINAL`, `PREWHERE` and `remote('localhost', …)` (after granting `REMOTE`) are filtered too, and `system.parts` is denied.
+- **Langfuse is unaffected:** its account appears in no policy, and `users_without_row_policies_can_read_rows` is `true` (in `config.xml`'s `<access_control_improvements>`, not in `system.server_settings`). The public API for B returned the same 6 observations before and after, and ingestion kept working.
+- **Unfiltered:** `schema_migrations` has no `project_id`, and the `analytics_*` views get no policy of their own.
+- **Masking policy:** `CREATE MASKING POLICY` on 26.8.22.13 fails with `Code: 344 … Masking Policies are available only in ClickHouse Cloud. (SUPPORT_IS_DISABLED)`.
+
 ### 🔑 Gotchas worth remembering
 
 | | Note |
@@ -278,6 +358,9 @@ Pairs with lab 07 as **archive-then-delete**: export before retention deletes. S
 | **EE license on BOTH containers** | `LANGFUSE_EE_LICENSE_KEY` must be set on `langfuse-web` *and* `langfuse-worker`. The overlay does this. |
 | **CH schema ≠ API** | Query ClickHouse directly for labs/debugging, but treat the schema as unstable. For apps, use the Public API / SDK query helpers / Blob Storage Export. |
 | **`retention=0` = forever** | Minimum non-zero retention is 3 days. Pair retention with a Blob Storage Export if you must archive before deletion. |
+| **Masking fails open by default** | `LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED` defaults to `false`: a down, slow (> 500 ms) or erroring callback stores the raw event. Set it to `true` (step 12). |
+| **The event bucket keeps the raw payload** | Masking runs after the worker downloads from S3, and the raw object stays there. Protect and expire the bucket like the source data (step 12). |
+| **v1 read endpoints are off in `events_only`** | `GET /api/public/traces`, `/observations`, `/scores` and `/sessions` return 404. Use `/api/public/v2/observations`. Legacy ingestion takes only `score-create`, with HTTP 207 (steps 12–15). |
 
 ### 📝 Verification status
 
@@ -304,6 +387,18 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `11` parquet export | the integration API **accepts `fileType: PARQUET`** with the `OBSERVATIONS_V2` export source; CH `s3()` round-trip **182 == 182**. The hourly job had not fired before teardown, so its files are not proven |
 
 > **Version drift (lab 11), resolved by the pin.** On v3.197.1 the integration API rejected `fileType: PARQUET` with HTTP 400 (`JSON` / `CSV` / `JSONL` only), although the published OpenAPI spec listed it. v4.48.0 accepted it, and so does the pinned **v4.56.0** (2026-10-10). The lab script still tries `PARQUET` first and falls back to `JSONL`, so it also works against an older image. Validate the API surface against your *running* image, not just the docs.
+
+**Steps 12–15** ([#65](https://github.com/litkhai/langfuse-hols/issues/65)) were verified **end-to-end on 2026-10-12** against **Langfuse v4.56.0 / SDK 4.17.0 / ClickHouse 26.8.22.13**:
+- **Stack:** the same pins and enterprise licence key, on the existing volumes (not fresh), in `events_only` mode.
+- **Model calls:** none, except `14-judge-encrypted.sh` on 2026-10-13 (real `claude-haiku-4-5`, 9 judge calls over three runs).
+- **Positive controls:** each script exits 1 when an expected result is not observed. Every one except the judge run was also run once with an injected fault and failed as it should.
+
+| Step | Result |
+|---|---|
+| `12` masking failure modes | 9 scenarios PASS: fail-open stores raw on down / slow / HTTP 500, fail-closed drops (worker log + S3 object kept); per-project rule via `X-Langfuse-Project-Id`; legacy ingestion 207, only `score-create` accepted and unmasked; raw OTLP payload kept in S3, no masked copy |
+| `13` project isolation | 36 checks PASS; plus a browser check of the viewer's view of B ("Project Not Found") |
+| `14` field encryption | 36 checks PASS; reader 24 PASS incl. wrong-key `InvalidTag`; real judge (2026-10-13): encrypted → 0, control → 1 |
+| `15` ClickHouse row policy | 30 checks PASS; `CREATE MASKING POLICY` → Code 344 on OSS 26.8.22.13 |
 
 Confirmed at runtime and built into the labs:
 
@@ -404,6 +499,14 @@ langfuse-ee/
 ├── 09-ee-protected-prompts.sh   # 버전 관리 프롬프트 + 배포 라벨 + 보호된 라벨
 ├── 10-ee-instance-governance.sh # UI 커스터마이징 + 조직 생성 허용목록
 ├── 11-ee-parquet-export.sh      # Blob 스토리지 Parquet 반출 + ClickHouse s3() 라운드트립
+├── 12-ee-masking-failure-modes.sh # 마스킹 callback 중단/지연/500 × FAIL_CLOSED, 프로젝트별 규칙, 레거시 경로, S3 원본
+│   └── 12-send-marker.py        #   ↳ 시나리오마다 다른 가짜 시크릿을 담은 OTLP trace 한 건
+├── 13-ee-project-isolation.sh   # 조직 NONE + 프로젝트 VIEWER 사용자가 프로젝트 사이에서 보는 것과 못 보는 것
+├── 14-field-encryption.sh       # SDK hook에서 AES-GCM 필드 암호화, ClickHouse·API·검색에서 확인
+│   ├── 14-field-encryption.py   #   ↳ mask_otel_spans를 쓰는 전송기
+│   ├── 14-decrypt-fields.py     #   ↳ 읽기: public API + 프로젝트별 키
+│   └── 14-judge-encrypted.sh    #   ↳ 암호화된 input에 실제 관리형 LLM-as-a-judge (claude-haiku-4-5, 약 3회 호출)
+├── 15-ch-row-policy.sh          # ClickHouse OSS의 project_id row policy, OSS에서의 CREATE MASKING POLICY
 └── 99-cleanup.sh                # 래퍼 → _base/bin/down.sh v4: 스택 종료 (--purge 로 볼륨까지 삭제)
 ```
 
@@ -412,7 +515,7 @@ langfuse-ee/
 ```
 _base/
 ├── .env.example                 # 시크릿, headless-init, EE 라이선스 키, SDK 키 (_base/.env 로 복사)
-├── v3/ · v4/                    # 트랙별: versions.env(이미지 버전 고정) · requirements.txt(v4: langfuse, anthropic, opentelemetry-instrumentation-anthropic) · seed_traces.py
+├── v3/ · v4/                    # 트랙별: versions.env(이미지 버전 고정) · requirements.txt(v4: langfuse, anthropic, opentelemetry-instrumentation-anthropic, cryptography) · seed_traces.py
 ├── docker-compose.yml           # OSS 스택(이미지 버전 고정): web · worker · postgres · clickhouse · redis · minio
 ├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
 ├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
@@ -470,6 +573,10 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./09-ee-protected-prompts.sh # 버전 관리 프롬프트 + 배포 라벨 + 보호된 라벨
 ./10-ee-instance-governance.sh # UI 커스터마이징 + 조직 생성 허용목록
 ./11-ee-parquet-export.sh    # 오브젝트 스토리지로 Parquet 반출 + ClickHouse s3() 라운드트립
+./12-ee-masking-failure-modes.sh  # 마스킹 callback 중단·지연·500, 프로젝트별 규칙, 레거시 경로, S3 원본 (~4분)
+./13-ee-project-isolation.sh # 조직 NONE + 프로젝트 VIEWER: 프로젝트 간 가시성
+./14-field-encryption.sh     # SDK hook에서 AES-GCM 필드 암호화 (requirements.txt의 cryptography 필요)
+./15-ch-row-policy.sh        # ClickHouse OSS의 project_id row policy
 ```
 
 ### 🧩 EE 기능 커버리지
@@ -480,16 +587,18 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 |---|---|---|
 | Instance Management API | 05 | — |
 | Org Management API & SCIM | 06 | — |
-| 프로젝트 단위 RBAC 역할 | 06 | — |
+| 프로젝트 단위 RBAC 역할 | 06, 13 | — |
 | 감사 로그(Audit Logs) | 07 | (감사 로그는 Postgres) |
 | 데이터 보존(Data Retention) | 07 | 야간 worker가 오래된 행을 ClickHouse에서 삭제 |
-| **서버측 데이터 마스킹** | 08 | **증명이 ClickHouse에서 실행** — 원문 시크릿 미저장 |
+| **서버측 데이터 마스킹** | 08, 12 | **증명이 ClickHouse에서 실행** — 원문 시크릿 미저장. 12는 저장되는 경우를 보여 줌 |
 | **보호된 프롬프트 라벨** | 09 | (프롬프트는 Postgres) |
 | **UI 커스터마이징** | 10 | — |
 | **조직 생성 허용목록** | 10 | — |
 | Parquet Blob 스토리지 반출* | 11 | **ClickHouse `s3()`가 Parquet 쓰기+재조회** |
 
 \* 스케줄 blob 스토리지 반출은 모든 self-hosted 프로젝트에서 사용 가능(라이선스 게이트 아님)하지만, 엔터프라이즈 데이터플랫폼/아카이브 스토리이자 가장 ClickHouse 친화적인 랩이므로 엔터프라이즈 트랙에 포함했습니다.
+
+단계 14와 15는 라이선스와 무관합니다. 14는 Python SDK의 `mask_otel_spans` hook을, 15는 ClickHouse OSS의 row policy를 씁니다. 규제 산업 배포에서 06·08과 함께 묻는 항목이라 여기에 둡니다.
 
 ### 📖 랩 워크스루
 
@@ -604,6 +713,72 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 
 랩 07과 **archive-then-delete**로 짝을 이룸: 보존 삭제 전에 반출. SA 함정 반영 — self-hosted에서 **ClickHouse < 25.11**은 Parquet 반출 실패가 안 뜰 수 있음(불완전 파일인데 "성공"). ≥ 25.11로 업그레이드하거나 신뢰할 수 있는 실패 감지를 위해 CSV/JSON 사용.
 
+#### 12 — 마스킹 실패 모드 ([12-ee-masking-failure-modes.sh](12-ee-masking-failure-modes.sh))
+
+랩 08이 정상 경로라면, 이 단계는 callback을 일부러 망가뜨립니다. 4.56.0 worker 동작은 이미지에서 직접 읽었습니다
+(`worker/dist/queues/otelIngestionQueue.js`, `@langfuse/shared/.../ingestionMasking/applyIngestionMasking.js`, `env.js`).
+마스킹은 **OTLP 수집 큐에서만, S3 이벤트 버킷에서 원본을 내려받은 뒤에** 실행됩니다. 기본값은 `TIMEOUT_MS=500`, `FAIL_CLOSED=false`,
+`MAX_RETRIES=1`(2회 시도)이고, callback은 `X-Langfuse-Project-Id`·`X-Langfuse-Org-Id` 헤더를 받습니다. web 컨테이너는 callback을 부르지 않습니다.
+저장소 오버레이는 `FAIL_CLOSED=true`·`2000 ms`이므로 시나리오마다 두 값을 명시합니다. 2026-10-12 측정 결과:
+
+| Callback | `FAIL_CLOSED=false` (Langfuse 기본값) | `FAIL_CLOSED=true` |
+|---|---|---|
+| 정상 `/mask` | 마스킹됨(양성 대조) | — |
+| 중단(닫힌 포트, 사이드카 정지) | ClickHouse에 **원문 시크릿 저장** | 버려짐 |
+| 지연(500 ms timeout에 2초) | **원문 시크릿 저장** | 버려짐 |
+| HTTP 500 | **원문 시크릿 저장** | 버려짐 |
+
+- **버려짐:** worker 로그의 `Dropping OTEL event due to masking failure`와 `fileKey`, 그리고 가장 느린 원문 저장 사례보다 오래 기다려도 행이 없다는 것으로 확인합니다. S3 객체는 남아 있어서 재처리할 수 있습니다.
+- **프로젝트별 규칙:** callback 하나가 `X-Langfuse-Project-Id`를 읽어 프로젝트마다 다른 규칙을 적용할 수 있습니다. `MASK_STRICT_PROJECT_IDS=<A>`이면 계좌번호가 A에서는 가려지고 B에서는 남으며, `sk-` 키는 양쪽 모두 가려집니다.
+- **레거시 `/api/public/ingestion`:** 기본 `events_only` 쓰기 모드에서는 HTTP **207**을 돌려주고, `trace-create`·`span-create`·`generation-create`·`event-create`는 건별 400으로 거부합니다. `score-create`만 받아들이며 마스킹을 거치지 않으므로, 원문 `comment`가 `scores`에 들어갑니다.
+- **S3의 원본:** OTLP 원본은 이벤트 버킷의 `events/otel/<project>/<yyyy>/<mm>/<dd>/<hh>/<mm>/<uuid>.json`에 그대로 남고, 마스킹본은 다시 쓰이지 않습니다. 레거시 score 이벤트도 `events/<project>/score/…`에 원문으로 남습니다. 그래서 이벤트 버킷은 원천 시스템과 같은 수준으로 보호하고 수명 주기 규칙을 걸어야 합니다.
+
+#### 13 — 프로젝트 격리 ([13-ee-project-isolation.sh](13-ee-project-isolation.sh))
+
+새 조직에 프로젝트 A와 B를 만듭니다. SCIM은 비밀번호를 받지 않으므로 `POST /api/auth/signup`으로 로컬 사용자 두 명을 만듭니다.
+- **viewer:** 조직 `NONE`, A에만 `VIEWER`
+- **orgadmin:** 조직 `ADMIN`, 프로젝트 역할 없음
+
+둘 다 NextAuth credentials로 로그인합니다(curl 쿠키 저장소).
+
+| 표면 | viewer의 A | viewer의 B | orgadmin의 A·B |
+|---|---|---|---|
+| 세션 프로젝트 목록 | 있음 | **없음** | 둘 다 있음 |
+| tRPC `traces.byId`, `events.all` | 200 | **401 UNAUTHORIZED** | 200 |
+| tRPC `projectApiKeys.create` | 403 | — | 200 |
+| 브라우저 `/project/<id>/traces` | 트레이싱 화면 | **"Project Not Found"** | — |
+
+- **UI 차단은 클라이언트에서:** 페이지 라우트는 누구에게나 같은 정적 껍데기를 주고, 차단은 클라이언트가 세션과 tRPC 결과로 합니다. 브라우저 확인(2026-10-12, 같은 방식으로 만든 viewer)에서 조직 화면에는 A만 보였습니다.
+- **Public API:** 사용자가 아니라 프로젝트 API 키로 인증합니다. A의 키로 B의 trace를 읽으면 HTTP 200에 빈 목록이 오고, 대조인 B의 키는 trace를 돌려줍니다.
+
+#### 14 — SDK hook에서 필드 암호화 ([14-field-encryption.sh](14-field-encryption.sh))
+
+**암호화 대상.** `Langfuse(mask_otel_spans=fn)`(SDK 4.17.0)는 내보내기 전에 span 속성을 고칩니다. 전송기는
+`langfuse.trace.input`, `langfuse.observation.input`과 모든 `*.metadata.account_no`를 AES-256-GCM으로 암호화합니다.
+- 12바이트 랜덤 nonce
+- AAD = 프로젝트 id
+- 형식 `enc:v1:<project_id>:<base64url>`
+
+output은 검색 대조용으로 평문으로 두고, hook 없이 보낸 대조 trace도 하나 둡니다. 프로젝트별 키는
+`_base/.env.field-keys`(mode 600, `_base/.gitignore`가 무시)에 둡니다. hook이 예외를 내면 SDK는 평문을 보내지 않고 배치 전체를 버립니다.
+
+**결과**
+- **저장:** ClickHouse `events_full`·`events_core`에는 평문 마커가 0이고 `enc:v1:` 행이 4/4입니다. 대조 행에서는 평문이 보여, 쿼리가 평문을 찾을 수 있다는 것도 확인됩니다.
+- **API:** `GET /api/public/v2/observations`는 UI가 그리는 그대로 암호문을 돌려줍니다.
+- **복호화:** [14-decrypt-fields.py](14-decrypt-fields.py)가 프로젝트 키로 읽어 복호화합니다. 다른 프로젝트의 키로는 `InvalidTag`로 실패합니다.
+- **UI 검색**(tRPC `events.all`, `searchType` input / content): 평문 input으로는 암호화된 trace가 0건이고(대조 trace는 찾음), 평문 output으로는 찾습니다. metadata 검색은 확인하지 않았습니다.
+- **LLM-as-a-judge**([14-judge-encrypted.sh](14-judge-encrypted.sh), 실제 `claude-haiku-4-5` 호출, 2026-10-13): 관리형 observation 수준 evaluator가 루트 observation의 `{{input}}`만 매핑합니다. judge 자신의 호출 trace를 보면 받은 프롬프트가 `Question: enc:v1:<project>:…`, 즉 저장된 암호문이었습니다. 암호화된 trace 2건은 0점(*"The question text is encrypted ciphertext … not readable"*), 평문 대조는 1점이었습니다. 세 번 실행하는 동안 암호화된 trace는 6번 판정 모두 0점이었습니다. 처음 프롬프트 문구에서는 대조도 한 번 0점을 받아 문구를 고쳤으므로, 한 번 통과했다고 대조가 안정적이라고 볼 수는 없습니다. 스크립트는 종료할 때 rule을 꺼서 이후 유료 호출이 생기지 않게 합니다.
+
+#### 15 — ClickHouse OSS row policy ([15-ch-row-policy.sh](15-ch-row-policy.sh))
+
+`analyst_a`(`SELECT ON default.*`)를 만들고, `project_id`가 있는 테이블 12개 전부에 `USING project_id = '<A>' TO analyst_a`를 겁니다.
+Langfuse용 ClickHouse 계정은 `access_management=0`이라, 스크립트가 `users.d`에 임시 관리자를 넣었다가 종료할 때 지웁니다.
+- **analyst_a는 걸러짐:** 데이터가 있는 모든 테이블에서 A만 보이고, `WHERE project_id='<B>'`는 0입니다.
+- **우회 없음:** `merge()`, `FINAL`, `PREWHERE`, `REMOTE` 권한을 준 뒤의 `remote('localhost', …)`도 걸러지고, `system.parts`는 거부됩니다.
+- **Langfuse는 영향 없음:** Langfuse 계정은 어떤 정책에도 없고, `users_without_row_policies_can_read_rows`가 `true`입니다(`system.server_settings`가 아니라 `config.xml`의 `<access_control_improvements>`에 있음). B의 public API 결과는 정책 전후 같은 6건이었고 수집도 계속 동작했습니다.
+- **걸러지지 않는 것:** `schema_migrations`에는 `project_id`가 없고, `analytics_*` 뷰에는 정책이 따로 걸리지 않습니다.
+- **masking policy:** 26.8.22.13에서 `CREATE MASKING POLICY`는 `Code: 344 … Masking Policies are available only in ClickHouse Cloud. (SUPPORT_IS_DISABLED)`로 실패합니다.
+
 ### 🔑 기억할 함정들
 
 | | 노트 |
@@ -617,6 +792,9 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 | **EE 라이선스는 양쪽 컨테이너에** | `LANGFUSE_EE_LICENSE_KEY`는 `langfuse-web`과 `langfuse-worker` 모두에 필요. 오버레이가 처리. |
 | **CH 스키마 ≠ API** | 랩/디버깅용으로 ClickHouse를 직접 조회하되 스키마는 불안정하다고 간주. 앱에서는 Public API / SDK query helper / Blob Storage Export 사용. |
 | **`retention=0` = 영구** | 0이 아닌 최소 보존은 3일. 삭제 전 보관이 필요하면 Blob Storage Export와 병행. |
+| **마스킹은 기본이 fail-open** | `LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED` 기본값은 `false`라서, callback이 죽거나 느리거나(> 500 ms) 오류를 내면 원본이 저장됨. `true`로 설정할 것(단계 12). |
+| **이벤트 버킷에 원본이 남음** | 마스킹은 worker가 S3에서 내려받은 뒤 실행되고 원본 객체는 그대로 남음. 버킷을 원천 데이터처럼 보호하고 만료시킬 것(단계 12). |
+| **`events_only`에서 v1 조회 API는 꺼져 있음** | `GET /api/public/traces`·`/observations`·`/scores`·`/sessions`는 404. `/api/public/v2/observations`를 쓸 것. 레거시 수집은 HTTP 207과 함께 `score-create`만 받음(단계 12–15). |
 
 ### 📝 검증 상태
 
@@ -643,6 +821,18 @@ SELECT count() FROM s3('http://minio:9000/langfuse/exports/manual/events_full.pa
 | `11` parquet 반출 | 통합 API가 `OBSERVATIONS_V2` export source와 함께 **`fileType: PARQUET`를 허용**; CH `s3()` 라운드트립 **182 == 182**. 한 시간 주기 작업은 정리 전에 실행되지 않아 파일 생성까지는 증명하지 못함 |
 
 > **버전 드리프트(랩 11), 고정으로 해소.** v3.197.1에서는 공개 OpenAPI 스펙에 있는데도 통합 API가 `fileType: PARQUET`를 HTTP 400으로 거부했습니다(`JSON`/`CSV`/`JSONL`만 허용). v4.48.0에서 허용됐고, 고정한 **v4.56.0**에서도 허용됩니다(2026-10-10). 스크립트는 여전히 `PARQUET`를 먼저 시도하고 `JSONL`로 폴백하므로, 더 오래된 이미지에서도 동작합니다. 문서가 아니라 *실행 중인 이미지* 기준으로 API를 확인하세요.
+
+**단계 12–15**([#65](https://github.com/litkhai/langfuse-hols/issues/65))는 **2026-10-12**에 **Langfuse v4.56.0 / SDK 4.17.0 / ClickHouse 26.8.22.13**에서 **end-to-end 검증**했습니다.
+- **스택:** 같은 고정 버전과 엔터프라이즈 라이선스 키를 썼고, 새 볼륨이 아니라 기존 볼륨에서 `events_only` 모드로 돌렸습니다.
+- **모델 호출:** 2026-10-13의 `14-judge-encrypted.sh`(실제 `claude-haiku-4-5`, 세 번 실행에 판정 9회)를 빼면 없습니다.
+- **양성 대조:** 각 스크립트는 기대한 결과가 관찰되지 않으면 1로 끝납니다. judge 실행을 뺀 모두에서 고장을 한 번 주입해 실패하는 것도 확인했습니다.
+
+| 단계 | 결과 |
+|---|---|
+| `12` 마스킹 실패 모드 | 9개 시나리오 PASS: fail-open은 중단·지연·HTTP 500에서 원본 저장, fail-closed는 버림(worker 로그 + S3 객체 유지); `X-Langfuse-Project-Id`로 프로젝트별 규칙; 레거시 수집은 207, `score-create`만 받고 마스킹 안 됨; OTLP 원본은 S3에 남고 마스킹본은 없음 |
+| `13` 프로젝트 격리 | 검사 36개 PASS. 여기에 viewer가 B를 보는 화면의 브라우저 확인("Project Not Found") |
+| `14` 필드 암호화 | 검사 36개 PASS; 복호화 24 PASS(잘못된 키 `InvalidTag` 포함); 실제 judge(2026-10-13): 암호화 → 0, 대조 → 1 |
+| `15` ClickHouse row policy | 검사 30개 PASS; OSS 26.8.22.13에서 `CREATE MASKING POLICY` → Code 344 |
 
 런타임에서 확인해 랩에 반영한 두 가지:
 

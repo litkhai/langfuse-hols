@@ -19,8 +19,10 @@ Runs on a bare `python:3-slim` image with NO pip install (stdlib only).
 Docs: https://langfuse.com/self-hosting/security/data-masking
 """
 import json
+import os
 import re
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ── Redaction rules: (compiled regex, replacement). Specific patterns first. ───
@@ -32,24 +34,33 @@ RULES = [
     (re.compile(r"\b01[016789][ -]?\d{3,4}[ -]?\d{4}\b"),           "[REDACTED_KR_PHONE]"),
 ]
 
+# Per-project extra rule (lab 12): only for the project ids in MASK_STRICT_PROJECT_IDS
+# (comma list, matched against the X-Langfuse-Project-Id header). Unset = lab 08 behaviour.
+STRICT_RULES = [
+    (re.compile(r"\b\d{3}-\d{2}-\d{6}\b"),                        "[REDACTED_ACCOUNT]"),
+]
+STRICT_PROJECT_IDS = {p.strip() for p in os.environ.get("MASK_STRICT_PROJECT_IDS", "").split(",") if p.strip()}
+# Lab 12 failure modes: POST /mask-slow sleeps this long before masking, POST /mask-500 fails.
+SLOW_SECONDS = float(os.environ.get("MASK_SLOW_SECONDS", "2") or 2)
+
 _hits = {"count": 0}
 
 
-def redact(text: str) -> str:
-    for rx, repl in RULES:
+def redact(text: str, rules=RULES) -> str:
+    for rx, repl in rules:
         text, n = rx.subn(repl, text)
         _hits["count"] += n
     return text
 
 
-def walk(node):
+def walk(node, rules=RULES):
     """Recursively mask every string LEAF in the JSON, preserving structure."""
     if isinstance(node, dict):
-        return {k: walk(v) for k, v in node.items()}
+        return {k: walk(v, rules) for k, v in node.items()}
     if isinstance(node, list):
-        return [walk(v) for v in node]
+        return [walk(v, rules) for v in node]
     if isinstance(node, str):
-        return redact(node)
+        return redact(node, rules)
     return node
 
 
@@ -72,10 +83,20 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._send(400, b'{"error":"invalid json"}')
             return
-        _hits["count"] = 0
-        masked = walk(payload)
         project = self.headers.get("X-Langfuse-Project-Id", "?")
-        sys.stderr.write(f"[mask] project={project} redactions={_hits['count']}\n")
+        if self.path == "/mask-500":
+            sys.stderr.write(f"[mask] project={project} path={self.path} -> HTTP 500\n")
+            sys.stderr.flush()
+            self._send(500, b'{"error":"simulated failure"}')
+            return
+        if self.path == "/mask-slow":
+            time.sleep(SLOW_SECONDS)
+        strict = project in STRICT_PROJECT_IDS
+        rules = RULES + STRICT_RULES if strict else RULES
+        _hits["count"] = 0
+        masked = walk(payload, rules)
+        sys.stderr.write(f"[mask] project={project} path={self.path} "
+                         f"rules={'base+strict' if strict else 'base'} redactions={_hits['count']}\n")
         sys.stderr.flush()
         self._send(200, json.dumps(masked).encode("utf-8"))
 
@@ -85,5 +106,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     PORT = 3100
-    print(f"masking-callback listening on :{PORT} (POST /mask, GET /health)", flush=True)
+    print(f"masking-callback listening on :{PORT} (POST /mask /mask-slow /mask-500, GET /health)", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

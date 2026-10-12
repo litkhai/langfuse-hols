@@ -23,6 +23,10 @@ services:
     command: python /app/masking_service.py
     volumes:
       - ./masking/masking_service.py:/app/masking_service.py:ro
+    environment:
+      # Lab 12 only; unset = lab 08 behaviour (no extra rule, /mask-slow sleeps 2 s).
+      MASK_STRICT_PROJECT_IDS: ${MASK_STRICT_PROJECT_IDS:-}
+      MASK_SLOW_SECONDS: ${MASK_SLOW_SECONDS:-2}
     expose:
       - "3100"
     healthcheck:

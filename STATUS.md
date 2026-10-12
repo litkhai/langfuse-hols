@@ -16,7 +16,7 @@ a real enterprise licence key (Docker 29.8.2, Compose v5.5.1, Python 3.12.14) ([
 | v4 — [langfuse-ee](labs/v4/langfuse-ee/README.md), [langfuse-eval](labs/v4/langfuse-eval/README.md) | Langfuse v4.56.0 / SDK 4.17.0 / ClickHouse 26.8.22.13 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline, and real Anthropic `claude-haiku-4-5` for `langfuse-ee` 02 and `langfuse-eval` 04–05 (managed evaluator included) |
 | v3 — [langfuse-ee](labs/v3/langfuse-ee/README.md), [langfuse-eval](labs/v3/langfuse-eval/README.md) | Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.22.13 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline only; the OpenAI path was not run |
 
-On **2026-10-12**, `langfuse-ee` v4 steps 12–15 were run end to end on the same v4 pins, with the licence key and no model calls, on existing volumes ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). The rest of the table was not re-run.
+On **2026-10-12**, `langfuse-ee` v4 steps 12–15 were run end to end on the same v4 pins, with the licence key and no model calls except step 14's real `claude-haiku-4-5` judge run (2026-10-13, 9 calls), on existing volumes ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). The rest of the table was not re-run.
 
 The per-lab results are in each lab's README, and the logs in each lab's `lab-output.md`.
 

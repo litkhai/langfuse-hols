@@ -51,6 +51,7 @@ Pins and the reason for each are in [`STATUS.md`](../../../STATUS.md). The Postg
 | 12 | Masking failure modes (2026-10-12) | ✅ 9 scenarios as the worker source says: fail-open stores raw on down / timeout / HTTP 500, fail-closed drops (log line + S3 object kept); per-project rule via `X-Langfuse-Project-Id`; legacy ingestion accepts only `score-create` and skips masking; the raw OTLP payload stays in S3 |
 | 13 | Project isolation (2026-10-12) | ✅ 36 PASS: org `NONE` + project-A `VIEWER` sees A only (session list, tRPC 401 on B, browser "Project Not Found"); org `ADMIN` sees both |
 | 14 | Field encryption in `mask_otel_spans` (2026-10-12) | ✅ 36 PASS: only `enc:v1:` ciphertext in `events_full` / `events_core` and the API; reader decrypts with the project key, wrong key → `InvalidTag`; input search finds 0 encrypted traces |
+| 14b | Real LLM-as-a-judge on encrypted input (2026-10-13) | ✅ `claude-haiku-4-5` judged the stored ciphertext (`Question: enc:v1:…`) and scored both encrypted traces 0 ("encrypted ciphertext … not readable"); the plaintext control scored 1. 9 judge calls in 3 runs; the control scored 0 once with the first prompt wording |
 | 15 | ClickHouse row policy (2026-10-12) | ✅ 30 PASS: `analyst_a` sees project A only on 12 tables; Langfuse's account unaffected (`users_without_row_policies_can_read_rows=true`); `CREATE MASKING POLICY` → Code 344 `SUPPORT_IS_DISABLED` |
 
 All 17 steps of this lab's part of the run (reset through lab 11, including the real-call 02, the 10 s wait, the sidecar log and the selftest) exited 0 in the run's summary log.
@@ -881,6 +882,52 @@ PASS  search content 'ENCMARK-IN-1791810468': control hits (positive control): 2
 PASS  evaluator {{input}} is ciphertext: yes
 
 ✅ All checks PASS (run 1791810468).
+```
+
+## Lab 14b — Managed LLM-as-a-judge on encrypted fields (2026-10-13)
+
+Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13, real Anthropic `claude-haiku-4-5` judge calls (approved; 9 in total over 3 runs). Command: `labs/v4/langfuse-ee/14-judge-encrypted.sh` (run 3, exit 0). Run 1 failed on a read-back bug in the script's cleanup check (`jq` `false // …`); run 2 used the first prompt wording, and the judge scored the plaintext control 0 ("a reference code or identifier rather than readable natural language"). The prompt was reworded for run 3. The encrypted traces scored 0 in all 6 judgments of the three runs.
+
+```text
+════ 1. Setup: org, project, API key, AES-256 key ════
+  org cmv5dshvz001xmw3tfuo37hhv  project cmv5dsi2c0025mw3tl2j39chk  (AES key written to _base/.env.field-keys, never printed)
+════ 2. Judge: LLM connection, evaluator (input only), rule on root observations ════
+  LLM connection: {"provider":"anthropic","adapter":"anthropic","withDefaultModels":true}
+  evaluator cmv5dsj1o002fmw3tunea0p9l  rule cmv5dsj3n002kmw3ths3oyysn  enabled=true  model claude-haiku-4-5
+════ 3. Send: 2 traces with the hook (encrypted input), 1 control trace without ════
+  hook traces: 22581f31a9e49f20bf5e667c481aa529 ce3a5be0232ea6ba8d1ac3cde1e4d974
+  control trace: 3e1a58f84ad059b1e8442c8d06fd61b7
+════ 4. Wait (max 3 min) for EVAL scores on the 3 root observations ════
+  traces with an EVAL score: 3 of 3
+  encrypted 22581f31a9e49f20bf5e667c481aa529  value=0  source=EVAL
+      reasoning: The question text is encrypted ciphertext (marked as enc:v1 format) and is not readable as a natural language question.
+  encrypted ce3a5be0232ea6ba8d1ac3cde1e4d974  value=0  source=EVAL
+      reasoning: The question text is encrypted (prefixed with 'enc:v1:' and contains encoded content) and therefore unreadable.
+  control 3e1a58f84ad059b1e8442c8d06fd61b7  value=1  source=EVAL
+      reasoning: This is a readable question asking about transfer status, with a reference code ENCMARK-IN-1791817357-CTRL included.
+PASS  EVAL scores on the 3 root observations: 3
+PASS  encrypted trace 22581f31 judged unreadable (value 0): 0
+PASS  encrypted trace ce3a5be0 judged unreadable (value 0): 0
+PASS  control trace judged a transfer question (value 1, positive control): 1
+PASS  control reasoning mentions a transfer: 1
+════ 5. The prompt the judge actually sent (its own trace, environment langfuse-llm-as-a-judge) ════
+  judge traces in this project: 3; observations by type:
+    GENERATION	3
+PASS  stored input of 22581f31 is ciphertext: yes
+PASS  judge prompt for 22581f31 holds that exact ciphertext: 1
+      judge sent: Question: enc:v1:cmv5dsi2c0025mw3tl2j39chk:fwb32J_OyAQoHnRYjWRgYDu_pThKJI5hrmkziyOCIwOWxHQ
+PASS  stored input of ce3a5be0 is ciphertext: yes
+PASS  judge prompt for ce3a5be0 holds that exact ciphertext: 1
+      judge sent: Question: enc:v1:cmv5dsi2c0025mw3tl2j39chk:cq80mzxxKPPo2wKz3FD_NLeuXCYpkcVJuoWbYCM5AbqBziS
+PASS  judge prompt for the control holds the plaintext marker (positive control): 1
+      judge sent: Question: Transfer status for ENCMARK-IN-1791817357-CTRL\\nScore 1 if the text is a readabl
+PASS  judge prompts holding a plaintext marker without -CTRL (i.e. from an encrypted trace): 0
+  judge calls made by this run (generation observations): 3
+════ 6. Cleanup ════
+  cleanup: rule cmv5dsj3n002kmw3ths3oyysn enabled=false (leaves the LLM connection in place)
+
+✅ All checks PASS (run 1791817357).
+EXIT 0
 ```
 
 ## Lab 15 — ClickHouse OSS row policy on `project_id` (2026-10-12)

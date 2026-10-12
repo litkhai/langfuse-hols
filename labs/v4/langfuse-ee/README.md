@@ -70,7 +70,8 @@ langfuse-ee/
 ├── 13-ee-project-isolation.sh   # Org NONE + project VIEWER: what a user can and cannot see across projects
 ├── 14-field-encryption.sh       # AES-GCM field encryption in the SDK hook, checked in ClickHouse, API and search
 │   ├── 14-field-encryption.py   #   ↳ sender with mask_otel_spans
-│   └── 14-decrypt-fields.py     #   ↳ reader: public API + per-project key
+│   ├── 14-decrypt-fields.py     #   ↳ reader: public API + per-project key
+│   └── 14-judge-encrypted.sh    #   ↳ real managed LLM-as-a-judge on the encrypted input (claude-haiku-4-5, ~3 calls)
 ├── 15-ch-row-policy.sh          # ClickHouse OSS row policy on project_id; CREATE MASKING POLICY on OSS
 └── 99-cleanup.sh                # Wrapper → _base/bin/down.sh v4: tear the stack down (--purge to wipe volumes)
 ```
@@ -332,7 +333,7 @@ The output stays plaintext as the search control, and one control trace is sent 
 - **API:** `GET /api/public/v2/observations` returns the ciphertext the UI renders.
 - **Decryption:** [14-decrypt-fields.py](14-decrypt-fields.py) reads with the project key and decrypts. With another project's key it fails with `InvalidTag`.
 - **UI search** (tRPC `events.all`, `searchType` input / content): the plaintext input finds 0 encrypted traces (the control is found), while the plaintext output finds them. Metadata search was not tested.
-- **LLM-as-a-judge:** not run (no model call). In the worker image, `evalService.js` builds the evaluator variables from the stored trace row, which is ciphertext. An evaluator would therefore judge `enc:v1:…`. This is a code reading, not a measurement.
+- **LLM-as-a-judge** ([14-judge-encrypted.sh](14-judge-encrypted.sh), real `claude-haiku-4-5` calls, 2026-10-13): a managed observation-level evaluator maps only `{{input}}` on root observations. The judge's own traced call shows the prompt it received was `Question: enc:v1:<project>:…`, the stored ciphertext. It scored both encrypted traces 0 (*"The question text is encrypted ciphertext … not readable"*) and the plaintext control 1. The encrypted traces scored 0 in all 6 judgments over three runs. With the first prompt wording the control once scored 0 too, so the prompt was reworded. One passing run is not proof the control is stable. The script disables its rule on exit so no more paid calls follow.
 
 #### 15 — ClickHouse OSS row policies ([15-ch-row-policy.sh](15-ch-row-policy.sh))
 
@@ -389,14 +390,14 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 
 **Steps 12–15** ([#65](https://github.com/litkhai/langfuse-hols/issues/65)) were verified **end-to-end on 2026-10-12** against **Langfuse v4.56.0 / SDK 4.17.0 / ClickHouse 26.8.22.13**:
 - **Stack:** the same pins and enterprise licence key, on the existing volumes (not fresh), in `events_only` mode.
-- **Model calls:** none.
-- **Positive controls:** each script exits 1 when an expected result is not observed. Every one was also run once with an injected fault and failed as it should.
+- **Model calls:** none, except `14-judge-encrypted.sh` on 2026-10-13 (real `claude-haiku-4-5`, 9 judge calls over three runs).
+- **Positive controls:** each script exits 1 when an expected result is not observed. Every one except the judge run was also run once with an injected fault and failed as it should.
 
 | Step | Result |
 |---|---|
 | `12` masking failure modes | 9 scenarios PASS: fail-open stores raw on down / slow / HTTP 500, fail-closed drops (worker log + S3 object kept); per-project rule via `X-Langfuse-Project-Id`; legacy ingestion 207, only `score-create` accepted and unmasked; raw OTLP payload kept in S3, no masked copy |
 | `13` project isolation | 36 checks PASS; plus a browser check of the viewer's view of B ("Project Not Found") |
-| `14` field encryption | 36 checks PASS; reader 24 PASS incl. wrong-key `InvalidTag`; LLM-as-a-judge by code reading only |
+| `14` field encryption | 36 checks PASS; reader 24 PASS incl. wrong-key `InvalidTag`; real judge (2026-10-13): encrypted → 0, control → 1 |
 | `15` ClickHouse row policy | 30 checks PASS; `CREATE MASKING POLICY` → Code 344 on OSS 26.8.22.13 |
 
 Confirmed at runtime and built into the labs:
@@ -503,7 +504,8 @@ langfuse-ee/
 ├── 13-ee-project-isolation.sh   # 조직 NONE + 프로젝트 VIEWER 사용자가 프로젝트 사이에서 보는 것과 못 보는 것
 ├── 14-field-encryption.sh       # SDK hook에서 AES-GCM 필드 암호화, ClickHouse·API·검색에서 확인
 │   ├── 14-field-encryption.py   #   ↳ mask_otel_spans를 쓰는 전송기
-│   └── 14-decrypt-fields.py     #   ↳ 읽기: public API + 프로젝트별 키
+│   ├── 14-decrypt-fields.py     #   ↳ 읽기: public API + 프로젝트별 키
+│   └── 14-judge-encrypted.sh    #   ↳ 암호화된 input에 실제 관리형 LLM-as-a-judge (claude-haiku-4-5, 약 3회 호출)
 ├── 15-ch-row-policy.sh          # ClickHouse OSS의 project_id row policy, OSS에서의 CREATE MASKING POLICY
 └── 99-cleanup.sh                # 래퍼 → _base/bin/down.sh v4: 스택 종료 (--purge 로 볼륨까지 삭제)
 ```
@@ -765,7 +767,7 @@ output은 검색 대조용으로 평문으로 두고, hook 없이 보낸 대조 
 - **API:** `GET /api/public/v2/observations`는 UI가 그리는 그대로 암호문을 돌려줍니다.
 - **복호화:** [14-decrypt-fields.py](14-decrypt-fields.py)가 프로젝트 키로 읽어 복호화합니다. 다른 프로젝트의 키로는 `InvalidTag`로 실패합니다.
 - **UI 검색**(tRPC `events.all`, `searchType` input / content): 평문 input으로는 암호화된 trace가 0건이고(대조 trace는 찾음), 평문 output으로는 찾습니다. metadata 검색은 확인하지 않았습니다.
-- **LLM-as-a-judge:** 모델 호출이 없어 돌리지 않았습니다. worker 이미지의 `evalService.js`는 평가 변수를 저장된 trace 행에서 만들고 그 값이 암호문이므로, 평가기는 `enc:v1:…`를 보게 됩니다. 측정이 아니라 코드를 읽은 결과입니다.
+- **LLM-as-a-judge**([14-judge-encrypted.sh](14-judge-encrypted.sh), 실제 `claude-haiku-4-5` 호출, 2026-10-13): 관리형 observation 수준 evaluator가 루트 observation의 `{{input}}`만 매핑합니다. judge 자신의 호출 trace를 보면 받은 프롬프트가 `Question: enc:v1:<project>:…`, 즉 저장된 암호문이었습니다. 암호화된 trace 2건은 0점(*"The question text is encrypted ciphertext … not readable"*), 평문 대조는 1점이었습니다. 세 번 실행하는 동안 암호화된 trace는 6번 판정 모두 0점이었습니다. 처음 프롬프트 문구에서는 대조도 한 번 0점을 받아 문구를 고쳤으므로, 한 번 통과했다고 대조가 안정적이라고 볼 수는 없습니다. 스크립트는 종료할 때 rule을 꺼서 이후 유료 호출이 생기지 않게 합니다.
 
 #### 15 — ClickHouse OSS row policy ([15-ch-row-policy.sh](15-ch-row-policy.sh))
 
@@ -822,14 +824,14 @@ Langfuse용 ClickHouse 계정은 `access_management=0`이라, 스크립트가 `u
 
 **단계 12–15**([#65](https://github.com/litkhai/langfuse-hols/issues/65))는 **2026-10-12**에 **Langfuse v4.56.0 / SDK 4.17.0 / ClickHouse 26.8.22.13**에서 **end-to-end 검증**했습니다.
 - **스택:** 같은 고정 버전과 엔터프라이즈 라이선스 키를 썼고, 새 볼륨이 아니라 기존 볼륨에서 `events_only` 모드로 돌렸습니다.
-- **모델 호출:** 없습니다.
-- **양성 대조:** 각 스크립트는 기대한 결과가 관찰되지 않으면 1로 끝납니다. 모두 고장을 한 번 주입해 실패하는 것도 확인했습니다.
+- **모델 호출:** 2026-10-13의 `14-judge-encrypted.sh`(실제 `claude-haiku-4-5`, 세 번 실행에 판정 9회)를 빼면 없습니다.
+- **양성 대조:** 각 스크립트는 기대한 결과가 관찰되지 않으면 1로 끝납니다. judge 실행을 뺀 모두에서 고장을 한 번 주입해 실패하는 것도 확인했습니다.
 
 | 단계 | 결과 |
 |---|---|
 | `12` 마스킹 실패 모드 | 9개 시나리오 PASS: fail-open은 중단·지연·HTTP 500에서 원본 저장, fail-closed는 버림(worker 로그 + S3 객체 유지); `X-Langfuse-Project-Id`로 프로젝트별 규칙; 레거시 수집은 207, `score-create`만 받고 마스킹 안 됨; OTLP 원본은 S3에 남고 마스킹본은 없음 |
 | `13` 프로젝트 격리 | 검사 36개 PASS. 여기에 viewer가 B를 보는 화면의 브라우저 확인("Project Not Found") |
-| `14` 필드 암호화 | 검사 36개 PASS; 복호화 24 PASS(잘못된 키 `InvalidTag` 포함); LLM-as-a-judge는 코드 읽기만 |
+| `14` 필드 암호화 | 검사 36개 PASS; 복호화 24 PASS(잘못된 키 `InvalidTag` 포함); 실제 judge(2026-10-13): 암호화 → 0, 대조 → 1 |
 | `15` ClickHouse row policy | 검사 30개 PASS; OSS 26.8.22.13에서 `CREATE MASKING POLICY` → Code 344 |
 
 런타임에서 확인해 랩에 반영한 두 가지:

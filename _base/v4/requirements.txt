@@ -9,3 +9,5 @@
 langfuse==4.17.0
 anthropic==1.12.1
 opentelemetry-instrumentation-anthropic==0.62.4
+# Client-side field encryption (labs/v4/langfuse-ee/14-*): AES-GCM. Latest on PyPI 2026-10-12 (pypi.org/pypi/cryptography/json).
+cryptography==50.0.2

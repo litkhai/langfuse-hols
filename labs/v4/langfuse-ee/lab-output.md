@@ -48,6 +48,10 @@ Pins and the reason for each are in [`STATUS.md`](../../../STATUS.md). The Postg
 | 09 | Protected prompt labels | ✅ v1→v2 label move; prompts in Postgres; audited |
 | 10 | Instance governance | ✅ UI + org-creator vars injected and verified |
 | 11 | Parquet export ↔ ClickHouse | ✅ **`fileType: PARQUET` accepted** with the `OBSERVATIONS_V2` source; `s3()` round-trip **182 == 182** |
+| 12 | Masking failure modes (2026-10-12) | ✅ 9 scenarios as the worker source says: fail-open stores raw on down / timeout / HTTP 500, fail-closed drops (log line + S3 object kept); per-project rule via `X-Langfuse-Project-Id`; legacy ingestion accepts only `score-create` and skips masking; the raw OTLP payload stays in S3 |
+| 13 | Project isolation (2026-10-12) | ✅ 36 PASS: org `NONE` + project-A `VIEWER` sees A only (session list, tRPC 401 on B, browser "Project Not Found"); org `ADMIN` sees both |
+| 14 | Field encryption in `mask_otel_spans` (2026-10-12) | ✅ 36 PASS: only `enc:v1:` ciphertext in `events_full` / `events_core` and the API; reader decrypts with the project key, wrong key → `InvalidTag`; input search finds 0 encrypted traces |
+| 15 | ClickHouse row policy (2026-10-12) | ✅ 30 PASS: `analyst_a` sees project A only on 12 tables; Langfuse's account unaffected (`users_without_row_policies_can_read_rows=true`); `CREATE MASKING POLICY` → Code 344 `SUPPORT_IS_DISABLED` |
 
 All 17 steps of this lab's part of the run (reset through lab 11, including the real-call 02, the 10 s wait, the sidecar log and the selftest) exited 0 in the run's summary log.
 
@@ -509,6 +513,476 @@ $ ./11-ee-parquet-export.sh
 **Part B.** This is the primitive the scheduled exporter uses: `INSERT INTO FUNCTION s3(...) … 'Parquet'`, then read it back. The ClickHouse-backed store can archive itself to object storage and stay queryable by ClickHouse, DuckDB, Athena or Spark. It pairs with lab 07 as **archive-then-delete**.
 
 182 equals the 158 rows of lab 03 plus the 24 `pii-demo` rows of lab 08.
+
+---
+
+## Lab 12 — Ingestion masking failure modes (2026-10-12)
+
+Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13, EE overlay up, `events_only` write mode. Command: `labs/v4/langfuse-ee/12-ee-masking-failure-modes.sh` (exit 0).
+
+```text
+════ 0. Setup: org, projects A and B, API keys ════
+  org cmv5atyvw00ntmw4168ph818g  project A cmv5atz1v00o1mw4105dqia47  project B cmv5atz6w00o8mw41e38g17o1
+  account number used in every payload: 110-23-812387 (fabricated)
+  worker image: docker.io/langfuse/langfuse-worker:4.56.0   sidecar image: docker.io/python:3.12.15-slim
+════ 1. Failure modes (one trace per scenario, worker recreated with the scenario env) ════
+── S0: healthy /mask (FAIL_CLOSED=false, TIMEOUT_MS=500, expect masked) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=false LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 (MAX_RETRIES unset = worker default)
+  events_full rows=1 raw_secret_rows=0 redacted_key_rows=1 account_raw_rows=1; first row after 3s
+  worker warn lines (attempt counts: 0):
+    
+  PASS  S0 | healthy /mask | FAIL_CLOSED=false | TIMEOUT_MS=500 | expected: masked | observed: masked
+── S2: /mask-slow (2 s) (FAIL_CLOSED=false, TIMEOUT_MS=500, expect raw) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask-slow LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=false (MAX_RETRIES unset = worker default)
+  events_full rows=1 raw_secret_rows=1 redacted_key_rows=0 account_raw_rows=1; first row after 2s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:40:12.072Z warn 	Ingestion masking callback failed (attempt 1/2): Request timeout {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"b1bd87bfc4ccbfca7d260c100f8f4d6c","span_id":"83badf50d7421a52","trace_flags":"01"}
+    2026-10-12T13:40:12.679Z warn 	Ingestion masking callback failed (attempt 2/2): Request timeout {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"b1bd87bfc4ccbfca7d260c100f8f4d6c","span_id":"83badf50d7421a52","trace_flags":"01"}
+  PASS  S2 | /mask-slow (2 s) | FAIL_CLOSED=false | TIMEOUT_MS=500 | expected: raw | observed: raw
+── S5a: /mask-500 (FAIL_CLOSED=false, TIMEOUT_MS=500, expect raw) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask-500 LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=false (MAX_RETRIES unset = worker default)
+  events_full rows=1 raw_secret_rows=1 redacted_key_rows=0 account_raw_rows=1; first row after 2s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:40:25.170Z warn 	Ingestion masking callback failed (attempt 1/2): HTTP 500: {"error":"simulated failure"} {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"38d1108d180b75ac2919d4139493894b","span_id":"6d39212aefbe9ce7","trace_flags":"01"}
+    2026-10-12T13:40:25.274Z warn 	Ingestion masking callback failed (attempt 2/2): HTTP 500: {"error":"simulated failure"} {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"38d1108d180b75ac2919d4139493894b","span_id":"6d39212aefbe9ce7","trace_flags":"01"}
+  PASS  S5a | /mask-500 | FAIL_CLOSED=false | TIMEOUT_MS=500 | expected: raw | observed: raw
+── S1a: down: closed port (FAIL_CLOSED=false, TIMEOUT_MS=500, expect raw) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=false LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3999/mask (MAX_RETRIES unset = worker default)
+  events_full rows=1 raw_secret_rows=1 redacted_key_rows=0 account_raw_rows=1; first row after 3s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:40:38.872Z warn 	Ingestion masking callback failed (attempt 1/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"53a2149eb00a7ea38d585ac30e91ea67","span_id":"0b2675c6ae75370d","trace_flags":"01"}
+    2026-10-12T13:40:38.975Z warn 	Ingestion masking callback failed (attempt 2/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"53a2149eb00a7ea38d585ac30e91ea67","span_id":"0b2675c6ae75370d","trace_flags":"01"}
+  PASS  S1a | down: closed port | FAIL_CLOSED=false | TIMEOUT_MS=500 | expected: raw | observed: raw
+  slowest raw-stored scenario appeared after 10s (floor 10 s) — dropped scenarios wait at least that long
+── S3a: down: closed port (FAIL_CLOSED=true, TIMEOUT_MS=500, expect dropped) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3999/mask LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=true (MAX_RETRIES unset = worker default)
+  events_full rows=0 raw_secret_rows=0 redacted_key_rows=0 account_raw_rows=0; first row after -1s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:40:52.532Z warn 	Ingestion masking callback failed (attempt 1/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"bc3db365ad9d119d331c9045779595d2","span_id":"979875ea83f4d16a","trace_flags":"01"}
+    2026-10-12T13:40:52.635Z warn 	Ingestion masking callback failed (attempt 2/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"bc3db365ad9d119d331c9045779595d2","span_id":"979875ea83f4d16a","trace_flags":"01"}
+    2026-10-12T13:40:52.635Z warn 	Dropping OTEL event due to masking failure {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","fileKey":"events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/40/1ea8baf4-ff35-4eb0-9abe-ec0e1ca748b0.json","error":"fetch failed","trace_id":"bc3db365ad9d119d331c9045779595d2","span_id":"979875ea83f4d16a","trace_flags":"01"}
+  fileKey in the Dropping line: events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/40/1ea8baf4-ff35-4eb0-9abe-ec0e1ca748b0.json  (object still in S3: yes)
+  PASS  S3a | down: closed port | FAIL_CLOSED=true | TIMEOUT_MS=500 | expected: dropped | observed: dropped
+── S4: /mask-slow (2 s) (FAIL_CLOSED=true, TIMEOUT_MS=500, expect dropped) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask-slow LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=true (MAX_RETRIES unset = worker default)
+  events_full rows=0 raw_secret_rows=0 redacted_key_rows=0 account_raw_rows=0; first row after -1s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:41:17.227Z warn 	Ingestion masking callback failed (attempt 1/2): Request timeout {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"1d89eac646a42ac52080a0f730c232ad","span_id":"7ad3b2019fe54715","trace_flags":"01"}
+    2026-10-12T13:41:17.831Z warn 	Ingestion masking callback failed (attempt 2/2): Request timeout {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"1d89eac646a42ac52080a0f730c232ad","span_id":"7ad3b2019fe54715","trace_flags":"01"}
+    2026-10-12T13:41:17.833Z warn 	Dropping OTEL event due to masking failure {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","fileKey":"events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/41/40993deb-2260-427d-9221-072c8e216cd4.json","error":"Request timeout","trace_id":"1d89eac646a42ac52080a0f730c232ad","span_id":"7ad3b2019fe54715","trace_flags":"01"}
+  fileKey in the Dropping line: events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/41/40993deb-2260-427d-9221-072c8e216cd4.json  (object still in S3: yes)
+  PASS  S4 | /mask-slow (2 s) | FAIL_CLOSED=true | TIMEOUT_MS=500 | expected: dropped | observed: dropped
+── S5b: /mask-500 (FAIL_CLOSED=true, TIMEOUT_MS=500, expect dropped) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=true LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask-500 (MAX_RETRIES unset = worker default)
+  events_full rows=0 raw_secret_rows=0 redacted_key_rows=0 account_raw_rows=0; first row after -1s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:41:40.794Z warn 	Ingestion masking callback failed (attempt 1/2): HTTP 500: {"error":"simulated failure"} {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"88ff4236defae378cc871b3557bc6a8b","span_id":"328a167524a50832","trace_flags":"01"}
+    2026-10-12T13:41:40.898Z warn 	Ingestion masking callback failed (attempt 2/2): HTTP 500: {"error":"simulated failure"} {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"88ff4236defae378cc871b3557bc6a8b","span_id":"328a167524a50832","trace_flags":"01"}
+    2026-10-12T13:41:40.899Z warn 	Dropping OTEL event due to masking failure {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","fileKey":"events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/41/bc535ccf-1bef-4dc7-873f-76eb4a041025.json","error":"HTTP 500: {\"error\":\"simulated failure\"}","trace_id":"88ff4236defae378cc871b3557bc6a8b","span_id":"328a167524a50832","trace_flags":"01"}
+  fileKey in the Dropping line: events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/41/bc535ccf-1bef-4dc7-873f-76eb4a041025.json  (object still in S3: yes)
+  PASS  S5b | /mask-500 | FAIL_CLOSED=true | TIMEOUT_MS=500 | expected: dropped | observed: dropped
+  (sidecar container stopped: exited)
+── S1b: down: sidecar stopped (FAIL_CLOSED=false, TIMEOUT_MS=500, expect raw) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=false LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask (MAX_RETRIES unset = worker default)
+  events_full rows=1 raw_secret_rows=1 redacted_key_rows=0 account_raw_rows=1; first row after 2s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:42:08.088Z warn 	Ingestion masking callback failed (attempt 1/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"c104e7ced8f75cd2974e951d2e72b4c3","span_id":"1ce492f9f5e58edf","trace_flags":"01"}
+    2026-10-12T13:42:08.194Z warn 	Ingestion masking callback failed (attempt 2/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"c104e7ced8f75cd2974e951d2e72b4c3","span_id":"1ce492f9f5e58edf","trace_flags":"01"}
+  PASS  S1b | down: sidecar stopped | FAIL_CLOSED=false | TIMEOUT_MS=500 | expected: raw | observed: raw
+── S3b: down: sidecar stopped (FAIL_CLOSED=true, TIMEOUT_MS=500, expect dropped) ──
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=500 LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=true (MAX_RETRIES unset = worker default)
+  events_full rows=0 raw_secret_rows=0 redacted_key_rows=0 account_raw_rows=0; first row after -1s
+  worker warn lines (attempt counts: 2):
+    2026-10-12T13:42:21.741Z warn 	Ingestion masking callback failed (attempt 1/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"0db806f5ec1e77a14272df478ceec445","span_id":"a9a5195ba143b33a","trace_flags":"01"}
+    2026-10-12T13:42:21.849Z warn 	Ingestion masking callback failed (attempt 2/2): fetch failed {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","trace_id":"0db806f5ec1e77a14272df478ceec445","span_id":"a9a5195ba143b33a","trace_flags":"01"}
+    2026-10-12T13:42:21.849Z warn 	Dropping OTEL event due to masking failure {"projectId":"cmv5atz1v00o1mw4105dqia47","orgId":"cmv5atyvw00ntmw4168ph818g","fileKey":"events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/42/a6d1b460-442d-4b7a-afb6-ec49d278b2f7.json","error":"fetch failed","trace_id":"0db806f5ec1e77a14272df478ceec445","span_id":"a9a5195ba143b33a","trace_flags":"01"}
+  fileKey in the Dropping line: events/otel/cmv5atz1v00o1mw4105dqia47/2026/10/12/13/42/a6d1b460-442d-4b7a-afb6-ec49d278b2f7.json  (object still in S3: yes)
+  PASS  S3b | down: sidecar stopped | FAIL_CLOSED=true | TIMEOUT_MS=500 | expected: dropped | observed: dropped
+════ 2c. Per-project rule: MASK_STRICT_PROJECT_IDS=<A> adds [REDACTED_ACCOUNT] for A only ════
+  worker env: LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=2000 LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=true (MAX_RETRIES unset = worker default)
+  project A rows/raw_secret/redacted_key/raw_account/redacted_account = 1/0/1/0/1
+  project B rows/raw_secret/redacted_key/raw_account/redacted_account = 1/0/1/1/0
+PASS  2c A: rows landed: yes
+PASS  2c A: [REDACTED_ACCOUNT] present: yes
+PASS  2c A: raw account rows: 0
+PASS  2c A: sk- redacted, raw secret rows: 0
+PASS  2c B: rows landed: yes
+PASS  2c B: raw account kept (positive control): yes
+PASS  2c B: [REDACTED_ACCOUNT] rows: 0
+PASS  2c B: sk- still redacted, raw secret rows: 0
+PASS  2c B: [REDACTED_API_KEY] present: yes
+  sidecar log lines for both projects:
+    [mask] project=cmv5atz1v00o1mw4105dqia47 path=/mask rules=base+strict redactions=2
+    [mask] project=cmv5atz6w00o8mw41e38g17o1 path=/mask rules=base redactions=1
+PASS  2c sidecar logged A with rules=base+strict: 1
+PASS  2c sidecar logged B with rules=base: 1
+════ 2d. Legacy path: POST /api/public/ingestion with healthy masking, FAIL_CLOSED=true ════
+  trace-create: HTTP 207 successes=0 errors=1 first error/body: Event type "trace-create" is not accepted by /api/public/ingestion when LANGFUSE_MIGRATION_V4_WRITE_MODE is events_only. This endpoint only accepts score events. Upgrade the client or integration to a v4-compatible SDK or OTLP ingestion path. As a temporary mi
+  span-create: HTTP 207 successes=0 errors=1 first error/body: Event type "span-create" is not accepted by /api/public/ingestion when LANGFUSE_MIGRATION_V4_WRITE_MODE is events_only. This endpoint only accepts score events. Upgrade the client or integration to a v4-compatible SDK or OTLP ingestion path. As a temporary mig
+  generation-create: HTTP 207 successes=0 errors=1 first error/body: Event type "generation-create" is not accepted by /api/public/ingestion when LANGFUSE_MIGRATION_V4_WRITE_MODE is events_only. This endpoint only accepts score events. Upgrade the client or integration to a v4-compatible SDK or OTLP ingestion path. As a tempora
+  event-create: HTTP 207 successes=0 errors=1 first error/body: Event type "event-create" is not accepted by /api/public/ingestion when LANGFUSE_MIGRATION_V4_WRITE_MODE is events_only. This endpoint only accepts score events. Upgrade the client or integration to a v4-compatible SDK or OTLP ingestion path. As a temporary mi
+  score-create: HTTP 207 successes=1 errors=0 first error/body: {"successes":[{"id":"4fe7f4bc183bd47127a72da9ca8673d6","status":201}],"errors":[]}
+  accepted legacy event types: score-create
+  trace-create rejected -> search over the same tables: events_full:0 events_core:0 traces:0 observations:0 scores:0
+PASS  2d trace-create rejected (HTTP 207), nothing stored:  events_full:0 events_core:0 traces:0 observations:0 scores:0
+  span-create rejected -> search over the same tables: events_full:0 events_core:0 traces:0 observations:0 scores:0
+PASS  2d span-create rejected (HTTP 207), nothing stored:  events_full:0 events_core:0 traces:0 observations:0 scores:0
+  generation-create rejected -> search over the same tables: events_full:0 events_core:0 traces:0 observations:0 scores:0
+PASS  2d generation-create rejected (HTTP 207), nothing stored:  events_full:0 events_core:0 traces:0 observations:0 scores:0
+  event-create rejected -> search over the same tables: events_full:0 events_core:0 traces:0 observations:0 scores:0
+PASS  2d event-create rejected (HTTP 207), nothing stored:  events_full:0 events_core:0 traces:0 observations:0 scores:0
+  score-create accepted -> raw secret found in: events_full:0 events_core:0 traces:0 observations:0 scores:1
+PASS  2d score-create accepted: raw secret reaches ClickHouse (legacy path bypasses masking): yes
+PASS  2d sidecar received no request for project A during the legacy calls (log lines before/after: 1/1): 1
+════ 2e. The raw payload in the S3 event bucket ════
+  bucket top-level prefixes: events/ 
+  objects: events/otel/<A>/ 10  events/otel/<B>/ 1  events/<A>/ 1
+  key layout (project ids replaced by <A>/<B>):
+       1 events/<A>/score/<id>/<uuid>.json
+       1 events/otel/<A>/2026/10/12/13/39/<uuid>.json
+       4 events/otel/<A>/2026/10/12/13/40/<uuid>.json
+       2 events/otel/<A>/2026/10/12/13/41/<uuid>.json
+       3 events/otel/<A>/2026/10/12/13/42/<uuid>.json
+       1 events/otel/<B>/2026/10/12/13/42/<uuid>.json
+  object(s) holding the S0 raw secret (healthy masking, masked in ClickHouse):
+    otel-A/2026/10/12/13/39/392145c9-33d3-4fce-802a-e47f6bb6776f.json
+PASS  2e S0: raw secret present in S3 although ClickHouse holds the masked copy: yes
+PASS  2e no masked copy written back to S3 (objects containing REDACTED_ under both projects): 0
+  legacy trace-create was rejected: no S3 object expected
+  legacy span-create was rejected: no S3 object expected
+  legacy generation-create was rejected: no S3 object expected
+  legacy event-create was rejected: no S3 object expected
+  legacy score-create object(s) with the raw secret: legacy-A/score/edb80b86a73b1793/4fe7f4bc183bd47127a72da9ca8673d6.json
+PASS  2e legacy score-create: raw copy in S3: yes
+PASS  2e S1a (raw stored in ClickHouse): its S3 object count: 1
+════ 3. Restore: worker back on the overlay defaults, sidecar running ════
+  LANGFUSE_INGESTION_MASKING_CALLBACK_URL=http://masking:3100/mask
+  LANGFUSE_INGESTION_MASKING_CALLBACK_TIMEOUT_MS=2000
+  LANGFUSE_INGESTION_MASKING_CALLBACK_FAIL_CLOSED=true
+PASS  sidecar state: running/healthy
+PASS  worker FAIL_CLOSED is the overlay default: true
+PASS  worker TIMEOUT_MS is the overlay default: 2000
+PASS  sidecar has no strict project left: 
+
+════ Scenario table ════
+id   | callback                | FAIL_CLOSED | TIMEOUT_MS| expected | observed  | result
+S0   | healthy /mask           | false       | 500       | masked   | masked    | PASS
+S2   | /mask-slow (2 s)        | false       | 500       | raw      | raw       | PASS
+S5a  | /mask-500               | false       | 500       | raw      | raw       | PASS
+S1a  | down: closed port       | false       | 500       | raw      | raw       | PASS
+S3a  | down: closed port       | true        | 500       | dropped  | dropped   | PASS
+S4   | /mask-slow (2 s)        | true        | 500       | dropped  | dropped   | PASS
+S5b  | /mask-500               | true        | 500       | dropped  | dropped   | PASS
+S1b  | down: sidecar stopped   | false       | 500       | raw      | raw       | PASS
+S3b  | down: sidecar stopped   | true        | 500       | dropped  | dropped   | PASS
+
+✅ every check printed PASS
+```
+
+## Lab 13 — Project isolation under project-level RBAC (2026-10-12)
+
+Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13, EE overlay up, `events_only` write mode. Command: `labs/v4/langfuse-ee/13-ee-project-isolation.sh` (exit 0).
+
+The script checks HTTP only: `/project/<id>` returns the same static shell for every user, and the deny happens client-side. A separate browser check on the same day used a viewer created the same way (org `NONE`, project A `VIEWER`). The organization page listed only project A. `/project/<B>/traces` rendered *"Project Not Found — The project you are trying to access does not exist or you do not have access to it."*, and `/project/<A>/traces` rendered the tracing page. The UI shows a *Create new API key* button to the viewer, but the tRPC call behind it returns 403 (row `projectApiKeys.create` below).
+
+```text
+════ 1. Organization, two projects, one API key and one trace per project ════
+  org id = cmv59ziqu00l3mw417cuxyyfx
+  project A id = cmv59ziwa00lbmw41vfv3btyk   trace id = 0b48d1af2e8448de42485b308bdea4f5
+  project B id = cmv59zj3e00limw4141lhlahp   trace id = 2660035d188f8928e552ea9e60d6e10b
+════ 2. Two local users via POST /api/auth/signup (SCIM has no password field) ════
+User created
+User created
+════ 3. Memberships (org key): viewer = org NONE + project A VIEWER; orgadmin = org ADMIN ════
+  PASS  viewer | org membership (public API) | cmv59ziqu00l3mw417cuxyyfx | expected: NONE | observed: NONE
+  PASS  orgadmin | org membership (public API) | cmv59ziqu00l3mw417cuxyyfx | expected: ADMIN | observed: ADMIN
+  PASS  viewer | project membership (public API) | A | expected: VIEWER | observed: VIEWER
+  PASS  orgadmin | project membership (public API) | A | expected: none | observed: none
+  PASS  viewer | project membership (public API) | B | expected: none | observed: none
+  PASS  orgadmin | project membership (public API) | B | expected: none | observed: none
+════ 4. Project list in the session (what the UI project switcher is built from) ════
+  PASS  viewer | session project list | A | expected: present | observed: present
+  PASS  viewer | session project list | B | expected: absent | observed: absent
+  PASS  orgadmin | session project list | A | expected: present | observed: present
+  PASS  orgadmin | session project list | B | expected: present | observed: present
+════ 5. tRPC API behind the UI (cookie auth) ════
+  PASS  viewer | tRPC traces.byId | A | expected: HTTP 200 and the trace id | observed: HTTP 200 id=0b48d1af2e8448de42485b308bdea4f5
+  PASS  viewer | tRPC events.all (list) | A | expected: HTTP 200 and trace in list | observed: HTTP 200, own trace in list: 1
+  PASS  viewer | tRPC traces.byId | B | expected: HTTP 4xx UNAUTHORIZED|FORBIDDEN|NOT_FOUND | observed: HTTP 401 UNAUTHORIZED
+  PASS  viewer | tRPC events.all (list) | B | expected: HTTP 4xx UNAUTHORIZED|FORBIDDEN|NOT_FOUND | observed: HTTP 401 UNAUTHORIZED
+  PASS  orgadmin | tRPC traces.byId | A | expected: HTTP 200 and the trace id | observed: HTTP 200 id=0b48d1af2e8448de42485b308bdea4f5
+  PASS  orgadmin | tRPC events.all (list) | A | expected: HTTP 200 and trace in list | observed: HTTP 200, own trace in list: 1
+  PASS  orgadmin | tRPC traces.byId | B | expected: HTTP 200 and the trace id | observed: HTTP 200 id=2660035d188f8928e552ea9e60d6e10b
+  PASS  orgadmin | tRPC events.all (list) | B | expected: HTTP 200 and trace in list | observed: HTTP 200, own trace in list: 1
+════ 6. Write on A (tRPC projectApiKeys.create): VIEWER must be rejected, ADMIN must succeed ════
+  PASS  viewer | tRPC projectApiKeys.create (mint key) | A | expected: HTTP 403 FORBIDDEN | observed: HTTP 403 FORBIDDEN
+  PASS  orgadmin | tRPC projectApiKeys.create (mint key) | A | expected: HTTP 200 and key id | observed: HTTP 200
+  PASS  viewer | key left behind by the rejected call | A | expected: 0 | observed: 0
+════ 7. UI pages (cookie auth; the browser check is separate) ════
+  PASS  viewer | UI GET /project/cmv59ziwa00lbmw41vfv3btyk | A | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0
+  PASS  viewer | UI GET traces | A | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0
+  PASS  viewer | UI GET /project/cmv59zj3e00limw4141lhlahp | B | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0
+  PASS  viewer | UI GET traces | B | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0
+  PASS  orgadmin | UI GET /project/cmv59ziwa00lbmw41vfv3btyk | A | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0
+  PASS  orgadmin | UI GET traces | A | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0
+  PASS  orgadmin | UI GET /project/cmv59zj3e00limw4141lhlahp | B | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0
+  PASS  orgadmin | UI GET traces | B | expected: HTTP 200 static shell, no trace data in body | observed: HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0
+════ 8. Public API: project API keys are scoped to their own project ════
+  PASS  key A | FINDING public GET /traces/<own trace> | A | expected: 404 events_only (endpoint off) | observed: HTTP 404 events_only
+  PASS  key B | FINDING public GET /traces/<own trace> | B | expected: 404 events_only (endpoint off) | observed: HTTP 404 events_only
+  PASS  key A | public v2/observations?traceId=<A trace> | A | expected: 1 observation | observed: 1
+  PASS  key A | public v2/observations?traceId=<B trace> | B | expected: 0 observations | observed: 0
+  PASS  key B | public v2/observations?traceId=<B trace> | B | expected: 1 observation (control) | observed: 1
+  PASS  key A | public v2/observations (unfiltered list) | A | expected: >=1 row, 0 from the other project | observed: 1 rows, 0 foreign
+  PASS  key B | public v2/observations (unfiltered list) | B | expected: >=1 row, 0 from the other project | observed: 1 rows, 0 foreign
+
+════ Result table ════
+actor     surface                                    project                    expected                                      observed                                                           result
+viewer    org membership (public API)                cmv59ziqu00l3mw417cuxyyfx  NONE                                          NONE                                                               PASS
+orgadmin  org membership (public API)                cmv59ziqu00l3mw417cuxyyfx  ADMIN                                         ADMIN                                                              PASS
+viewer    project membership (public API)            A                          VIEWER                                        VIEWER                                                             PASS
+orgadmin  project membership (public API)            A                          none                                          none                                                               PASS
+viewer    project membership (public API)            B                          none                                          none                                                               PASS
+orgadmin  project membership (public API)            B                          none                                          none                                                               PASS
+viewer    session project list                       A                          present                                       present                                                            PASS
+viewer    session project list                       B                          absent                                        absent                                                             PASS
+orgadmin  session project list                       A                          present                                       present                                                            PASS
+orgadmin  session project list                       B                          present                                       present                                                            PASS
+viewer    tRPC traces.byId                           A                          HTTP 200 and the trace id                     HTTP 200 id=0b48d1af2e8448de42485b308bdea4f5                       PASS
+viewer    tRPC events.all (list)                     A                          HTTP 200 and trace in list                    HTTP 200, own trace in list: 1                                     PASS
+viewer    tRPC traces.byId                           B                          HTTP 4xx UNAUTHORIZED|FORBIDDEN|NOT_FOUND     HTTP 401 UNAUTHORIZED                                              PASS
+viewer    tRPC events.all (list)                     B                          HTTP 4xx UNAUTHORIZED|FORBIDDEN|NOT_FOUND     HTTP 401 UNAUTHORIZED                                              PASS
+orgadmin  tRPC traces.byId                           A                          HTTP 200 and the trace id                     HTTP 200 id=0b48d1af2e8448de42485b308bdea4f5                       PASS
+orgadmin  tRPC events.all (list)                     A                          HTTP 200 and trace in list                    HTTP 200, own trace in list: 1                                     PASS
+orgadmin  tRPC traces.byId                           B                          HTTP 200 and the trace id                     HTTP 200 id=2660035d188f8928e552ea9e60d6e10b                       PASS
+orgadmin  tRPC events.all (list)                     B                          HTTP 200 and trace in list                    HTTP 200, own trace in list: 1                                     PASS
+viewer    tRPC projectApiKeys.create (mint key)      A                          HTTP 403 FORBIDDEN                            HTTP 403 FORBIDDEN                                                 PASS
+orgadmin  tRPC projectApiKeys.create (mint key)      A                          HTTP 200 and key id                           HTTP 200                                                           PASS
+viewer    key left behind by the rejected call       A                          0                                             0                                                                  PASS
+viewer    UI GET /project/cmv59ziwa00lbmw41vfv3btyk  A                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0  PASS
+viewer    UI GET traces                              A                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0  PASS
+viewer    UI GET /project/cmv59zj3e00limw4141lhlahp  B                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0  PASS
+viewer    UI GET traces                              B                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0  PASS
+orgadmin  UI GET /project/cmv59ziwa00lbmw41vfv3btyk  A                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0  PASS
+orgadmin  UI GET traces                              A                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0  PASS
+orgadmin  UI GET /project/cmv59zj3e00limw4141lhlahp  B                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7032 bytes, body mentions own trace/name: 0  PASS
+orgadmin  UI GET traces                              B                          HTTP 200 static shell, no trace data in body  HTTP 200, redirect -, 7439 bytes, body mentions own trace/name: 0  PASS
+key A     FINDING public GET /traces/<own trace>     A                          404 events_only (endpoint off)                HTTP 404 events_only                                               PASS
+key B     FINDING public GET /traces/<own trace>     B                          404 events_only (endpoint off)                HTTP 404 events_only                                               PASS
+key A     public v2/observations?traceId=<A trace>   A                          1 observation                                 1                                                                  PASS
+key A     public v2/observations?traceId=<B trace>   B                          0 observations                                0                                                                  PASS
+key B     public v2/observations?traceId=<B trace>   B                          1 observation (control)                       1                                                                  PASS
+key A     public v2/observations (unfiltered list)   A                          >=1 row, 0 from the other project             1 rows, 0 foreign                                                  PASS
+key B     public v2/observations (unfiltered list)   B                          >=1 row, 0 from the other project             1 rows, 0 foreign                                                  PASS
+
+✅ all 36 checks passed (org cmv59ziqu00l3mw417cuxyyfx, projects A=cmv59ziwa00lbmw41vfv3btyk B=cmv59zj3e00limw4141lhlahp)
+exit=0
+```
+
+## Lab 14 — Client-side field encryption (`mask_otel_spans`) (2026-10-12)
+
+Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13, EE overlay up, `events_only` write mode. Command: `labs/v4/langfuse-ee/14-field-encryption.sh` (exit 0).
+
+```text
+════ 1. Setup: org, projects A and B, API keys, one AES-256 key per project ════
+  org cmv59otog00cvmw41xh41z6dc  project A cmv59otua00d3mw411trfmoa6  project B cmv59ou1100damw41ld4qjy5k
+  AES keys: 2 written to _base/.env.field-keys, mode 600
+════ 2. Send: 2 traces with the hook, 1 control trace without ════
+  span 'answer' attribute keys: ['langfuse.observation.input', 'langfuse.observation.metadata.account_no', 'langfuse.observation.model.name', 'langfuse.observation.output', 'langfuse.observation.type', 'langfuse.trace.metadata.account_no', 'langfuse.trace.name']
+  span 'transfer-status' attribute keys: ['langfuse.internal.is_app_root', 'langfuse.observation.input', 'langfuse.observation.output', 'langfuse.observation.type', 'langfuse.trace.input', 'langfuse.trace.metadata.account_no', 'langfuse.trace.name', 'langfuse.trace.output']
+  hook traces: de1f1135ae147c60540da456b93fa80f e6f040a0bbca38ac1abe68d56f3294a6
+  control trace: 5729c9e779e8466603be643068054403
+════ 3. ClickHouse: plaintext of the encrypted fields must be absent, the control must be present ════
+  events_full rows for the 3 traces: 6 (expect 6 = 3 traces x 2 observations)
+PASS  events_full hook rows: 4
+PASS  events_full plaintext input marker in hook rows: 0
+PASS  events_full plaintext account_no in hook rows: 0
+PASS  events_full rows holding enc:v1:: 4
+PASS  events_full control rows: 2
+PASS  events_full control input marker in plaintext (positive control): 2
+PASS  events_full control account_no in plaintext (positive control): 2
+PASS  events_full plaintext OUTPUT marker in hook rows (output was not encrypted): 4
+PASS  events_core hook rows: 4
+PASS  events_core plaintext input marker in hook rows: 0
+PASS  events_core plaintext account_no in hook rows: 0
+PASS  events_core rows holding enc:v1:: 4
+PASS  events_core control rows: 2
+PASS  events_core control input marker in plaintext (positive control): 2
+PASS  events_core control account_no in plaintext (positive control): 2
+PASS  events_core plaintext OUTPUT marker in hook rows (output was not encrypted): 4
+PASS  events_core_mv hook rows: 4
+PASS  events_core_mv plaintext input marker in hook rows: 0
+PASS  events_core_mv plaintext account_no in hook rows: 0
+PASS  events_core_mv rows holding enc:v1:: 4
+PASS  events_core_mv control rows: 2
+PASS  events_core_mv control input marker in plaintext (positive control): 2
+PASS  events_core_mv control account_no in plaintext (positive control): 2
+PASS  events_core_mv plaintext OUTPUT marker in hook rows (output was not encrypted): 4
+INFO  traces: no rows of this run (table is not written by this stack) - nothing to check
+INFO  observations: no rows of this run (table is not written by this stack) - nothing to check
+INFO  observations_pid_tid_sorting: no rows of this run (table is not written by this stack) - nothing to check
+INFO  observations_batch_staging: no rows of this run (table is not written by this stack) - nothing to check
+════ 4. What the UI shows: the public API returns the stored values ════
+  GET /api/public/v2/observations?traceId=<hook trace>&fields=core,basic,io,metadata:
+{"name":"answer","input":"enc:v1:cmv59otua00d3mw411trfmoa6:d610IJaYdRzss2KKR","account_no":"enc:v1:cmv59otua00d3mw411trfmoa6:FUCEH_J","output":"Your transfer ENCMARK-OUT-1791810468 is complete"}
+{"name":"transfer-status","input":"enc:v1:cmv59otua00d3mw411trfmoa6:dQfxlbO-fJuE8Dx_A","account_no":"enc:v1:cmv59otua00d3mw411trfmoa6:bYxR8Hv","output":"Your transfer ENCMARK-OUT-1791810468 is complete"}
+PASS  API observations whose input is ciphertext: 2
+PASS  API observations whose metadata.account_no is ciphertext: 2
+PASS  API observations holding the plaintext input marker: 0
+════ 5. Reader: decrypt with the project's key (14-decrypt-fields.py) ════
+  ── trace de1f1135ae147c60540da456b93fa80f: 2 observations
+     child observation answer: input = enc:v1:cmv59otua00d3mw411trfmoa6:d610IJaYdRzss2KKR…  account_no = enc:v1:cmv59otua00d3mw411trfmoa6:FUCEH_J…
+  PASS  child observation answer input is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:d610IJa…
+  PASS  child observation answer input decrypts to the expected plaintext: decrypted value equals expected
+  PASS  child observation answer input with another project's key fails: InvalidTag
+  PASS  child observation answer metadata.account_no is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:FUCEH_J…
+  PASS  child observation answer metadata.account_no decrypts to the expected plaintext: decrypted value equals expected
+  PASS  child observation answer output is plaintext (search control): Your transfer ENCMARK-OUT-1791810468 is complete
+     root observation transfer-status: input = enc:v1:cmv59otua00d3mw411trfmoa6:dQfxlbO-fJuE8Dx_A…  account_no = enc:v1:cmv59otua00d3mw411trfmoa6:bYxR8Hv…
+  PASS  root observation transfer-status input is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:dQfxlbO…
+  PASS  root observation transfer-status input decrypts to the expected plaintext: decrypted value equals expected
+  PASS  root observation transfer-status input with another project's key fails: InvalidTag
+  PASS  root observation transfer-status metadata.account_no is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:bYxR8Hv…
+  PASS  root observation transfer-status metadata.account_no decrypts to the expected plaintext: decrypted value equals expected
+  PASS  root observation transfer-status output is plaintext (search control): Your transfer ENCMARK-OUT-1791810468 is complete
+  ── trace e6f040a0bbca38ac1abe68d56f3294a6: 2 observations
+     child observation answer: input = enc:v1:cmv59otua00d3mw411trfmoa6:e2Mhx_mzHkMs_1sOb…  account_no = enc:v1:cmv59otua00d3mw411trfmoa6:CflIHI3…
+  PASS  child observation answer input is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:e2Mhx_m…
+  PASS  child observation answer input decrypts to the expected plaintext: decrypted value equals expected
+  PASS  child observation answer input with another project's key fails: InvalidTag
+  PASS  child observation answer metadata.account_no is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:CflIHI3…
+  PASS  child observation answer metadata.account_no decrypts to the expected plaintext: decrypted value equals expected
+  PASS  child observation answer output is plaintext (search control): Your transfer ENCMARK-OUT-1791810468 is complete
+     root observation transfer-status: input = enc:v1:cmv59otua00d3mw411trfmoa6:bs8HxkYjgZOIwtQgN…  account_no = enc:v1:cmv59otua00d3mw411trfmoa6:DKVg2cf…
+  PASS  root observation transfer-status input is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:bs8HxkY…
+  PASS  root observation transfer-status input decrypts to the expected plaintext: decrypted value equals expected
+  PASS  root observation transfer-status input with another project's key fails: InvalidTag
+  PASS  root observation transfer-status metadata.account_no is ciphertext: enc:v1:cmv59otua00d3mw411trfmoa6:DKVg2cf…
+  PASS  root observation transfer-status metadata.account_no decrypts to the expected plaintext: decrypted value equals expected
+  PASS  root observation transfer-status output is plaintext (search control): Your transfer ENCMARK-OUT-1791810468 is complete
+PASS  reader exit status: 0
+PASS  reader PASS lines (2 traces x 2 observations x 6 checks): 24
+════ 6. UI search: tRPC events.all with searchType input/output (the v4 table's search) ════
+PASS  search input 'ENCMARK-IN-1791810468': hook-trace hits (ciphertext): 0
+PASS  search input 'ENCMARK-IN-1791810468': control hits (positive control): 2
+PASS  search output 'ENCMARK-OUT-1791810468': hook-trace hits (plaintext output): 4
+PASS  search output 'ENCMARK-OUT-1791810468': control hits: 2
+PASS  search content 'ENCMARK-IN-1791810468': hook-trace hits: 0
+PASS  search content 'ENCMARK-IN-1791810468': control hits (positive control): 2
+════ 7. LLM-as-a-judge: what {{input}} resolves to (no model is called) ════
+  events.js:  const getTraceById = async (params) => {
+  events.js:      if (env_1.env.LANGFUSE_MIGRATION_V4_WRITE_MODE !== "events_only") {
+  events.js:          return (0, traces_1.getTraceByIdFromTracesTable)(params);
+  events.js:      }
+  events.js:      return (0, exports.getTraceByIdFromEventsTable)(params);
+  events.js:  };
+  evalService.js:1136:                value: parseDatabaseRowValue(trace, mapping),
+  stored root input (what {{input}} gets): enc:v1:cmv59otua00d3mw411trfmoa6:dQfxlbO-fJuE8Dx_AkvNmkGNYl6hjyDbT1crw...
+PASS  evaluator {{input}} is ciphertext: yes
+
+✅ All checks PASS (run 1791810468).
+```
+
+## Lab 15 — ClickHouse OSS row policy on `project_id` (2026-10-12)
+
+Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13, EE overlay up, `events_only` write mode. Command: `labs/v4/langfuse-ee/15-ch-row-policy.sh` (exit 0).
+
+```text
+════ 0. Server and the tables that carry project_id ════
+  version: 26.8.22.13
+  tables with project_id (12): blob_storage_file_log dataset_run_items_rmt events_core events_full observations observations_batch_staging observations_pid_tid_sorting scores topic_assignments topic_facet_summaries topics traces
+  views with project_id  (4): analytics_observations analytics_scores analytics_traces events_core_mv   (not given a policy; they read the tables above)
+  tables WITHOUT project_id: schema_migrations
+════ 1. Organization + two projects (A, B) + keys ════
+  project A id = cmv59oggd00cfmw417t7fiq7i
+  project B id = cmv59oglh00cmmw41wg6vw9df
+════ 2. Send traces to A and B through the SDK (OTLP) ════
+  sent 3 traces (+3 scores) to project A
+  sent 3 traces (+3 scores) to project B
+▶ Waiting for both projects' rows in events_full and scores (up to 120 s)…
+  events_full: A=6 B=6   scores: A=3 B=3
+════ 3. Which tables hold rows for both projects (positive control, as clickhouse) ════
+  tested   blob_storage_file_log  (A=3, B=3)
+  skipped  dataset_run_items_rmt  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  tested   events_core  (A=6, B=6)
+  tested   events_full  (A=6, B=6)
+  skipped  observations  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  observations_batch_staging  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  observations_pid_tid_sorting  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  tested   scores  (A=3, B=3)
+  skipped  topic_assignments  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  topic_facet_summaries  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  topics  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  traces  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  analytics_observations  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  analytics_scores  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+  skipped  analytics_traces  (A=0, B=0: no rows for one project, a 0 here would prove nothing)
+════ 4. Create analyst_a and a row policy on every project_id table ════
+  clickhouse: access_management = 0 (users.d/default-user.xml)
+  PASS  clickhouse cannot create users (Langfuse's account has no access management)  [ACCESS_DENIED]
+  → creating a temporary admin user lab_rp_admin through users.d (ClickHouse reloads it, no restart)
+  12 policies named rp_analyst_a; one of them:
+    Row 1:
+    ──────
+    database:      default
+    table:         events_full
+    select_filter: project_id = 'cmv59oggd00cfmw417t7fiq7i'
+    apply_to_list: ['analyst_a']
+════ 5. As analyst_a: only project A; as clickhouse: both ════
+  PASS  blob_storage_file_log: clickhouse sees A and B (control)  [cmv59oggd00cfmw417t7fiq7i:3 cmv59oglh00cmmw41wg6vw9df:3]
+  PASS  blob_storage_file_log: analyst_a GROUP BY project_id sees only A  [cmv59oggd00cfmw417t7fiq7i:3]
+  PASS  blob_storage_file_log: analyst_a WHERE project_id='B' returns 0  [0]
+  PASS  events_core: clickhouse sees A and B (control)  [cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:6]
+  PASS  events_core: analyst_a GROUP BY project_id sees only A  [cmv59oggd00cfmw417t7fiq7i:6]
+  PASS  events_core: analyst_a WHERE project_id='B' returns 0  [0]
+  PASS  events_full: clickhouse sees A and B (control)  [cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:6]
+  PASS  events_full: analyst_a GROUP BY project_id sees only A  [cmv59oggd00cfmw417t7fiq7i:6]
+  PASS  events_full: analyst_a WHERE project_id='B' returns 0  [0]
+  PASS  scores: clickhouse sees A and B (control)  [cmv59oggd00cfmw417t7fiq7i:3 cmv59oglh00cmmw41wg6vw9df:3]
+  PASS  scores: analyst_a GROUP BY project_id sees only A  [cmv59oggd00cfmw417t7fiq7i:3]
+  PASS  scores: analyst_a WHERE project_id='B' returns 0  [0]
+════ 6. Why clickhouse is unaffected (settings) ════
+  system.settings (per query, user-level):
+    apply_row_policy_after_final	1
+  system.server_settings rows matching row_polic|users_without: 0  (the server option is not listed there)
+  config.xml (<access_control_improvements>), effective copy first:
+    /var/lib/clickhouse/preprocessed_configs/config.xml:872:        <throw_on_unmatched_row_policies>false</throw_on_unmatched_row_policies>
+    /var/lib/clickhouse/preprocessed_configs/config.xml:878:        <users_without_row_policies_can_read_rows>true</users_without_row_policies_can_read_rows>
+    /etc/clickhouse-server/config.xml:866:        <throw_on_unmatched_row_policies>false</throw_on_unmatched_row_policies>
+    /etc/clickhouse-server/config.xml:872:        <users_without_row_policies_can_read_rows>true</users_without_row_policies_can_read_rows>
+  clickhouse has policies applied to it: 0 (policy lists only analyst_a)
+  PASS  users_without_row_policies_can_read_rows is true: a user the policy does not name reads all rows  [true]
+════ 7. Langfuse itself still works after the policies exist ════
+  control — API before the policy was created: A=6 B=6
+  PASS  control: the API returned B's 6 observations BEFORE the policies existed  [6]
+  PASS  public API GET /api/public/v2/observations, project B, AFTER the policies  [6]
+  PASS  public API GET /api/public/v2/observations, project A, AFTER the policies  [6]
+  sent 1 traces (+1 scores) to project B
+  PASS  a trace sent AFTER the policies exist is ingested (worker insert) and served to B  [8]
+  PASS  …and ClickHouse holds 8 events_full rows for B (clickhouse)  [8]
+════ 8. Escape hatches as analyst_a ════
+  PASS  merge('default','^events_full$'): no B rows  [analyst: cmv59oggd00cfmw417t7fiq7i:6 | control: cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:8 ]
+  PASS  MV target events_core directly: no B rows  [analyst: cmv59oggd00cfmw417t7fiq7i:6 | control: cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:8 ]
+  PASS  remote('localhost') without credentials: refused  [Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: analyst_a: Not enough privileges. To execute this query, it's necessary to have the grant READ ON REMOTE. (ACCESS_DENIED)]
+  PASS  remote('localhost') with the analyst's own credentials: refused  [Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: analyst_a: Not enough privileges. To execute this query, it's necessary to have the grant READ ON REMOTE. (ACCESS_DENIED)]
+  PASS  FINAL: no B rows  [analyst: cmv59oggd00cfmw417t7fiq7i:6 | control: cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:8 ]
+  PASS  PREWHERE on another column: no B rows  [analyst: cmv59oggd00cfmw417t7fiq7i:6 | control: cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:8 ]
+  PASS  remote('localhost') without credentials, REMOTE granted: no B rows  [analyst: cmv59oggd00cfmw417t7fiq7i:6 | control: cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:8 ]
+  PASS  remote('localhost') with the analyst's own credentials, REMOTE granted: no B rows  [analyst: cmv59oggd00cfmw417t7fiq7i:6 | control: cmv59oggd00cfmw417t7fiq7i:6 cmv59oglh00cmmw41wg6vw9df:8 ]
+  PASS  system.parts (row counts of the whole table): refused  [Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: analyst_a: Not enough privileges. To execute this query, it's necessary to have the grant SELECT ON system.parts. (ACCESS_DENIED)]
+  (system.parts is not a row-policy question: it carries no project_id. It is blocked or open by GRANT, shown above.)
+════ 9. CREATE MASKING POLICY on OSS ════
+  version: 26.8.22.13
+    Received exception from server (version 26.8.22):
+    Code: 344. DB::Exception: Received from localhost:9000. DB::Exception: Masking Policies are available only in ClickHouse Cloud. (SUPPORT_IS_DISABLED)
+    (query: CREATE MASKING POLICY mp_probe ON default.events_full UPDATE input = '***' TO analyst_a)
+  PASS  CREATE MASKING POLICY is refused on this server  [Code: 344. Masking Policies are available only in ClickHouse Cloud. (SUPPORT_IS_DISABLED)]
+  PASS  no masking policy was created (control: row policies exist, masking ones do not)  [0]
+
+✅ ROW POLICY VERDICT: PASS (0 failed checks)
+▶ Cleanup: row policies left = 0, users named analyst_a left = 0
+▶ Cleanup: temporary admin user definition removed (/etc/clickhouse-server/users.d/zz-15-row-policy-admin.xml); ClickHouse drops it on its next config reload
+```
 
 ---
 

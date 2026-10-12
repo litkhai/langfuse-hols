@@ -15,7 +15,7 @@ Every lab exists once per Langfuse major version, in `labs/v3/` and `labs/v4/` (
 | | v3 (`_base/v3/`) | v4 (`_base/v4/`) |
 |---|---|---|
 | Image pins (`versions.env`) | Langfuse 3.225.11, ClickHouse 26.8.22.13 | Langfuse 4.56.0, ClickHouse 26.8.22.13 |
-| Python deps (`requirements.txt`) | `langfuse==3.15.0` | `langfuse==4.17.0`, `anthropic`, `opentelemetry-instrumentation-anthropic` |
+| Python deps (`requirements.txt`) | `langfuse==3.15.0` | `langfuse==4.17.0`, `anthropic`, `opentelemetry-instrumentation-anthropic`, `cryptography` (langfuse-ee 14) |
 | Trace generator (`seed_traces.py`) | SDK v3, optional real OpenAI calls | SDK v4, optional real Anthropic calls |
 | Where ClickHouse puts traces | `traces`, `observations`, `scores` | `events_full` / `events_core` (one wide row per observation, a trace is its root observation `is_app_root`) and `scores`; the v3 tables stay empty |
 | Compose project, containers | `langfuse-hols-v3`, `langfuse-hols-v3-<service>-1` | `langfuse-hols-v4`, `langfuse-hols-v4-<service>-1` |
@@ -180,7 +180,7 @@ docker stop $(docker ps -q --filter label=com.docker.compose.project=langfuse-ho
 | | v3 (`_base/v3/`) | v4 (`_base/v4/`) |
 |---|---|---|
 | 이미지 버전 고정 (`versions.env`) | Langfuse 3.225.11, ClickHouse 26.8.22.13 | Langfuse 4.56.0, ClickHouse 26.8.22.13 |
-| Python 의존성 (`requirements.txt`) | `langfuse==3.15.0` | `langfuse==4.17.0`, `anthropic`, `opentelemetry-instrumentation-anthropic` |
+| Python 의존성 (`requirements.txt`) | `langfuse==3.15.0` | `langfuse==4.17.0`, `anthropic`, `opentelemetry-instrumentation-anthropic`, `cryptography` (langfuse-ee 14) |
 | trace 생성기 (`seed_traces.py`) | SDK v3, 선택적으로 실제 OpenAI 호출 | SDK v4, 선택적으로 실제 Anthropic 호출 |
 | ClickHouse의 trace 저장 위치 | `traces`, `observations`, `scores` | `events_full` / `events_core`(observation마다 넓은 행 하나, trace는 루트 observation `is_app_root`)와 `scores`. v3 테이블은 비어 있음 |
 | compose 프로젝트, 컨테이너 | `langfuse-hols-v3`, `langfuse-hols-v3-<service>-1` | `langfuse-hols-v4`, `langfuse-hols-v4-<service>-1` |

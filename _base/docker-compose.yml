@@ -40,7 +40,7 @@ name: langfuse-hols-${LF_TRACK:?LF_TRACK is not set -- it comes from _base/<trac
 services:
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:?LANGFUSE_VERSION is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}   # pinned per track (#33)
-    restart: always
+    restart: unless-stopped
     depends_on: &langfuse-depends-on
       postgres:
         condition: service_healthy
@@ -97,7 +97,7 @@ services:
 
   langfuse-web:
     image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:?LANGFUSE_VERSION is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}   # pinned per track (#33)
-    restart: always
+    restart: unless-stopped
     depends_on: *langfuse-depends-on
     ports:
       - 3000:3000
@@ -118,7 +118,7 @@ services:
 
   clickhouse:
     image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:?CLICKHOUSE_VERSION is not set -- it comes from _base/<track>/versions.env; start the stack with _base/bin/up.sh <track> (v3 or v4)}   # Langfuse v4 requires ClickHouse >= 25.12 (26.4 recommended); pinned per track (#33)
-    restart: always
+    restart: unless-stopped
     user: "101:101"
     environment:
       CLICKHOUSE_DB: default
@@ -141,7 +141,7 @@ services:
     # No version tag is published (only `latest` / `latest-dev`), so pinned by digest (#6):
     # index digest of `latest`, resolved 2026-10-06 from the cgr.dev manifest API.
     image: cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034
-    restart: always
+    restart: unless-stopped
     entrypoint: sh
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
     environment:
@@ -161,7 +161,7 @@ services:
 
   redis:
     image: docker.io/redis:${REDIS_VERSION:-7.2.16}
-    restart: always
+    restart: unless-stopped
     command: >
       --requirepass ${REDIS_AUTH:-myredissecret}
       --maxmemory-policy noeviction
@@ -177,7 +177,7 @@ services:
 
   postgres:
     image: docker.io/postgres:${POSTGRES_VERSION:-17.11}
-    restart: always
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 3s

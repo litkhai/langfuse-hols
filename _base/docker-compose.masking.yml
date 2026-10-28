@@ -19,7 +19,7 @@
 services:
   masking:
     image: docker.io/python:3.12.15-slim
-    restart: always
+    restart: unless-stopped
     command: python /app/masking_service.py
     volumes:
       - ./masking/masking_service.py:/app/masking_service.py:ro

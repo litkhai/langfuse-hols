@@ -107,6 +107,8 @@ Every lab reads this file. Never commit it.
 | `bin/down.sh <track>` | stops that track's stack with all four compose files; `--purge` also deletes its data volumes (`down -v`) |
 | `<track>/seed_traces.py` | the trace generator both labs of the track use (`labs/<track>/langfuse-ee/02-generate-traces.py` and `labs/<track>/langfuse-eval/01-seed-traces.py` are thin wrappers); needs `pip install -r _base/<track>/requirements.txt` |
 
+Services use `restart: unless-stopped`: a running stack comes back after Docker Desktop restarts, a stack you stopped (`docker stop`, Docker Desktop Stop) stays stopped.
+
 `bin/check.sh` needs only `docker` and `curl`, and never prints a key value:
 
 1. **Containers** — the six services of the track's project are running; `postgres`, `clickhouse`, `redis`, `minio` report `healthy`.
@@ -271,6 +273,8 @@ chmod 600 _base/.env
 | `bin/check.sh <track>` | 준비 상태 점검 — 항목별 PASS / FAIL / SKIP, FAIL이 하나라도 있으면 종료 코드 1; `--env-file PATH`, `--help` |
 | `bin/down.sh <track>` | compose 파일 4개를 모두 지정해 그 트랙의 스택 종료; `--purge`는 그 트랙의 데이터 볼륨까지 삭제(`down -v`) |
 | `<track>/seed_traces.py` | 그 트랙의 두 랩이 함께 쓰는 trace 생성기(`labs/<track>/langfuse-ee/02-generate-traces.py`와 `labs/<track>/langfuse-eval/01-seed-traces.py`는 얇은 래퍼); `pip install -r _base/<track>/requirements.txt` 필요 |
+
+서비스는 `restart: unless-stopped`입니다. 실행 중이던 스택은 Docker Desktop이 재시작돼도 다시 뜨고, 직접 멈춘 스택(`docker stop`, Docker Desktop의 Stop)은 멈춘 채로 남습니다.
 
 `bin/check.sh`는 `docker`와 `curl`만 필요하고, 키 값은 절대 출력하지 않습니다.
 

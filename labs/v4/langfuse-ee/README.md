@@ -367,7 +367,7 @@ The overlay [`docker-compose.sso.yml`](../../../_base/docker-compose.sso.yml) ad
 | B | `AUTH_DOMAINS_WITH_SSO_ENFORCEMENT=sso.test`, `AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING=true` | sign-up and password sign-in for `sso.test` → HTTP 422 / refused, `other.test` unaffected; the refused user signs in through SSO and gets a `keycloak` row in Postgres `"Account"` |
 | C | `AUTH_DISABLE_USERNAME_PASSWORD=true` | password sign-up and sign-in refused for every domain, the initial admin included; SSO still works |
 
-- **Tokens in Postgres:** after an SSO sign-in, the user's `"Account"` row holds the IdP's `access_token`, `refresh_token` and `id_token`. `AUTH_IGNORE_ACCOUNT_FIELDS` exists to drop such fields; it was not tested.
+- **Tokens in Postgres:** after an SSO sign-in, the user's `"Account"` row holds the IdP's `access_token`, `refresh_token` and `id_token` as issued: plain JWTs, not encrypted by Langfuse. `AUTH_IGNORE_ACCOUNT_FIELDS` exists to drop such fields; it was not tested.
 - **Phase C locks out every password user**, the initial admin too. The script ends by restarting `langfuse-web` without the overlay and removing Keycloak, then checks the admin can sign in again.
 - **For a browser:** add `127.0.0.1 keycloak` to `/etc/hosts`. The issuer must be the same URL for the browser and for `langfuse-web`.
 
@@ -858,7 +858,7 @@ Langfuse용 ClickHouse 계정은 `access_management=0`이라, 스크립트가 `u
 | B | `AUTH_DOMAINS_WITH_SSO_ENFORCEMENT=sso.test`, `AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING=true` | `sso.test`의 비밀번호 가입·로그인 → HTTP 422 / 거부, `other.test`는 영향 없음. A에서 거부된 사용자가 SSO로 로그인하고 Postgres `"Account"`에 `keycloak` 행이 생김 |
 | C | `AUTH_DISABLE_USERNAME_PASSWORD=true` | 모든 도메인의 비밀번호 가입·로그인 거부(초기 관리자 포함), SSO는 동작 |
 
-- **Postgres의 토큰:** SSO 로그인 뒤 사용자의 `"Account"` 행에 IdP의 `access_token`, `refresh_token`, `id_token`이 남습니다. 이런 필드를 빼는 `AUTH_IGNORE_ACCOUNT_FIELDS`가 있지만 시험하지 않았습니다.
+- **Postgres의 토큰:** SSO 로그인 뒤 사용자의 `"Account"` 행에 IdP의 `access_token`, `refresh_token`, `id_token`이 발급된 그대로, 즉 Langfuse가 암호화하지 않은 JWT로 남습니다. 이런 필드를 빼는 `AUTH_IGNORE_ACCOUNT_FIELDS`가 있지만 시험하지 않았습니다.
 - **C 단계는 비밀번호 사용자를 모두 막습니다.** 초기 관리자도 마찬가지입니다. 스크립트는 마지막에 오버레이 없이 `langfuse-web`을 다시 띄우고 Keycloak을 지운 뒤, 관리자가 다시 로그인되는지 확인합니다.
 - **브라우저로 보려면** `/etc/hosts`에 `127.0.0.1 keycloak`을 넣습니다. issuer는 브라우저와 `langfuse-web`에서 같은 URL이어야 합니다.
 

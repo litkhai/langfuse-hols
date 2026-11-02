@@ -1039,11 +1039,11 @@ Langfuse v4.56.0 / CH 26.8.22.13 / Keycloak 26.8.1, EE overlay up, existing volu
 ════ A. OIDC + SAML broker, no enforcement ════
   PASS  A | broker checks the SAML signature | expected: validateSignature=true | observed: validateSignature=true
   PASS  A | /api/auth/providers | expected: keycloak listed | observed: credentials,keycloak
-  PASS  A | OIDC sign-in (Keycloak) | expected: session for bob | observed: session=bob-20261102174003@sso.test error=none
+  PASS  A | OIDC sign-in (Keycloak) | expected: session for bob | observed: session=bob-20261102175542@sso.test error=none
   PASS  A | first-login roles (LANGFUSE_DEFAULT_*) | expected: org=NONE project=VIEWER | observed: org=NONE project=VIEWER
-  PASS  A | IdP tokens stored in Postgres "Account" (no AUTH_IGNORE_ACCOUNT_FIELDS) | expected: recorded | observed: access_token,refresh_token,id_token
+  PASS  A | IdP tokens in Postgres "Account" as plain JWTs (no AUTH_IGNORE_ACCOUNT_FIELDS) | expected: recorded | observed: access_token,refresh_token,id_token
   PASS  A | OIDC sign-in, wrong password | expected: no session | observed: session=none error=Keycloak rejected the credentials (login form shown again)
-  PASS  A | SAML IdP via broker (kc_idp_hint) | expected: session for alice | observed: session=alice-20261102174003@sso.test error=none
+  PASS  A | SAML IdP via broker (kc_idp_hint) | expected: session for alice | observed: session=alice-20261102175542@sso.test error=none
   PASS  A | broker user linked to the SAML IdP | expected: corp-saml | observed: corp-saml
   PASS  A | password sign-up (control, no enforcement yet) | expected: HTTP 200 | observed: HTTP 200 User created
   PASS  A | SSO for an email that has a password account, linking off | expected: no session, OAuthAccountNotLinked | observed: session=none error=OAuthAccountNotLinked
@@ -1051,14 +1051,14 @@ Langfuse v4.56.0 / CH 26.8.22.13 / Keycloak 26.8.1, EE overlay up, existing volu
   PASS  B | password sign-up, enforced domain | expected: refused | observed: HTTP 422 Sign up with email and password is disabled for this domain. Please use SSO.
   PASS  B | password sign-up, other domain (control) | expected: HTTP 200 | observed: HTTP 200 User created
   PASS  B | password sign-in, enforced domain (existing account) | expected: no session | observed: error: Sign in with email and password is disabled for this domain. Please use SSO.
-  PASS  B | password sign-in, other domain (control) | expected: session | observed: frank-20261102174003@other.test
-  PASS  B | SSO for the same email, linking on | expected: session for dave | observed: session=dave-20261102174003@sso.test error=none
+  PASS  B | password sign-in, other domain (control) | expected: session | observed: frank-20261102175542@other.test
+  PASS  B | SSO for the same email, linking on | expected: session for dave | observed: session=dave-20261102175542@sso.test error=none
   PASS  B | accounts linked to dave's user (Postgres) | expected: keycloak | observed: keycloak
 ════ C. AUTH_DISABLE_USERNAME_PASSWORD=true ════
   PASS  C | password sign-up, any domain | expected: refused | observed: HTTP 422 Sign up with email and password is disabled for this instance. Please use SSO.
   PASS  C | password sign-in, other domain | expected: no session | observed: error: Sign in with email and password is disabled for this instance. Please use SSO.
   PASS  C | password sign-in, initial admin | expected: no session | observed: error: Sign in with email and password is disabled for this instance. Please use SSO.
-  PASS  C | OIDC sign-in still works | expected: session for bob | observed: session=bob-20261102174003@sso.test
+  PASS  C | OIDC sign-in still works | expected: session for bob | observed: session=bob-20261102175542@sso.test
 ════ Restore: langfuse-web without the SSO overlay, Keycloak removed ════
   PASS  restore | password sign-in, initial admin | expected: session | observed: admin@example.com
 

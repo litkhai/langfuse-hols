@@ -133,12 +133,14 @@ row A "first-login roles (LANGFUSE_DEFAULT_*)" "org=NONE project=VIEWER" "$r" $o
 
 printf 'Aa1!wrong-%s' "$(openssl rand -hex 6)" > "$WORK/pw-wrong"
 # What Langfuse keeps from the IdP: NextAuth's Account row (tokens unless AUTH_IGNORE_ACCOUNT_FIELDS).
+# A value starting with `eyJ` is a JWT as issued (base64url of `{"`), i.e. not encrypted by Langfuse.
+# Only the first three characters are read; no token is printed.
 tok=$(lf_compose -- exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -tA -c \
-  "SELECT concat_ws(',', CASE WHEN a.access_token IS NOT NULL THEN 'access_token' END,
-     CASE WHEN a.refresh_token IS NOT NULL THEN 'refresh_token' END, CASE WHEN a.id_token IS NOT NULL THEN 'id_token' END)
+  "SELECT concat_ws(',', CASE WHEN left(a.access_token, 3) = 'eyJ' THEN 'access_token' END,
+     CASE WHEN left(a.refresh_token, 3) = 'eyJ' THEN 'refresh_token' END, CASE WHEN left(a.id_token, 3) = 'eyJ' THEN 'id_token' END)
    FROM \"Account\" a JOIN users u ON u.id = a.user_id WHERE u.email = '$BOB' AND a.provider = 'keycloak'")
 [ -n "$tok" ] && ok=1 || ok=0
-row A "IdP tokens stored in Postgres \"Account\" (no AUTH_IGNORE_ACCOUNT_FIELDS)" "recorded" "${tok:-none}" $ok
+row A "IdP tokens in Postgres \"Account\" as plain JWTs (no AUTH_IGNORE_ACCOUNT_FIELDS)" "recorded" "${tok:-none}" $ok
 
 R=$(sso "$BOB" "" "$WORK/pw-wrong")
 e=$(echo "$R" | jq -r '.session.user.email // "none"'); [ "$e" = none ] && ok=1 || ok=0

@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lab 16 overlay — SSO: Keycloak as OIDC provider, a SAML IdP behind it
+#
+#  Adds one Keycloak with two realms (sso/realm-*.json):
+#    langfuse   the OIDC provider Langfuse talks to (client `langfuse`), and the SAML
+#               service provider that brokers `corp`
+#    corp       stands in for a company IdP that speaks SAML only
+#  Langfuse has OIDC/OAuth providers but no SAML provider of its own, so a SAML-only
+#  IdP is reached through a broker like this one.
+#
+#  Keycloak's frontend URL is http://keycloak:8088 on purpose: the browser and
+#  langfuse-web (discovery, token exchange) must see the same issuer. Inside the
+#  compose network `keycloak` resolves; on the host, 16-ee-sso.sh pins it to
+#  127.0.0.1 per request. For a browser, add `127.0.0.1 keycloak` to /etc/hosts.
+#
+#  Layer on top of base + EE (16-ee-sso.sh does this):
+#    . _base/lib/env.sh v4 && lf_compose ee sso -- up -d      (the track: v3 or v4)
+#  Everything below the provider block is switched per phase by 16-ee-sso.sh from the
+#  shell; unset = no enforcement, no account linking.
+#  Docs: https://langfuse.com/self-hosting/security/authentication-and-sso
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.8.1}   # pinned (#69)
+    restart: unless-stopped
+    command: start-dev --import-realm --http-port=8088 --hostname=http://keycloak:8088
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Client secret of the `langfuse` OIDC client; the realm file reads it with ${env.…}.
+      LANGFUSE_OIDC_CLIENT_SECRET: ${AUTH_KEYCLOAK_CLIENT_SECRET:-langfuse-lab-secret}
+    volumes:
+      - ./sso:/opt/keycloak/data/import:ro
+    ports:
+      - 127.0.0.1:8088:8088
+
+  langfuse-web:
+    environment:
+      # ── Provider: Keycloak (NextAuth provider id `keycloak`) ──
+      AUTH_KEYCLOAK_CLIENT_ID: langfuse
+      AUTH_KEYCLOAK_CLIENT_SECRET: ${AUTH_KEYCLOAK_CLIENT_SECRET:-langfuse-lab-secret}
+      AUTH_KEYCLOAK_ISSUER: http://keycloak:8088/realms/langfuse
+      # ── Where a first-time SSO user lands (project roles need the EE licence) ──
+      LANGFUSE_DEFAULT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-ch-workshop}
+      LANGFUSE_DEFAULT_ORG_ROLE: ${SSO_DEFAULT_ORG_ROLE:-NONE}
+      LANGFUSE_DEFAULT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-llm-observability}
+      LANGFUSE_DEFAULT_PROJECT_ROLE: ${SSO_DEFAULT_PROJECT_ROLE:-VIEWER}
+      # ── Switched per phase by 16-ee-sso.sh ──
+      AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING: ${SSO_ALLOW_ACCOUNT_LINKING:-false}
+      AUTH_DOMAINS_WITH_SSO_ENFORCEMENT: ${SSO_ENFORCED_DOMAINS:-}
+      AUTH_DISABLE_USERNAME_PASSWORD: ${SSO_DISABLE_PASSWORD:-false}

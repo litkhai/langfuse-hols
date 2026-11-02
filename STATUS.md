@@ -1,6 +1,6 @@
 # STATUS.md
 
-**As of 2026-10-12** — `langfuse-ee` v4 has four more steps (12–15: masking failure modes, project isolation, field encryption, ClickHouse row policies), run end to end on the current pins ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). As of 2026-10-10: the pins are Langfuse v4 4.56.0 and ClickHouse 26.8.22.13, and both tracks were run end to end on them ([#55](https://github.com/litkhai/langfuse-hols/issues/55)). As of 2026-10-08: Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, run end to end ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
+**As of 2026-11-02** — `langfuse-ee` v4 has two more steps (16 SSO: Keycloak OIDC, a SAML IdP behind the broker, enforcement; 17 encryption in transit and at rest), run end to end on the current pins ([#69](https://github.com/litkhai/langfuse-hols/issues/69)). **As of 2026-10-12** — `langfuse-ee` v4 has four more steps (12–15: masking failure modes, project isolation, field encryption, ClickHouse row policies), run end to end on the current pins ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). As of 2026-10-10: the pins are Langfuse v4 4.56.0 and ClickHouse 26.8.22.13, and both tracks were run end to end on them ([#55](https://github.com/litkhai/langfuse-hols/issues/55)). As of 2026-10-08: Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, run end to end ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
 [#33](https://github.com/litkhai/langfuse-hols/issues/33)).
 As of 2026-10-08: the notes-site export (`docs/labs.json`) publishes all four labs, both tracks
 ([#56](https://github.com/litkhai/langfuse-hols/issues/56), [#58](https://github.com/litkhai/langfuse-hols/issues/58)). As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
@@ -17,6 +17,8 @@ a real enterprise licence key (Docker 29.8.2, Compose v5.5.1, Python 3.12.14) ([
 | v3 — [langfuse-ee](labs/v3/langfuse-ee/README.md), [langfuse-eval](labs/v3/langfuse-eval/README.md) | Langfuse v3.225.11 / SDK 3.15.0 / ClickHouse 26.8.22.13 | `langfuse-ee` 01–11, `langfuse-eval` 01–07 | offline only; the OpenAI path was not run |
 
 On **2026-10-12**, `langfuse-ee` v4 steps 12–15 were run end to end on the same v4 pins, with the licence key and no model calls except step 14's real `claude-haiku-4-5` judge run (2026-10-13, 9 calls), on existing volumes ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). The rest of the table was not re-run.
+
+On **2026-11-02**, `langfuse-ee` v4 steps 16–17 were run end to end on the same v4 pins plus Keycloak 26.8.1, with the licence key and no model calls, on existing volumes; step 17 puts ClickHouse on its own fresh volume (Docker 29.9.2, Compose v5.6.1) ([#69](https://github.com/litkhai/langfuse-hols/issues/69)). 16: 21 checks PASS. 17: 22 PASS, 3 INFO. The rest of the table was not re-run.
 
 The per-lab results are in each lab's README, and the logs in each lab's `lab-output.md`.
 
@@ -53,12 +55,14 @@ fixed tags and digests there. A run can override any of them without editing a f
 | `postgres` | 17.11 | 17.11 | Langfuse v4 requires ≥ 15 (16 recommended); 17 is the upstream compose default and this stack's existing major |
 | `cgr.dev/chainguard/minio` | `@sha256:4cf4831a…0034` | same | The registry publishes only `latest` / `latest-dev`, so the pin is the index digest of `latest`, resolved on 2026-10-06 |
 | `python` (lab 08 masking sidecar) | 3.12.15-slim | same | Highest `3.12.<patch>-slim` on Docker Hub on 2026-10-06 |
+| `quay.io/keycloak/keycloak` (lab 16) | 26.8.1 | same | Newest release tag on quay.io on 2026-11-02 (tag API; `26.8.1-2` rebuilt 2026-10-31) |
 
-How each was confirmed (Langfuse, ClickHouse and the PyPI packages read on 2026-10-10; Redis, Postgres, MinIO and `python` read on 2026-10-06 and not re-checked):
+How each was confirmed (Langfuse, ClickHouse and the PyPI packages read on 2026-10-10; Redis, Postgres, MinIO and `python` read on 2026-10-06 and not re-checked; Keycloak read on 2026-11-02):
 
 - Langfuse images: GitHub releases API and Docker Hub tags
 - the other images: Docker Hub tags
 - MinIO: the cgr.dev manifest API
+- Keycloak: the quay.io tag API
 - Python packages: PyPI JSON
 
 The v4 minimum versions and the v3 support end date come from Langfuse's

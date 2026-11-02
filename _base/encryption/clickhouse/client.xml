@@ -1,0 +1,13 @@
+<!-- Lab 17: clickhouse-client inside the container talks TLS on 9440 and checks the server
+     certificate against the lab CA. -->
+<config>
+  <secure>true</secure>
+  <port>9440</port>
+  <openSSL>
+    <client>
+      <caConfig>/etc/clickhouse-server/certs/ca.crt</caConfig>
+      <verificationMode>strict</verificationMode>
+      <loadDefaultCAFile>false</loadDefaultCAFile>
+    </client>
+  </openSSL>
+</config>

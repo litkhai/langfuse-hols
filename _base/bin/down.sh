@@ -13,9 +13,11 @@ fi
 . "$here/lib/env.sh" "$1"
 shift
 
-# Include every overlay so lab-specific sidecars (e.g. the lab-08 masking
-# service) and their config are torn down too. --remove-orphans is belt-and-braces.
-COMPOSE=(lf_compose ee masking governance --)
+# Include every overlay so lab-specific sidecars (the lab-08 masking service, the lab-16
+# Keycloak) and their config are torn down too. --remove-orphans is belt-and-braces.
+COMPOSE=(lf_compose ee masking governance sso encryption --)
+# The encryption overlay guards its two keys with `:?`; `down` only needs them to parse.
+export CLICKHOUSE_ENCRYPTION_KEY="${CLICKHOUSE_ENCRYPTION_KEY:-x}" MINIO_KMS_SECRET_KEY="${MINIO_KMS_SECRET_KEY:-x}"
 
 if [[ "${1:-}" == "--purge" ]]; then
   echo "▶ Stopping the ${TRACK} stack and DELETING all its data volumes…"

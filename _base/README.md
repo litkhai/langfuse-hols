@@ -47,6 +47,10 @@ _base/
 ├── docker-compose.ee.yml          # overlay: enterprise license key + admin API key
 ├── docker-compose.masking.yml     # overlay: masking sidecar + worker callback (needs ee)
 ├── docker-compose.governance.yml  # overlay: UI customization + org-creators allowlist (needs ee)
+├── docker-compose.sso.yml         # overlay: Keycloak + AUTH_KEYCLOAK_* and the SSO switches (lab 16)
+├── docker-compose.encryption.yml  # overlay: ClickHouse TLS + encrypted disk on its own volume, MinIO KMS, S3 SSE (lab 17)
+├── sso/realm-*.json               # Keycloak realms for lab 16: `langfuse` (OIDC, brokers `corp`) and `corp` (SAML IdP)
+├── encryption/clickhouse/*.xml    # lab 17 ClickHouse config; encryption/{certs,secrets}/ are generated and gitignored
 ├── masking/masking_service.py     # the masking sidecar (mounted by the masking overlay)
 ├── .env.example                   # copy to _base/.env — one file for both tracks
 ├── v3/ · v4/                      # per track: versions.env · requirements.txt · seed_traces.py
@@ -64,7 +68,9 @@ The same in both tracks:
 | `docker-compose.ee.yml` | lab 05 (and `EE=1 bin/up.sh <track>`) | injects `LANGFUSE_EE_LICENSE_KEY` into web and worker, plus `ADMIN_API_KEY` |
 | `+ docker-compose.masking.yml` | lab 08 | adds the `masking` sidecar, wires the worker to it |
 | `+ docker-compose.governance.yml` | lab 10 | UI customization and the org-creators allowlist on web |
-| all four | lab 99 / `bin/down.sh <track>` | so the sidecar and every overlay's config are torn down together |
+| `+ docker-compose.sso.yml` | lab 16 | adds `keycloak` (127.0.0.1:8088, realms from `sso/`), the Keycloak provider and the first-login roles on web; the SSO switches come from the shell |
+| `+ docker-compose.encryption.yml` | lab 17 | ClickHouse on the separate volume `langfuse_clickhouse_encrypted_data` with an encrypted default storage policy and TLS only (8443 / 9440); MinIO KMS key; web and worker on HTTPS with the lab CA and S3 SSE. Its two keys are `:?`-guarded: `17-ee-encryption.sh` exports them |
+| all six | lab 99 / `bin/down.sh <track>` | so the sidecars and every overlay's config are torn down together |
 
 Lab scripts do not spell the compose flags. They source [`lib/env.sh`](lib/env.sh) with their track and call `lf_compose`:
 
@@ -104,7 +110,7 @@ Every lab reads this file. Never commit it.
 |---|---|
 | `bin/up.sh <track>` | creates `_base/.env` if missing, refuses if the other track is running, starts the stack (`EE=1` adds the EE overlay), waits for `/api/public/health`, prints the logins |
 | `bin/check.sh <track>` | readiness check — PASS / FAIL / SKIP per item, exit 1 on any FAIL; `--env-file PATH`, `--help` |
-| `bin/down.sh <track>` | stops that track's stack with all four compose files; `--purge` also deletes its data volumes (`down -v`) |
+| `bin/down.sh <track>` | stops that track's stack with all six compose files; `--purge` also deletes its data volumes (`down -v`) |
 | `<track>/seed_traces.py` | the trace generator both labs of the track use (`labs/<track>/langfuse-ee/02-generate-traces.py` and `labs/<track>/langfuse-eval/01-seed-traces.py` are thin wrappers); needs `pip install -r _base/<track>/requirements.txt` |
 
 Services use `restart: unless-stopped`: a running stack comes back after Docker Desktop restarts, a stack you stopped (`docker stop`, Docker Desktop Stop) stays stopped.
@@ -214,6 +220,10 @@ _base/
 ├── docker-compose.ee.yml          # 오버레이: 엔터프라이즈 라이선스 키 + admin API 키
 ├── docker-compose.masking.yml     # 오버레이: 마스킹 사이드카 + worker 콜백 (ee 필요)
 ├── docker-compose.governance.yml  # 오버레이: UI 커스터마이징 + 조직 생성 허용목록 (ee 필요)
+├── docker-compose.sso.yml         # 오버레이: Keycloak + AUTH_KEYCLOAK_*와 SSO 스위치 (랩 16)
+├── docker-compose.encryption.yml  # 오버레이: ClickHouse TLS + 별도 볼륨의 암호화 디스크, MinIO KMS, S3 SSE (랩 17)
+├── sso/realm-*.json               # 랩 16 Keycloak realm: `langfuse`(OIDC, `corp` 중개), `corp`(SAML IdP)
+├── encryption/clickhouse/*.xml    # 랩 17 ClickHouse 설정; encryption/{certs,secrets}/는 실행 시 생성, gitignore
 ├── masking/masking_service.py     # 마스킹 사이드카 (마스킹 오버레이가 마운트)
 ├── .env.example                   # _base/.env 로 복사 — 두 트랙이 같은 파일을 씀
 ├── v3/ · v4/                      # 트랙별: versions.env · requirements.txt · seed_traces.py
@@ -231,7 +241,9 @@ _base/
 | `docker-compose.ee.yml` | 랩 05 (그리고 `EE=1 bin/up.sh <track>`) | web·worker에 `LANGFUSE_EE_LICENSE_KEY` 주입 + `ADMIN_API_KEY` |
 | `+ docker-compose.masking.yml` | 랩 08 | `masking` 사이드카 추가, worker를 그쪽으로 연결 |
 | `+ docker-compose.governance.yml` | 랩 10 | web에 UI 커스터마이징과 조직 생성 허용목록 |
-| 4개 전부 | 랩 99 / `bin/down.sh <track>` | 사이드카와 모든 오버레이 설정을 함께 정리 |
+| `+ docker-compose.sso.yml` | 랩 16 | `keycloak`(127.0.0.1:8088, realm은 `sso/`)을 추가하고, web에 Keycloak 공급자와 첫 로그인 역할을 넣음. SSO 스위치는 셸에서 |
+| `+ docker-compose.encryption.yml` | 랩 17 | ClickHouse를 별도 볼륨 `langfuse_clickhouse_encrypted_data`에 암호화 기본 저장 정책과 TLS 전용(8443 / 9440)으로, MinIO에 KMS 키, web과 worker는 실습 CA로 HTTPS와 S3 SSE. 두 키는 `:?`로 막혀 있고 `17-ee-encryption.sh`가 export함 |
+| 6개 전부 | 랩 99 / `bin/down.sh <track>` | 사이드카와 모든 오버레이 설정을 함께 정리 |
 
 랩 스크립트는 compose 플래그를 직접 쓰지 않습니다. 자기 트랙을 넘겨 [`lib/env.sh`](lib/env.sh)를 source 하고 `lf_compose`를 호출합니다.
 
@@ -271,7 +283,7 @@ chmod 600 _base/.env
 |---|---|
 | `bin/up.sh <track>` | `_base/.env`가 없으면 생성, 다른 트랙이 실행 중이면 거부, 스택 기동(`EE=1`이면 EE 오버레이 추가), `/api/public/health` 대기, 로그인 정보 출력 |
 | `bin/check.sh <track>` | 준비 상태 점검 — 항목별 PASS / FAIL / SKIP, FAIL이 하나라도 있으면 종료 코드 1; `--env-file PATH`, `--help` |
-| `bin/down.sh <track>` | compose 파일 4개를 모두 지정해 그 트랙의 스택 종료; `--purge`는 그 트랙의 데이터 볼륨까지 삭제(`down -v`) |
+| `bin/down.sh <track>` | compose 파일 6개를 모두 지정해 그 트랙의 스택 종료; `--purge`는 그 트랙의 데이터 볼륨까지 삭제(`down -v`) |
 | `<track>/seed_traces.py` | 그 트랙의 두 랩이 함께 쓰는 trace 생성기(`labs/<track>/langfuse-ee/02-generate-traces.py`와 `labs/<track>/langfuse-eval/01-seed-traces.py`는 얇은 래퍼); `pip install -r _base/<track>/requirements.txt` 필요 |
 
 서비스는 `restart: unless-stopped`입니다. 실행 중이던 스택은 Docker Desktop이 재시작돼도 다시 뜨고, 직접 멈춘 스택(`docker stop`, Docker Desktop의 Stop)은 멈춘 채로 남습니다.

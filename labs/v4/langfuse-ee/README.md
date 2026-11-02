@@ -73,6 +73,9 @@ langfuse-ee/
 │   ├── 14-decrypt-fields.py     #   ↳ reader: public API + per-project key
 │   └── 14-judge-encrypted.sh    #   ↳ real managed LLM-as-a-judge on the encrypted input (claude-haiku-4-5, ~3 calls)
 ├── 15-ch-row-policy.sh          # ClickHouse OSS row policy on project_id; CREATE MASKING POLICY on OSS
+├── 16-ee-sso.sh                 # Keycloak OIDC, a SAML IdP behind it, first-login roles, SSO enforcement, account linking
+│   └── 16-sso-login.py          #   ↳ scripted browser sign-in through Keycloak (stdlib only)
+├── 17-ee-encryption.sh          # TLS to ClickHouse, ClickHouse encrypted disk, MinIO SSE-S3, what Postgres holds
 └── 99-cleanup.sh                # Wrapper → _base/bin/down.sh v4: tear the stack down (--purge to wipe volumes)
 ```
 
@@ -86,6 +89,9 @@ _base/
 ├── docker-compose.ee.yml        # EE overlay: injects license key + admin API key
 ├── docker-compose.masking.yml   # Lab 08 overlay: masking sidecar + worker callback wiring
 ├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
+├── docker-compose.sso.yml       # Lab 16 overlay: Keycloak (realms in sso/) + AUTH_KEYCLOAK_* and the SSO switches
+├── docker-compose.encryption.yml# Lab 17 overlay: ClickHouse TLS + encrypted disk (own volume), MinIO KMS key, LANGFUSE_S3_*_SSE
+├── sso/ · encryption/           # Lab 16 realm files · lab 17 ClickHouse config (keys and certificates are generated, gitignored)
 ├── masking/masking_service.py   # Labs 08, 12: tiny stdlib masking-callback sidecar (+ /mask-slow, /mask-500, per-project rule)
 └── bin/                         # up.sh · check.sh · down.sh (first argument: the track, v3 or v4)
 ```
@@ -143,6 +149,8 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./13-ee-project-isolation.sh # org NONE + project VIEWER: cross-project visibility
 ./14-field-encryption.sh     # AES-GCM field encryption in the SDK hook (needs cryptography from requirements.txt)
 ./15-ch-row-policy.sh        # ClickHouse OSS row policy on project_id
+./16-ee-sso.sh               # Keycloak OIDC + SAML broker, first-login roles, SSO enforcement (~3 min)
+./17-ee-encryption.sh        # TLS to ClickHouse + encrypted disk + MinIO SSE-S3 (~2 min, own ClickHouse volume)
 ```
 
 ### 🧩 EE feature coverage
@@ -345,6 +353,45 @@ The Langfuse ClickHouse user has `access_management=0`, so the script drops a te
 - **Unfiltered:** `schema_migrations` has no `project_id`, and the `analytics_*` views get no policy of their own.
 - **Masking policy:** `CREATE MASKING POLICY` on 26.8.22.13 fails with `Code: 344 … Masking Policies are available only in ClickHouse Cloud. (SUPPORT_IS_DISABLED)`.
 
+#### 16 — SSO: OIDC, a SAML IdP behind a broker, enforcement ([16-ee-sso.sh](16-ee-sso.sh))
+
+The overlay [`docker-compose.sso.yml`](../../../_base/docker-compose.sso.yml) adds one Keycloak 26.8.1 with two realms:
+- `langfuse` is the OIDC provider Langfuse uses (`AUTH_KEYCLOAK_*`);
+- `corp` stands in for a company IdP that speaks SAML only. Langfuse has OIDC/OAuth providers but no SAML provider, so `langfuse` brokers `corp`, and the broker checks the SAML signature against `corp`'s certificate.
+
+[16-sso-login.py](16-sso-login.py) signs in the way a browser does: NextAuth CSRF, `POST /api/auth/signin/keycloak`, the Keycloak login form, the SAMLResponse form for the brokered IdP, the Langfuse callback, `GET /api/auth/session`. `kc_idp_hint=corp-saml` on the sign-in request goes straight to the SAML IdP. Users and passwords are made at run time.
+
+| Phase | Switches | What was observed |
+|---|---|---|
+| A | provider only | OIDC and SAML-brokered sign-in give a session; a wrong password does not. First login gets `LANGFUSE_DEFAULT_ORG_ROLE=NONE` + `LANGFUSE_DEFAULT_PROJECT_ROLE=VIEWER`. An email that already has a password account is refused with `OAuthAccountNotLinked` |
+| B | `AUTH_DOMAINS_WITH_SSO_ENFORCEMENT=sso.test`, `AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING=true` | sign-up and password sign-in for `sso.test` → HTTP 422 / refused, `other.test` unaffected; the refused user signs in through SSO and gets a `keycloak` row in Postgres `"Account"` |
+| C | `AUTH_DISABLE_USERNAME_PASSWORD=true` | password sign-up and sign-in refused for every domain, the initial admin included; SSO still works |
+
+- **Tokens in Postgres:** after an SSO sign-in, the user's `"Account"` row holds the IdP's `access_token`, `refresh_token` and `id_token` as issued: plain JWTs, not encrypted by Langfuse. `AUTH_IGNORE_ACCOUNT_FIELDS` exists to drop such fields; it was not tested.
+- **Phase C locks out every password user**, the initial admin too. The script ends by restarting `langfuse-web` without the overlay and removing Keycloak, then checks the admin can sign in again.
+- **For a browser:** add `127.0.0.1 keycloak` to `/etc/hosts`. The issuer must be the same URL for the browser and for `langfuse-web`.
+
+#### 17 — Encryption in transit and at rest ([17-ee-encryption.sh](17-ee-encryption.sh))
+
+The overlay [`docker-compose.encryption.yml`](../../../_base/docker-compose.encryption.yml) switches three things. ClickHouse runs on its own volume during this step, so the other labs' traces stay on the original one:
+- **ClickHouse:** an encrypted disk (AES-256-CTR, key from `CLICKHOUSE_ENCRYPTION_KEY`) as `merge_tree.storage_policy`, and TLS only: 8443 / 9440 open, 8123 / 9000 removed.
+- **MinIO:** a static KMS key (`MINIO_KMS_SECRET_KEY`), with Langfuse asking for SSE on each object (`LANGFUSE_S3_*_SSE=AES256`).
+- **Langfuse:** `CLICKHOUSE_URL=https://…:8443`, `CLICKHOUSE_MIGRATION_SSL=true`, and `NODE_EXTRA_CA_CERTS` for the lab CA.
+
+The script makes the CA, the server certificate and both keys once under `_base/encryption/{certs,secrets}/` (gitignored) and reuses them, because the encrypted volume can only be read with the same key.
+
+| Area | What was observed |
+|---|---|
+| in transit | HTTPS from `langfuse-web` succeeds; without the CA → `UNABLE_TO_VERIFY_LEAF_SIGNATURE`; 8123 → `ECONNREFUSED`; 9000 from another container → `Connection refused`; `clickhouse-client` on 9440 with strict verification succeeds |
+| ClickHouse | every Langfuse MergeTree table and the system log tables use `encrypted_policy`; the trace input reads back through the API; 0 raw files on the volume hold it. Control: a `CODEC(NONE)` table on the plain disk shows the sentinel in 1 file, the same table on the encrypted disk in 0 |
+| MinIO | the event object is `X-Amz-Server-Side-Encryption: AES256`, readable through S3, 0 raw files hold the sentinel; control: an object without SSE shows it in 1 file |
+| Postgres | an LLM connection secret and the project's API secret key appear 0 times in a full `pg_dump`; the connection name and the public key are there (control) |
+
+- **The guide's snippet does not start as printed.** On ClickHouse 26.8.22.13 the encrypted disk that wraps `default` fails with `The wrapped disk must have been announced earlier. No disk with name default`, until `<default/>` is declared before it ([encrypted_storage.xml](../../../_base/encryption/clickhouse/encrypted_storage.xml)).
+- **Migrations skip certificate checks.** With `CLICKHOUSE_MIGRATION_SSL=true` the image's `up.sh` adds `secure=true&skip_verify=true`: the migration connection is encrypted, but the server certificate is not checked. Langfuse's own HTTPS client does check it.
+- **`merge_tree.storage_policy` applies to tables created after it is set.** Here that is a fresh volume. An existing deployment needs a data migration (for example `INSERT … SELECT` into new tables), which was not tested.
+- **Not run:** Postgres and Redis TLS (`sslmode`, `REDIS_TLS_*`), disk encryption for Postgres, AWS S3 SSE-KMS, ClickHouse Cloud CMEK.
+
 ### 🔑 Gotchas worth remembering
 
 | | Note |
@@ -399,6 +446,16 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `13` project isolation | 36 checks PASS; plus a browser check of the viewer's view of B ("Project Not Found") |
 | `14` field encryption | 36 checks PASS; reader 24 PASS incl. wrong-key `InvalidTag`; real judge (2026-10-13): encrypted → 0, control → 1 |
 | `15` ClickHouse row policy | 30 checks PASS; `CREATE MASKING POLICY` → Code 344 on OSS 26.8.22.13 |
+
+**Steps 16–17** ([#69](https://github.com/litkhai/langfuse-hols/issues/69)) were verified **end-to-end on 2026-11-02** against **Langfuse v4.56.0 / ClickHouse 26.8.22.13 / Keycloak 26.8.1**:
+- **Stack:** the same pins and enterprise licence key, on the existing volumes. Step 17 puts ClickHouse on its own fresh volume.
+- **Run:** Docker 29.9.2, Compose v5.6.1, system Python 3.9.6 for the stdlib-only helper, no model calls.
+- **Positive controls:** each script exits 1 when an expected result is not observed. Every negative check has a control in the same run (wrong password, linking off, another domain, a plain-disk table, an object without SSE). No separate fault-injection run was made.
+
+| Step | Result |
+|---|---|
+| `16` SSO | 21 checks PASS: OIDC and SAML-brokered sign-in, first-login roles, `OAuthAccountNotLinked` → linked with `ALLOW_ACCOUNT_LINKING`, domain enforcement, password sign-in disabled, admin password sign-in restored |
+| `17` encryption | 22 checks PASS, 3 INFO: TLS only to ClickHouse (CA checked), encrypted disk with plain-disk control, MinIO SSE-S3 with unencrypted control, secrets absent from `pg_dump`, original volume restored |
 
 Confirmed at runtime and built into the labs:
 
@@ -507,6 +564,9 @@ langfuse-ee/
 │   ├── 14-decrypt-fields.py     #   ↳ 읽기: public API + 프로젝트별 키
 │   └── 14-judge-encrypted.sh    #   ↳ 암호화된 input에 실제 관리형 LLM-as-a-judge (claude-haiku-4-5, 약 3회 호출)
 ├── 15-ch-row-policy.sh          # ClickHouse OSS의 project_id row policy, OSS에서의 CREATE MASKING POLICY
+├── 16-ee-sso.sh                 # Keycloak OIDC, 그 뒤의 SAML IdP, 첫 로그인 역할, SSO 강제, 계정 연결
+│   └── 16-sso-login.py          #   ↳ Keycloak을 거치는 브라우저 로그인을 스크립트로 재현 (stdlib 전용)
+├── 17-ee-encryption.sh          # ClickHouse TLS, ClickHouse 암호화 디스크, MinIO SSE-S3, Postgres에 남는 것
 └── 99-cleanup.sh                # 래퍼 → _base/bin/down.sh v4: 스택 종료 (--purge 로 볼륨까지 삭제)
 ```
 
@@ -520,6 +580,9 @@ _base/
 ├── docker-compose.ee.yml        # EE 오버레이: 라이선스 키 + admin API 키 주입
 ├── docker-compose.masking.yml   # 랩 08 오버레이: 마스킹 사이드카 + worker 콜백 연결
 ├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
+├── docker-compose.sso.yml       # 랩 16 오버레이: Keycloak(realm은 sso/) + AUTH_KEYCLOAK_*와 SSO 스위치
+├── docker-compose.encryption.yml# 랩 17 오버레이: ClickHouse TLS + 암호화 디스크(별도 볼륨), MinIO KMS 키, LANGFUSE_S3_*_SSE
+├── sso/ · encryption/           # 랩 16 realm 파일 · 랩 17 ClickHouse 설정 (키와 인증서는 실행 시 생성, gitignore)
 ├── masking/masking_service.py   # 랩 08: stdlib 전용 초경량 마스킹 콜백 사이드카
 └── bin/                         # up.sh · check.sh · down.sh (첫 번째 인자: 트랙, v3 또는 v4)
 ```
@@ -577,6 +640,8 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./13-ee-project-isolation.sh # 조직 NONE + 프로젝트 VIEWER: 프로젝트 간 가시성
 ./14-field-encryption.sh     # SDK hook에서 AES-GCM 필드 암호화 (requirements.txt의 cryptography 필요)
 ./15-ch-row-policy.sh        # ClickHouse OSS의 project_id row policy
+./16-ee-sso.sh               # Keycloak OIDC + SAML 브로커, 첫 로그인 역할, SSO 강제 (~3분)
+./17-ee-encryption.sh        # ClickHouse TLS + 암호화 디스크 + MinIO SSE-S3 (~2분, 별도 ClickHouse 볼륨)
 ```
 
 ### 🧩 EE 기능 커버리지
@@ -779,6 +844,45 @@ Langfuse용 ClickHouse 계정은 `access_management=0`이라, 스크립트가 `u
 - **걸러지지 않는 것:** `schema_migrations`에는 `project_id`가 없고, `analytics_*` 뷰에는 정책이 따로 걸리지 않습니다.
 - **masking policy:** 26.8.22.13에서 `CREATE MASKING POLICY`는 `Code: 344 … Masking Policies are available only in ClickHouse Cloud. (SUPPORT_IS_DISABLED)`로 실패합니다.
 
+#### 16 — SSO: OIDC, 브로커 뒤의 SAML IdP, 강제 ([16-ee-sso.sh](16-ee-sso.sh))
+
+오버레이 [`docker-compose.sso.yml`](../../../_base/docker-compose.sso.yml)는 Keycloak 26.8.1 하나에 realm 두 개를 띄웁니다.
+- `langfuse`는 Langfuse가 쓰는 OIDC 공급자입니다(`AUTH_KEYCLOAK_*`).
+- `corp`는 SAML만 지원하는 사내 IdP 역할입니다. Langfuse에는 OIDC/OAuth 공급자만 있고 SAML 공급자는 없어서, `langfuse`가 `corp`를 중개하고 SAML 서명은 `corp`의 인증서로 검증합니다.
+
+[16-sso-login.py](16-sso-login.py)는 브라우저와 같은 순서로 로그인합니다. NextAuth CSRF, `POST /api/auth/signin/keycloak`, Keycloak 로그인 폼, 중개 IdP의 SAMLResponse 폼, Langfuse callback, `GET /api/auth/session` 순입니다. 로그인 요청에 `kc_idp_hint=corp-saml`을 붙이면 SAML IdP로 바로 갑니다. 사용자와 비밀번호는 실행 시 만듭니다.
+
+| 단계 | 스위치 | 관찰한 것 |
+|---|---|---|
+| A | 공급자만 | OIDC와 SAML 중개 로그인 모두 세션이 생기고, 틀린 비밀번호는 생기지 않음. 첫 로그인은 `LANGFUSE_DEFAULT_ORG_ROLE=NONE` + `LANGFUSE_DEFAULT_PROJECT_ROLE=VIEWER`. 이미 비밀번호 계정이 있는 이메일은 `OAuthAccountNotLinked`로 거부 |
+| B | `AUTH_DOMAINS_WITH_SSO_ENFORCEMENT=sso.test`, `AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING=true` | `sso.test`의 비밀번호 가입·로그인 → HTTP 422 / 거부, `other.test`는 영향 없음. A에서 거부된 사용자가 SSO로 로그인하고 Postgres `"Account"`에 `keycloak` 행이 생김 |
+| C | `AUTH_DISABLE_USERNAME_PASSWORD=true` | 모든 도메인의 비밀번호 가입·로그인 거부(초기 관리자 포함), SSO는 동작 |
+
+- **Postgres의 토큰:** SSO 로그인 뒤 사용자의 `"Account"` 행에 IdP의 `access_token`, `refresh_token`, `id_token`이 발급된 그대로, 즉 Langfuse가 암호화하지 않은 JWT로 남습니다. 이런 필드를 빼는 `AUTH_IGNORE_ACCOUNT_FIELDS`가 있지만 시험하지 않았습니다.
+- **C 단계는 비밀번호 사용자를 모두 막습니다.** 초기 관리자도 마찬가지입니다. 스크립트는 마지막에 오버레이 없이 `langfuse-web`을 다시 띄우고 Keycloak을 지운 뒤, 관리자가 다시 로그인되는지 확인합니다.
+- **브라우저로 보려면** `/etc/hosts`에 `127.0.0.1 keycloak`을 넣습니다. issuer는 브라우저와 `langfuse-web`에서 같은 URL이어야 합니다.
+
+#### 17 — 전송 구간과 저장 데이터 암호화 ([17-ee-encryption.sh](17-ee-encryption.sh))
+
+오버레이 [`docker-compose.encryption.yml`](../../../_base/docker-compose.encryption.yml)는 세 가지를 바꿉니다. 이 단계에서 ClickHouse는 별도 볼륨을 쓰므로 다른 랩의 trace는 원래 볼륨에 그대로 있습니다.
+- **ClickHouse:** 암호화 디스크(AES-256-CTR, 키는 `CLICKHOUSE_ENCRYPTION_KEY`)를 `merge_tree.storage_policy`로 지정하고, TLS만 엽니다(8443 / 9440, 8123 / 9000 제거).
+- **MinIO:** 고정 KMS 키(`MINIO_KMS_SECRET_KEY`)를 두고, Langfuse가 객체마다 SSE를 요청합니다(`LANGFUSE_S3_*_SSE=AES256`).
+- **Langfuse:** `CLICKHOUSE_URL=https://…:8443`, `CLICKHOUSE_MIGRATION_SSL=true`, 실습 CA를 위한 `NODE_EXTRA_CA_CERTS`.
+
+스크립트는 CA, 서버 인증서, 두 키를 `_base/encryption/{certs,secrets}/`(gitignore)에 한 번 만들고 재사용합니다. 암호화된 볼륨은 같은 키로만 읽을 수 있기 때문입니다.
+
+| 영역 | 관찰한 것 |
+|---|---|
+| 전송 구간 | `langfuse-web`의 HTTPS 성공, CA 없이 → `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, 8123 → `ECONNREFUSED`, 다른 컨테이너에서 9000 → `Connection refused`, 9440에서 strict 검증한 `clickhouse-client` 성공 |
+| ClickHouse | Langfuse의 모든 MergeTree 테이블과 system 로그 테이블이 `encrypted_policy`. trace 입력은 API로 읽히고 볼륨의 원본 파일 0개에 있음. 대조: plain 디스크의 `CODEC(NONE)` 테이블은 1개 파일에서 보였고, 같은 테이블을 암호화 디스크에 두면 0개 |
+| MinIO | 이벤트 객체는 `X-Amz-Server-Side-Encryption: AES256`, S3로는 읽히고 원본 파일 0개에 있음. 대조: SSE 없이 쓴 객체는 1개 파일에서 보임 |
+| Postgres | LLM 연결 비밀키와 프로젝트 API secret key가 전체 `pg_dump`에 0회. 연결 이름과 public key는 있음(대조) |
+
+- **가이드의 설정 예시는 그대로는 뜨지 않습니다.** ClickHouse 26.8.22.13에서 `default`를 감싸는 암호화 디스크는 `<default/>`를 먼저 선언하기 전까지 `The wrapped disk must have been announced earlier. No disk with name default`로 실패했습니다([encrypted_storage.xml](../../../_base/encryption/clickhouse/encrypted_storage.xml)).
+- **마이그레이션은 인증서를 검증하지 않습니다.** `CLICKHOUSE_MIGRATION_SSL=true`이면 이미지의 `up.sh`가 `secure=true&skip_verify=true`를 붙입니다. 마이그레이션 연결은 암호화되지만 서버 인증서는 확인하지 않습니다. Langfuse 본체의 HTTPS 클라이언트는 확인합니다.
+- **`merge_tree.storage_policy`는 설정 뒤에 만든 테이블에만 적용됩니다.** 여기서는 새 볼륨입니다. 운영 중인 배포는 데이터 이전(예: 새 테이블로 `INSERT … SELECT`)이 필요하고, 시험하지 않았습니다.
+- **실행하지 않은 것:** Postgres와 Redis TLS(`sslmode`, `REDIS_TLS_*`), Postgres 디스크 암호화, AWS S3 SSE-KMS, ClickHouse Cloud CMEK.
+
 ### 🔑 기억할 함정들
 
 | | 노트 |
@@ -833,6 +937,16 @@ Langfuse용 ClickHouse 계정은 `access_management=0`이라, 스크립트가 `u
 | `13` 프로젝트 격리 | 검사 36개 PASS. 여기에 viewer가 B를 보는 화면의 브라우저 확인("Project Not Found") |
 | `14` 필드 암호화 | 검사 36개 PASS; 복호화 24 PASS(잘못된 키 `InvalidTag` 포함); 실제 judge(2026-10-13): 암호화 → 0, 대조 → 1 |
 | `15` ClickHouse row policy | 검사 30개 PASS; OSS 26.8.22.13에서 `CREATE MASKING POLICY` → Code 344 |
+
+**16–17단계**([#69](https://github.com/litkhai/langfuse-hols/issues/69))는 **2026-11-02**에 **Langfuse v4.56.0 / ClickHouse 26.8.22.13 / Keycloak 26.8.1**로 **처음부터 끝까지 검증**했습니다.
+- **스택:** 같은 버전 고정과 엔터프라이즈 라이선스 키, 기존 볼륨. 17단계는 ClickHouse를 새 별도 볼륨에 띄웁니다.
+- **실행 환경:** Docker 29.9.2, Compose v5.6.1, stdlib만 쓰는 도우미는 시스템 Python 3.9.6, 모델 호출 없음.
+- **양성 대조:** 기대한 결과가 나오지 않으면 각 스크립트가 1로 끝납니다. 모든 부정 확인에는 같은 실행 안에 대조가 있습니다(틀린 비밀번호, 연결 꺼짐, 다른 도메인, plain 디스크 테이블, SSE 없는 객체). 별도의 결함 주입 실행은 하지 않았습니다.
+
+| 단계 | 결과 |
+|---|---|
+| `16` SSO | 검사 21개 PASS: OIDC와 SAML 중개 로그인, 첫 로그인 역할, `OAuthAccountNotLinked` → `ALLOW_ACCOUNT_LINKING`으로 연결, 도메인 강제, 비밀번호 로그인 끄기, 관리자 비밀번호 로그인 복구 |
+| `17` 암호화 | 검사 22개 PASS, INFO 3개: ClickHouse는 TLS만(CA 검증), plain 디스크 대조가 있는 암호화 디스크, 암호화하지 않은 대조가 있는 MinIO SSE-S3, `pg_dump`에 비밀값 없음, 원래 볼륨 복구 |
 
 런타임에서 확인해 랩에 반영한 두 가지:
 

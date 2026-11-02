@@ -1,0 +1,17 @@
+<!-- Lab 17: TLS only. The plain HTTP (8123) and native (9000) listeners are removed; HTTPS 8443
+     and secure native 9440 use the lab CA's server certificate (17-ee-encryption.sh makes it). -->
+<clickhouse>
+  <http_port remove="1"/>
+  <tcp_port remove="1"/>
+  <https_port>8443</https_port>
+  <tcp_port_secure>9440</tcp_port_secure>
+  <openSSL>
+    <server>
+      <certificateFile>/etc/clickhouse-server/certs/server.crt</certificateFile>
+      <privateKeyFile>/etc/clickhouse-server/certs/server.key</privateKeyFile>
+      <verificationMode>none</verificationMode>
+      <disableProtocols>sslv2,sslv3,tlsv1,tlsv1_1</disableProtocols>
+      <preferServerCiphers>true</preferServerCiphers>
+    </server>
+  </openSSL>
+</clickhouse>

@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lab 17 overlay — encryption in transit and at rest
+#
+#    ClickHouse  encrypted disk as the default MergeTree storage policy, TLS only
+#                (8443 / 9440; 8123 and 9000 closed), on its OWN data volume so the
+#                other labs' traces stay untouched in langfuse_clickhouse_data
+#    MinIO       SSE-S3 with a static KMS key; Langfuse asks for it per object
+#                (LANGFUSE_S3_*_SSE=AES256)
+#    Langfuse    talks HTTPS to ClickHouse and trusts the lab CA (NODE_EXTRA_CA_CERTS)
+#
+#  17-ee-encryption.sh makes the CA, the server certificate and both keys under
+#  _base/encryption/{certs,secrets}/ (gitignored, kept across runs: the encrypted volume
+#  is unreadable without the same key) and exports the keys before calling compose.
+#    . _base/lib/env.sh v4 && lf_compose ee encryption -- up -d      (the track: v3 or v4)
+#  Back to the plain stack: lf_compose ee -- up -d
+#  Docs: https://langfuse.com/self-hosting/configuration/encryption
+#        https://langfuse.com/self-hosting/deployment/infrastructure/clickhouse#encryption
+#        https://langfuse.com/self-hosting/deployment/infrastructure/blobstorage#using-aws-kms-encryption
+# ─────────────────────────────────────────────────────────────────────────────
+x-langfuse-encryption-env: &langfuse-encryption-env
+  CLICKHOUSE_URL: https://clickhouse:8443
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9440
+  CLICKHOUSE_MIGRATION_SSL: "true"
+  NODE_EXTRA_CA_CERTS: /etc/langfuse-certs/ca.crt
+  LANGFUSE_S3_EVENT_UPLOAD_SSE: AES256
+  LANGFUSE_S3_MEDIA_UPLOAD_SSE: AES256
+  LANGFUSE_S3_BATCH_EXPORT_SSE: AES256
+
+services:
+  clickhouse:
+    environment:
+      CLICKHOUSE_ENCRYPTION_KEY: ${CLICKHOUSE_ENCRYPTION_KEY:?run 17-ee-encryption.sh, it exports the disk key}
+    volumes:
+      - langfuse_clickhouse_encrypted_data:/var/lib/clickhouse
+      - ./encryption/clickhouse/encrypted_storage.xml:/etc/clickhouse-server/config.d/encrypted_storage.xml:ro
+      - ./encryption/clickhouse/tls.xml:/etc/clickhouse-server/config.d/tls.xml:ro
+      - ./encryption/clickhouse/client.xml:/etc/clickhouse-client/config.xml:ro
+      - ./encryption/certs:/etc/clickhouse-server/certs:ro
+    ports:
+      - 127.0.0.1:8443:8443
+      - 127.0.0.1:9440:9440
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider --ca-certificate=/etc/clickhouse-server/certs/ca.crt https://localhost:8443/ping || exit 1
+
+  minio:
+    environment:
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:?run 17-ee-encryption.sh, it exports the KMS key}
+
+  langfuse-worker:
+    environment: *langfuse-encryption-env
+    volumes:
+      - ./encryption/certs/ca.crt:/etc/langfuse-certs/ca.crt:ro
+
+  langfuse-web:
+    environment: *langfuse-encryption-env
+    volumes:
+      - ./encryption/certs/ca.crt:/etc/langfuse-certs/ca.crt:ro
+
+volumes:
+  langfuse_clickhouse_encrypted_data:
+    driver: local

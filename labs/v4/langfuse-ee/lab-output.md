@@ -1031,6 +1031,91 @@ Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13, EE overlay up, `events_only` writ
 ▶ Cleanup: temporary admin user definition removed (/etc/clickhouse-server/users.d/zz-15-row-policy-admin.xml); ClickHouse drops it on its next config reload
 ```
 
+## Lab 16 — SSO: Keycloak OIDC, a SAML IdP behind the broker, enforcement (2026-11-02)
+
+Langfuse v4.56.0 / CH 26.8.22.13 / Keycloak 26.8.1, EE overlay up, existing volumes. Command: `labs/v4/langfuse-ee/16-ee-sso.sh` (exit 0). User emails carry the run's timestamp; passwords were generated and not printed.
+
+```text
+════ A. OIDC + SAML broker, no enforcement ════
+  PASS  A | broker checks the SAML signature | expected: validateSignature=true | observed: validateSignature=true
+  PASS  A | /api/auth/providers | expected: keycloak listed | observed: credentials,keycloak
+  PASS  A | OIDC sign-in (Keycloak) | expected: session for bob | observed: session=bob-20261102175542@sso.test error=none
+  PASS  A | first-login roles (LANGFUSE_DEFAULT_*) | expected: org=NONE project=VIEWER | observed: org=NONE project=VIEWER
+  PASS  A | IdP tokens in Postgres "Account" as plain JWTs (no AUTH_IGNORE_ACCOUNT_FIELDS) | expected: recorded | observed: access_token,refresh_token,id_token
+  PASS  A | OIDC sign-in, wrong password | expected: no session | observed: session=none error=Keycloak rejected the credentials (login form shown again)
+  PASS  A | SAML IdP via broker (kc_idp_hint) | expected: session for alice | observed: session=alice-20261102175542@sso.test error=none
+  PASS  A | broker user linked to the SAML IdP | expected: corp-saml | observed: corp-saml
+  PASS  A | password sign-up (control, no enforcement yet) | expected: HTTP 200 | observed: HTTP 200 User created
+  PASS  A | SSO for an email that has a password account, linking off | expected: no session, OAuthAccountNotLinked | observed: session=none error=OAuthAccountNotLinked
+════ B. AUTH_DOMAINS_WITH_SSO_ENFORCEMENT=sso.test, account linking on ════
+  PASS  B | password sign-up, enforced domain | expected: refused | observed: HTTP 422 Sign up with email and password is disabled for this domain. Please use SSO.
+  PASS  B | password sign-up, other domain (control) | expected: HTTP 200 | observed: HTTP 200 User created
+  PASS  B | password sign-in, enforced domain (existing account) | expected: no session | observed: error: Sign in with email and password is disabled for this domain. Please use SSO.
+  PASS  B | password sign-in, other domain (control) | expected: session | observed: frank-20261102175542@other.test
+  PASS  B | SSO for the same email, linking on | expected: session for dave | observed: session=dave-20261102175542@sso.test error=none
+  PASS  B | accounts linked to dave's user (Postgres) | expected: keycloak | observed: keycloak
+════ C. AUTH_DISABLE_USERNAME_PASSWORD=true ════
+  PASS  C | password sign-up, any domain | expected: refused | observed: HTTP 422 Sign up with email and password is disabled for this instance. Please use SSO.
+  PASS  C | password sign-in, other domain | expected: no session | observed: error: Sign in with email and password is disabled for this instance. Please use SSO.
+  PASS  C | password sign-in, initial admin | expected: no session | observed: error: Sign in with email and password is disabled for this instance. Please use SSO.
+  PASS  C | OIDC sign-in still works | expected: session for bob | observed: session=bob-20261102175542@sso.test
+════ Restore: langfuse-web without the SSO overlay, Keycloak removed ════
+  PASS  restore | password sign-in, initial admin | expected: session | observed: admin@example.com
+
+✅ all 21 checks passed
+```
+
+## Lab 17 — Encryption in transit and at rest (2026-11-02)
+
+Langfuse v4.56.0 / CH 26.8.22.13, EE + encryption overlays, ClickHouse on its own volume (`langfuse_clickhouse_encrypted_data`, reused from the runs before this one). Command: `labs/v4/langfuse-ee/17-ee-encryption.sh` (exit 0). Sentinels are random per run.
+
+```text
+════ 0. Keys and certificates (made once, reused) ════
+  disk key, KMS key, CA and server certificate under _base/encryption/ (not printed)
+════ 1. Restart with the encryption overlay (ClickHouse on its own volume) ════
+════ 2. In transit: Langfuse → ClickHouse ════
+  PASS  transit | HTTPS 8443 from langfuse-web, lab CA trusted | expected: ok Ok. | observed: ok Ok.
+  PASS  transit | HTTPS 8443 without the lab CA | expected: certificate error | observed: error UNABLE_TO_VERIFY_LEAF_SIGNATURE
+  PASS  transit | plain HTTP 8123 | expected: refused | observed: error ECONNREFUSED
+  PASS  transit | clickhouse-client on 9440, strict certificate check | expected: tls ok | observed: tls ok
+  PASS  transit | plain native 9000 from another container | expected: Connection refused | observed: Connection refused
+  INFO  transit | migration connection (CLICKHOUSE_MIGRATION_SSL=true) | expected: read from the image | observed: up.sh appends secure=true&skip_verify=true: TLS without certificate check
+════ 3. At rest: ClickHouse encrypted disk ════
+  PASS  clickhouse | system.disks: encrypted_disk is_encrypted | expected: 1 | observed: 1
+  PASS  clickhouse | storage policy of every Langfuse MergeTree table | expected: ['encrypted_policy'] | observed: ['encrypted_policy']
+  INFO  clickhouse | system log tables | expected: reported | observed: part_log=encrypted_policy query_log=encrypted_policy text_log=encrypted_policy
+  PASS  clickhouse | trace input through the public API (decrypted on read) | expected: the sentinel | observed: lab17-enc-744c3b4fc630dd7906e6db6b
+  PASS  clickhouse | events_full parts | expected: ['encrypted_disk'] | observed: ['encrypted_disk']
+  PASS  clickhouse | raw files with the trace sentinel (whole data volume) | expected: 0 | observed: 0
+  INFO  clickhouse | server log files with the trace sentinel | expected: reported | observed: 0
+  PASS  clickhouse | control: CODEC(NONE) table on the plain disk | expected: >=1 file | observed: 1 (store/a62/a62680df-16ed-4bed-846c-12ad7c6644f1/)
+  PASS  clickhouse | same table on the encrypted disk | expected: 0 | observed: 0 (encrypted/store/d77/d778b306-7647-4f0d-8fb1-fb54e600265f/)
+════ 4. At rest: MinIO SSE-S3 ════
+  PASS  minio | event object for the trace, read through S3 (decrypted) | expected: found | observed: events/otel/llm-observability/2026/11/02/08/48/0816d3e6-22fb-4515-a5af-5457e919429b.json
+  PASS  minio | X-Amz-Server-Side-Encryption of that object | expected: AES256 | observed: AES256
+  PASS  minio | raw files with the trace sentinel (whole data volume) | expected: 0 | observed: 0
+  PASS  minio | control: object written without SSE | expected: >=1 file | observed: 1
+════ 5. Application level: what Postgres holds ════
+  PASS  postgres | LLM connection created (public API) | expected: HTTP 200 or 201 | observed: HTTP 201, displaySecretKey=...3459
+pg_dump: warning: there are circular foreign-key constraints among these tables:
+pg_dump: detail: projects
+pg_dump: detail: dashboards
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: api_keys
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+  PASS  postgres | LLM secret in a full data dump | expected: 0 | observed: 0
+  PASS  postgres | control: the connection name in the same dump | expected: >=1 | observed: 1
+  PASS  postgres | project API secret key in the dump | expected: 0 | observed: 0
+  PASS  postgres | control: project API public key in the dump | expected: >=1 | observed: 1
+════ Restore: plain overlay set, original ClickHouse volume ════
+  PASS  restore | plain ClickHouse on the original volume has the earlier labs' data | expected: 1 | observed: 1
+
+✅ all checks passed (22 PASS, 3 INFO)
+```
+
 ---
 
 ## Findings & gotchas (blog-worthy)

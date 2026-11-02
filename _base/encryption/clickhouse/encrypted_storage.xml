@@ -1,0 +1,33 @@
+<!-- Lab 17: every new MergeTree table on an encrypted disk (AES-256-CTR, key from the environment).
+     From the Langfuse ClickHouse guide (Encryption → Manual Disk Encryption), with AES_256_CTR
+     instead of AES_128_CTR. merge_tree.storage_policy is the default for tables created after
+     the server starts with this file, so it is set on a fresh data volume (see the overlay). -->
+<clickhouse>
+  <storage_configuration>
+    <disks>
+      <!-- Declared before the wrapper: as printed in the guide (no <default/>), ClickHouse 26.8.22.13
+           refuses to start with "The wrapped disk must have been announced earlier" (#69). -->
+      <default/>
+      <encrypted_disk>
+        <type>encrypted</type>
+        <disk>default</disk>
+        <path>encrypted/</path>
+        <algorithm>AES_256_CTR</algorithm>
+        <key_hex id="0" from_env="CLICKHOUSE_ENCRYPTION_KEY"></key_hex>
+        <current_key_id>0</current_key_id>
+      </encrypted_disk>
+    </disks>
+    <policies>
+      <encrypted_policy>
+        <volumes>
+          <main>
+            <disk>encrypted_disk</disk>
+          </main>
+        </volumes>
+      </encrypted_policy>
+    </policies>
+  </storage_configuration>
+  <merge_tree>
+    <storage_policy>encrypted_policy</storage_policy>
+  </merge_tree>
+</clickhouse>

@@ -18,7 +18,8 @@
 #     a developer's _base/.env
 #   * the variables the compose files reference are unset in this script's environment,
 #     so a value exported in the developer's shell does not leak in either
-#   * LANGFUSE_EE_LICENSE_KEY=ci-dummy satisfies the `:?` guard in docker-compose.ee.yml
+#   * LANGFUSE_EE_LICENSE_KEY=ci-dummy satisfies the `:?` guard in docker-compose.ee.yml, and the
+#     two key dummies the guards in docker-compose.encryption.yml
 set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -28,13 +29,17 @@ cd "$(git rev-parse --show-toplevel)"
 #   ee                      labs 05-07, 09, 11  (05-ee-activate.sh starts it; EE=1 _base/bin/up.sh <track>)
 #   ee masking              lab 08  (08-ee-data-masking.sh)
 #   ee governance           lab 10  (10-ee-instance-governance.sh)
-#   ee masking governance   lab 99 cleanup  (99-cleanup.sh -> _base/bin/down.sh tears down all of them)
+#   ee sso                  lab 16  (16-ee-sso.sh)
+#   ee encryption           lab 17  (17-ee-encryption.sh)
+#   ee masking governance sso encryption   lab 99 cleanup  (99-cleanup.sh -> _base/bin/down.sh tears down all of them)
 SETS=(
     "base"
     "ee"
     "ee masking"
     "ee governance"
-    "ee masking governance"
+    "ee sso"
+    "ee encryption"
+    "ee masking governance sso encryption"
 )
 
 # Reset the compose input to a known state. The grep picks up every ${VAR the compose files
@@ -43,7 +48,7 @@ for v in COMPOSE_FILE COMPOSE_PROFILES COMPOSE_PROJECT_NAME COMPOSE_ENV_FILES \
          $(grep -ohE '\$\{[A-Za-z_][A-Za-z_0-9]*' _base/docker-compose*.yml | tr -d '${' | sort -u); do
     unset "$v"
 done
-export LANGFUSE_EE_LICENSE_KEY=ci-dummy
+export LANGFUSE_EE_LICENSE_KEY=ci-dummy CLICKHOUSE_ENCRYPTION_KEY=ci-dummy MINIO_KMS_SECRET_KEY=ci-dummy
 
 # The tracks: every _base/<track>/versions.env.
 tracks=()
@@ -98,6 +103,8 @@ def has_env(service, names):
 expected = ["langfuse-web", "langfuse-worker", "postgres", "clickhouse", "redis", "minio"]
 if "masking" in overlays:
     expected.append("masking")  # lab 08 adds the sidecar
+if "sso" in overlays:
+    expected.append("keycloak")  # lab 16 adds the identity provider
 check(sorted(services) == sorted(expected), "services are exactly: " + " ".join(sorted(expected)),
       "got: " + " ".join(sorted(services)))
 # All lab SQL docs say `docker exec ... langfuse-hols-<track>-clickhouse-1`; that name comes from here.
@@ -152,6 +159,51 @@ if "governance" in overlays:
         "LANGFUSE_UI_SUPPORT_HREF",
         "LANGFUSE_ALLOWED_ORGANIZATION_CREATORS",
     ])
+
+# ── sso (lab 16) ─────────────────────────────────────────────────────────────
+if "sso" in overlays:
+    # lab 16: NextAuth reads the provider and the SSO switches in langfuse-web only.
+    has_env("langfuse-web", [
+        "AUTH_KEYCLOAK_CLIENT_ID",
+        "AUTH_KEYCLOAK_CLIENT_SECRET",
+        "AUTH_KEYCLOAK_ISSUER",
+        "LANGFUSE_DEFAULT_ORG_ID",
+        "LANGFUSE_DEFAULT_ORG_ROLE",
+        "LANGFUSE_DEFAULT_PROJECT_ID",
+        "LANGFUSE_DEFAULT_PROJECT_ROLE",
+        "AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING",
+        "AUTH_DOMAINS_WITH_SSO_ENFORCEMENT",
+        "AUTH_DISABLE_USERNAME_PASSWORD",
+    ])
+    issuer = env_of("langfuse-web").get("AUTH_KEYCLOAK_ISSUER", "")
+    check(issuer.startswith("http://keycloak:8088/"), "issuer is the Keycloak frontend URL", "got: %r" % issuer)
+    mounts = (services.get("keycloak") or {}).get("volumes") or []
+    sources = [m.get("source", "") for m in mounts if m.get("type") == "bind"]
+    realm_dir = [s for s in sources if s.replace(os.sep, "/").endswith("_base/sso")]
+    check(bool(realm_dir) and all(os.path.isfile(os.path.join(realm_dir[0], f))
+                                  for f in ("realm-langfuse.json", "realm-corp.json")),
+          "keycloak bind-mounts _base/sso with both realm files", "bind sources: %s" % (sources or "none"))
+
+# ── encryption (lab 17) ──────────────────────────────────────────────────────
+if "encryption" in overlays:
+    for svc in ("langfuse-web", "langfuse-worker"):
+        # lab 17: both containers query ClickHouse and write to S3.
+        has_env(svc, ["CLICKHOUSE_MIGRATION_SSL", "NODE_EXTRA_CA_CERTS",
+                      "LANGFUSE_S3_EVENT_UPLOAD_SSE", "LANGFUSE_S3_MEDIA_UPLOAD_SSE", "LANGFUSE_S3_BATCH_EXPORT_SSE"])
+        url = env_of(svc).get("CLICKHOUSE_URL", "")
+        check(url.startswith("https://"), "%s CLICKHOUSE_URL is https" % svc, "got: %r" % url)
+    has_env("clickhouse", ["CLICKHOUSE_ENCRYPTION_KEY"])
+    has_env("minio", ["MINIO_KMS_SECRET_KEY"])
+    mounts = (services.get("clickhouse") or {}).get("volumes") or []
+    data = [m for m in mounts if m.get("target") == "/var/lib/clickhouse"]
+    check(len(data) == 1 and data[0].get("source") == "langfuse_clickhouse_encrypted_data",
+          "clickhouse data is the separate encrypted volume",
+          "got: %s" % [m.get("source") for m in data])
+    sources = [m.get("source", "") for m in mounts if m.get("type") == "bind"]
+    for f in ("encrypted_storage.xml", "tls.xml", "client.xml"):
+        hit = [s for s in sources if s.replace(os.sep, "/").endswith("_base/encryption/clickhouse/" + f)]
+        check(bool(hit) and os.path.isfile(hit[0]), "clickhouse bind-mounts encryption/clickhouse/" + f,
+              "bind sources: %s" % (sources or "none"))
 
 sys.exit(1 if fails else 0)
 PYEOF

@@ -25,3 +25,7 @@ __pycache__/
 .venv-*/
 venv/
 .ipynb_checkpoints/
+
+# Lab 17 keys and certificates — made by labs/v4/langfuse-ee/17-ee-encryption.sh, never committed
+_base/encryption/secrets/
+_base/encryption/certs/

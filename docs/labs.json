@@ -1,6 +1,6 @@
 {
   "repo": "langfuse-hols",
-  "generated": "2026-10-08T13:08:19Z",
+  "generated": "2026-11-02T08:55:54Z",
   "labs": [
     {
       "path": "labs/v3/langfuse-ee",
@@ -8,7 +8,7 @@
       "summary_ko": "Langfuse v3를 직접 띄우고 ClickHouse 백엔드를 SQL로 들여다본 뒤, 엔터프라이즈 기능(RBAC, SCIM, 감사 로그, 데이터 마스킹 등)을 실습합니다.",
       "title_en": "Self-Hosting Langfuse on ClickHouse: Workshop (Langfuse v3)",
       "summary_en": "Self-host Langfuse v3, query its ClickHouse backend with SQL, then exercise the enterprise features: RBAC, SCIM, audit logs, retention and data masking.",
-      "category": "third-party",
+      "category": "langfuse",
       "tags": [
         "langfuse",
         "llm",
@@ -23,7 +23,7 @@
       "summary_ko": "Langfuse의 프롬프트 관리, 데이터셋, 실험, LLM-as-a-judge, 사람 주석을 차례로 돌려 보고, 모든 품질 점수가 ClickHouse 백엔드에 어떻게 쌓이는지 확인합니다. 라이선스 키는 필요 없습니다.",
       "title_en": "The Langfuse quality loop: prompts, datasets, experiments and evals (Langfuse v3)",
       "summary_en": "Walk Langfuse's prompt management, datasets, experiments, LLM-as-a-judge and human annotation, then see how every quality score lands in the ClickHouse backend. No license key needed.",
-      "category": "third-party",
+      "category": "langfuse",
       "tags": [
         "langfuse",
         "llm"
@@ -37,7 +37,7 @@
       "summary_ko": "Langfuse를 직접 띄우고 ClickHouse 백엔드를 SQL로 들여다본 뒤, 엔터프라이즈 기능(RBAC, SCIM, 감사 로그, 데이터 마스킹 등)을 실습합니다.",
       "title_en": "Self-Hosting Langfuse on ClickHouse: Workshop (OSS + Enterprise, Langfuse v4)",
       "summary_en": "Self-host Langfuse, query its ClickHouse backend with SQL, then exercise the enterprise features: RBAC, SCIM, audit logs, retention and data masking.",
-      "category": "third-party",
+      "category": "langfuse",
       "tags": [
         "langfuse",
         "llm",
@@ -52,7 +52,7 @@
       "summary_ko": "Langfuse v4에서 프롬프트 관리, 데이터셋, 실험, LLM-as-a-judge, 사람 주석을 차례로 돌려 보고, 모든 품질 점수가 ClickHouse 백엔드에 어떻게 쌓이는지 확인합니다. 라이선스 키는 필요 없습니다.",
       "title_en": "The Langfuse quality loop: prompts, datasets, experiments and evals (Langfuse v4)",
       "summary_en": "Walk Langfuse's prompt management, datasets, experiments, LLM-as-a-judge and human annotation on the v4 stack, where observations are the unit stored in ClickHouse, and see how every quality score lands there.",
-      "category": "third-party",
+      "category": "langfuse",
       "tags": [
         "langfuse",
         "llm"

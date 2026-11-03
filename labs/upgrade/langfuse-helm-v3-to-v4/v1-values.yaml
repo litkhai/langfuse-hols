@@ -1,0 +1,56 @@
+# Chart v1 source release: every store bundled (Bitnami), as most v1 installs run.
+# Based on langfuse-k8s examples/upgrade-v1-to-v2/v1-values.yaml @15f31e8, scaled down for kind.
+# The Langfuse image tag is passed on the command line (02 and 04), not here.
+langfuse:
+  salt:
+    secretKeyRef: {name: langfuse, key: salt}
+  encryptionKey:
+    secretKeyRef: {name: langfuse, key: encryption-key}
+  nextauth:
+    secret:
+      secretKeyRef: {name: langfuse, key: nextauth-secret}
+  # Headless init: org, project, API keys and an admin user, so the lab needs no UI clicks.
+  additionalEnv:
+    - {name: LANGFUSE_INIT_ORG_ID, value: upgrade-lab-org}
+    - {name: LANGFUSE_INIT_ORG_NAME, value: upgrade-lab}
+    - {name: LANGFUSE_INIT_PROJECT_ID, value: upgrade-lab}
+    - {name: LANGFUSE_INIT_PROJECT_NAME, value: upgrade-lab}
+    - {name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY, value: pk-lf-upgrade-lab}
+    - {name: LANGFUSE_INIT_PROJECT_SECRET_KEY, value: sk-lf-upgrade-lab}
+    - {name: LANGFUSE_INIT_USER_EMAIL, value: admin@example.com}
+    - {name: LANGFUSE_INIT_USER_NAME, value: admin}
+    - {name: LANGFUSE_INIT_USER_PASSWORD, value: upgrade-lab-password}
+
+postgresql:
+  deploy: true
+  auth:
+    username: postgres
+    password: postgres-lab
+    database: postgres_langfuse
+  primary:
+    # Upstream v1 example: logical replication for the online Postgres copy.
+    extendedConfiguration: |
+      wal_level = logical
+      max_wal_senders = 10
+      max_replication_slots = 10
+
+clickhouse:
+  deploy: true
+  auth:
+    username: default
+    password: clickhouse-lab
+  replicaCount: 1
+  resourcesPreset: large
+  zookeeper:
+    replicaCount: 1
+
+redis:
+  deploy: true
+  auth:
+    password: redis-lab
+
+s3:
+  deploy: true
+  auth:
+    rootUser: langfuse
+    rootPassword: minio-lab-password

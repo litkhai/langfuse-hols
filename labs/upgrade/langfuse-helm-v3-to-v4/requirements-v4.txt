@@ -1,0 +1,2 @@
+# v4-compatible producer (>= 4.7.0 writes the new tables directly): the v4-track pin (_base/v4/requirements.txt).
+langfuse==4.17.0

@@ -26,6 +26,14 @@ Langfuse up, use [usecase/langfuse-on-clickhouse](https://github.com/litkhai/cli
 snapshot of a v4 run's ClickHouse tables (Langfuse 4.52.0, ClickHouse 26.8.18.2) in one
 plain ClickHouse container.
 
+### ⬆️ Upgrade labs (`labs/upgrade/`)
+
+Labs that move a deployment from one version to the next. They run on a local kind cluster, not on `_base/`.
+
+| Lab | What it covers |
+|---|---|
+| [langfuse-helm-v3-to-v4](labs/upgrade/langfuse-helm-v3-to-v4/) | Helm chart v1 → v2 (bundled stores, sibling release under live traffic), then Langfuse v3 → v4 through `legacy`, `dual`, a rollback rehearsal, the backfill and `events_only` |
+
 ### 📖 Reading (`reading/`)
 
 Background pages, not labs: nothing in them is run.
@@ -87,6 +95,14 @@ Langfuse를 띄우지 않고 v4 `langfuse-ee` 03–04와 `langfuse-eval` 07의 C
 돌리려면 clickhouse-hols의 [usecase/langfuse-on-clickhouse](https://github.com/litkhai/clickhouse-hols/tree/main/usecase/langfuse-on-clickhouse)를 쓰세요. v4 실행의
 ClickHouse 테이블 스냅샷(Langfuse 4.52.0, ClickHouse 26.8.18.2)을 일반 ClickHouse 컨테이너
 하나에 올린 실습입니다.
+
+### ⬆️ 업그레이드 실습 (`labs/upgrade/`)
+
+배포를 한 버전에서 다음 버전으로 옮기는 실습입니다. `_base/`가 아니라 로컬 kind 클러스터에서 실행합니다.
+
+| 실습 | 내용 |
+|---|---|
+| [langfuse-helm-v3-to-v4](labs/upgrade/langfuse-helm-v3-to-v4/) | Helm chart v1 → v2(내장 저장소, 트래픽을 받는 중에 sibling release로 이전), 이어서 Langfuse v3 → v4를 `legacy`, `dual`, 롤백 리허설, backfill, `events_only` 순서로 |
 
 ### 📖 읽기 자료 (`reading/`)
 

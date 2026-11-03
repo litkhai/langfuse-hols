@@ -1,0 +1,58 @@
+# values-kind.yaml — layered on values-aks.yaml for the local check on kind:
+#   helm install … -f values-aks.yaml -f values-kind.yaml
+# Only sizes, addresses and the storage class change. Node pools, taints, replica counts, HPA/PDB,
+# the operator CRs and the external-service wiring stay exactly as on AKS.
+langfuse:
+  nextauth:
+    url: http://localhost:3000
+  web:
+    resources:
+      requests: { cpu: 250m, memory: 768Mi }
+      limits: { memory: 1536Mi }
+  worker:
+    resources:
+      requests: { cpu: 250m, memory: 768Mi }
+      limits: { memory: 1536Mi }
+  ingress:
+    enabled: false
+  # Headless init so 03-checks.sh has a project and API keys (on AKS, orgs come from SSO / SCIM).
+  additionalEnv:
+    - { name: LANGFUSE_INIT_ORG_ID, value: kind-org }
+    - { name: LANGFUSE_INIT_ORG_NAME, value: kind }
+    - { name: LANGFUSE_INIT_PROJECT_ID, value: kind-project }
+    - { name: LANGFUSE_INIT_PROJECT_NAME, value: kind }
+    - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+      valueFrom: { secretKeyRef: { name: langfuse, key: init-public-key } }
+    - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
+      valueFrom: { secretKeyRef: { name: langfuse, key: init-secret-key } }
+
+clickhouse:
+  cluster:
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { memory: 2Gi }
+    storage:
+      size: 5Gi
+      className: standard            # kind's local-path class
+  keeper:
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 512Mi }
+    storage:
+      size: 1Gi
+      className: standard
+
+postgresql:
+  host: postgres.standins.svc.cluster.local
+  args: sslmode=disable
+
+redis:
+  host: redis.standins.svc.cluster.local
+  port: 6379
+  tls:
+    enabled: false
+
+s3:
+  endpoint: http://azurite.standins.svc.cluster.local:10000/langfuselab
+  accessKeyId:
+    value: langfuselab               # the Azurite account 01-kind-up.sh creates

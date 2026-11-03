@@ -1,6 +1,6 @@
 # STATUS.md
 
-**As of 2026-11-02** — `langfuse-ee` v4 has two more steps (16 SSO: Keycloak OIDC, a SAML IdP behind the broker, enforcement; 17 encryption in transit and at rest), run end to end on the current pins ([#69](https://github.com/litkhai/langfuse-hols/issues/69)). **As of 2026-10-12** — `langfuse-ee` v4 has four more steps (12–15: masking failure modes, project isolation, field encryption, ClickHouse row policies), run end to end on the current pins ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). As of 2026-10-10: the pins are Langfuse v4 4.56.0 and ClickHouse 26.8.22.13, and both tracks were run end to end on them ([#55](https://github.com/litkhai/langfuse-hols/issues/55)). As of 2026-10-08: Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, run end to end ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
+**As of 2026-11-03** — new lab `labs/v4/langfuse-aks` (v4 only, [#74](https://github.com/litkhai/langfuse-hols/issues/74)): Helm values for AKS with generous sizing on the official chart langfuse 2.2.1 (Langfuse 4.70.1, ClickHouse 26.8.36.3; clickhouse-operator 0.0.8, cert-manager v1.20.2), verified on a fresh kind cluster (kind 0.33.0, Kubernetes v1.37.0): `03-checks.sh` 19 PASS (placement, wiring, data path, ClickHouse replica and Keeper failover), `04-render-aks.sh` 10 PASS (the AKS file alone, server-side dry run); an injected fault (replicas 3 → 2) failed the render check. Not run on AKS or the Azure managed services. **As of 2026-11-02** — `langfuse-ee` v4 has two more steps (16 SSO: Keycloak OIDC, a SAML IdP behind the broker, enforcement; 17 encryption in transit and at rest), run end to end on the current pins ([#69](https://github.com/litkhai/langfuse-hols/issues/69)). **As of 2026-10-12** — `langfuse-ee` v4 has four more steps (12–15: masking failure modes, project isolation, field encryption, ClickHouse row policies), run end to end on the current pins ([#65](https://github.com/litkhai/langfuse-hols/issues/65)). As of 2026-10-10: the pins are Langfuse v4 4.56.0 and ClickHouse 26.8.22.13, and both tracks were run end to end on them ([#55](https://github.com/litkhai/langfuse-hols/issues/55)). As of 2026-10-08: Langfuse v4 4.53.0 and ClickHouse 26.8.19.9, run end to end ([#49](https://github.com/litkhai/langfuse-hols/issues/49)). As of 2026-10-06: the labs are split into a v3 and a v4 track (`labs/v3/`, `labs/v4/`,
 [#33](https://github.com/litkhai/langfuse-hols/issues/33)).
 As of 2026-10-08: the notes-site export (`docs/labs.json`) publishes all four labs, both tracks
 ([#56](https://github.com/litkhai/langfuse-hols/issues/56), [#58](https://github.com/litkhai/langfuse-hols/issues/58)). As of 2026-10-03: `docs/labs.json` added. As of 2026-10-02: split out of
@@ -71,7 +71,7 @@ The v4 minimum versions and the v3 support end date come from Langfuse's
 
 ## Inventory
 
-4 labs (2 labs × 2 tracks) and 1 reading page in the README tables; 0 single-language.
+5 labs (2 labs × 2 tracks, plus `langfuse-aks` on v4 only) and 1 reading page in the README tables; 0 single-language.
 
 ## Open work
 

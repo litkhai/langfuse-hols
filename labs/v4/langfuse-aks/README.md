@@ -6,7 +6,7 @@
 
 ## English
 
-**Verified end to end on 2026-11-03** with the official chart **langfuse 2.2.1** (Langfuse 4.70.1, ClickHouse 26.8.36.3), clickhouse-operator 0.0.8 and cert-manager v1.20.2. Fresh kind cluster (kind 0.33.0, Kubernetes v1.37.0; Docker 29.9.2 with 12 CPU / 16 GiB): [03-checks.sh](03-checks.sh) passed 19 checks and [04-render-aks.sh](04-render-aks.sh) 10. An injected fault (ClickHouse replicas 3 → 2 in `values-aks.yaml`) failed the render check, and it passed again after the revert. **Not run on AKS itself** and not against the Azure managed services (no spending): the AKS file is checked by rendering it and validating against a real Kubernetes API, and the same file runs on kind with an overlay that only shrinks sizes and swaps addresses.
+**Verified end to end on 2026-11-03** with the official chart **langfuse 2.2.1** (Langfuse 4.70.1, ClickHouse 26.8.36.3), clickhouse-operator 0.0.8 and cert-manager v1.20.2. Fresh kind cluster, staged first install (kind 0.33.0, Kubernetes v1.37.0; Docker 29.9.2 with 12 CPU / 16 GiB, shared with another kind cluster using about 5 GiB): [03-checks.sh](03-checks.sh) passed 19 checks and [04-render-aks.sh](04-render-aks.sh) 11. An injected fault (ClickHouse replicas 3 → 2 in `values-aks.yaml`) failed the render check, and it passed again after the revert. **Not run on AKS itself** and not against the Azure managed services (no spending): the AKS file is checked by rendering it and validating against a real Kubernetes API, and the same file runs on kind with an overlay that only shrinks sizes and swaps addresses.
 
 [values-aks.yaml](values-aks.yaml) is the deliverable: self-hosted Langfuse on AKS with ClickHouse OSS run by the operator and Postgres, Redis and Blob as Azure managed services.
 
@@ -41,8 +41,16 @@ helm install clickhouse-operator oci://ghcr.io/clickhouse/clickhouse-operator-he
 
 Then: the two node pools, the Azure services (PostgreSQL Flexible Server, Azure Managed Redis, a storage account **with the container already created**), the `langfuse` Secret ([secret-example.yaml](secret-example.yaml)), the TLS secret `langfuse-tls`, and
 
+install in three steps the first time (later upgrades are one `helm upgrade`):
+
 ```bash
-helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-aks.yaml
+H="helm upgrade --install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-aks.yaml"
+ZERO="--set langfuse.web.replicas=null --set langfuse.worker.replicas=null --set langfuse.web.hpa.enabled=false --set langfuse.worker.hpa.enabled=false"
+$H $ZERO --set langfuse.replicas=0      # 1. ClickHouse and Keeper only
+kubectl -n langfuse wait --for=condition=Ready keepercluster/langfuse clickhousecluster/langfuse --timeout=15m
+$H $ZERO --set langfuse.replicas=1      # 2. one web pod runs the ClickHouse migrations
+kubectl -n langfuse rollout status deploy/langfuse-web --timeout=15m
+$H                                      # 3. full values
 ```
 
 ### Run the local verification
@@ -52,7 +60,7 @@ cd labs/v4/langfuse-aks
 ./01-kind-up.sh       # kind cluster shaped like the AKS pools, cert-manager, operator, stand-ins, Secrets
 ./02-install.sh       # the chart with values-aks.yaml + values-kind.yaml
 ./03-checks.sh        # placement, wiring, data path, failover (19 checks)
-./04-render-aks.sh    # values-aks.yaml alone: render, server-side dry run, field checks (10 checks)
+./04-render-aks.sh    # values-aks.yaml alone: render, server-side dry run, field checks (11 checks)
 ./99-down.sh          # delete the kind cluster
 ```
 
@@ -67,12 +75,12 @@ Needs `kind`, `kubectl`, `helm`, `jq`, `openssl`, `uv`. The langfuse-hols compos
 - **Data path:** a trace sent through the public API is read back, its row is on all three replicas, its raw event in the Blob container, the project in Postgres.
 - **Failover:** with one ClickHouse replica deleted, a new trace is ingested and read back, and the replica returns with that row. With one Keeper deleted, the same.
 
-`04-render-aks.sh`: 10 PASS. `values-aks.yaml` alone (placeholders swapped for example values) renders 12 objects that the kind API accepts in a server-side dry run, with web/worker 2 CPU / 4 GiB on `app` (replicas owned by the HPA), ClickHouse 3 replicas × 6 CPU / 24 GiB / 512 GiB `managed-csi-premium` on the tainted pool, Keeper 3, ingress class `webapprouting.kubernetes.azure.com` with TLS, and Redis as `rediss://…:10000`.
+`04-render-aks.sh`: 11 PASS. `values-aks.yaml` alone (placeholders swapped for example values) renders 12 objects that the kind API accepts in a server-side dry run, with web/worker 2 CPU / 4 GiB on `app` (replicas owned by the HPA), ClickHouse 3 replicas × 6 CPU / 24 GiB / 512 GiB `managed-csi-premium` on the tainted pool, Keeper 3, ingress class `webapprouting.kubernetes.azure.com` with TLS, and Redis as `rediss://…:10000`.
 
 ### Things worth knowing
 
 - **Create the Blob container beforehand.** The chart docs say Langfuse attempts to create a missing container; Langfuse 4.70.1 did not, on upload or after a restart: every event PUT got 404 and OTLP ingestion answered HTTP 500 (`Failed to upload JSON to Azure Blob Storage`). [01-kind-up.sh](01-kind-up.sh) creates it, as IaC would on Azure.
-- **First start restarts a few times.** ClickHouse exits with a Keeper coordination error (exit 231) until Keeper is up, and web until ClickHouse answers. Both settle on their own; [02-install.sh](02-install.sh) waits on the CR conditions instead of pod counts.
+- **Give the first start time to migrate.** Two first installs ended with `Dirty database version 5`: the migration state was left half-applied, and web restarted forever. The pod events show why: `Container langfuse-web failed liveness probe, will be restarted`. A first start applies 461 Postgres migrations and then the ClickHouse ones on three replicas, longer than the chart's default liveness window (20 s + 3 × 10 s, and no startup probe for web). `values-aks.yaml` sets `livenessProbe.initialDelaySeconds: 300`. [02-install.sh](02-install.sh) also stages a first install: data stores first, until the `ClickHouseCluster` and `KeeperCluster` Ready conditions (ClickHouse restarts a few times with a Keeper coordination error, exit 231, until Keeper is up), then one web pod for the migrations, then the full values.
 - **Anti-affinity needs the operator's label.** clickhouse-operator 0.0.8 labels pods `clickhouse.com/role=clickhouse-server` (and `clickhouse-keeper`); the values use it.
 - **With HPA on, the chart omits `spec.replicas`.** The HPA minimum (2) is the floor.
 - **Azurite only:** in-cluster hostnames need `--disableProductStyleUrl`, or Azurite reads `azurite.standins…` as `<account>.<host>` and answers 400. Not relevant on Azure.
@@ -99,7 +107,7 @@ Needs `kind`, `kubectl`, `helm`, `jq`, `openssl`, `uv`. The langfuse-hols compos
 
 ## 한국어
 
-**2026-11-03에 처음부터 끝까지 검증**했습니다. 공식 차트 **langfuse 2.2.1**(Langfuse 4.70.1, ClickHouse 26.8.36.3), clickhouse-operator 0.0.8, cert-manager v1.20.2 기준입니다. 새 kind 클러스터(kind 0.33.0, Kubernetes v1.37.0, Docker 29.9.2에 12 CPU / 16 GiB)에서 [03-checks.sh](03-checks.sh)가 확인 19개, [04-render-aks.sh](04-render-aks.sh)가 10개를 통과했습니다. 일부러 넣은 결함(`values-aks.yaml`의 ClickHouse replica 3 → 2)은 렌더 검사가 잡았고, 되돌리자 다시 통과했습니다. **AKS 자체와 Azure 관리형 서비스에서는 실행하지 않았습니다**(비용 없음). AKS 파일은 렌더링해서 실제 Kubernetes API로 검증했고, 같은 파일을 사양과 주소만 바꾸는 overlay와 함께 kind에서 띄웠습니다.
+**2026-11-03에 처음부터 끝까지 검증**했습니다. 공식 차트 **langfuse 2.2.1**(Langfuse 4.70.1, ClickHouse 26.8.36.3), clickhouse-operator 0.0.8, cert-manager v1.20.2 기준입니다. 새 kind 클러스터에 단계로 나눈 첫 설치(kind 0.33.0, Kubernetes v1.37.0, Docker 29.9.2에 12 CPU / 16 GiB, 약 5 GiB를 쓰는 다른 kind 클러스터와 공유)로 [03-checks.sh](03-checks.sh)가 확인 19개, [04-render-aks.sh](04-render-aks.sh)가 11개를 통과했습니다. 일부러 넣은 결함(`values-aks.yaml`의 ClickHouse replica 3 → 2)은 렌더 검사가 잡았고, 되돌리자 다시 통과했습니다. **AKS 자체와 Azure 관리형 서비스에서는 실행하지 않았습니다**(비용 없음). AKS 파일은 렌더링해서 실제 Kubernetes API로 검증했고, 같은 파일을 사양과 주소만 바꾸는 overlay와 함께 kind에서 띄웠습니다.
 
 결과물은 [values-aks.yaml](values-aks.yaml)입니다. AKS에서 셀프호스팅 Langfuse를 운영하는 구성으로, ClickHouse OSS는 operator로 띄우고 Postgres, Redis, Blob은 Azure 관리형 서비스를 씁니다.
 
@@ -134,8 +142,16 @@ helm install clickhouse-operator oci://ghcr.io/clickhouse/clickhouse-operator-he
 
 그다음 노드 풀 두 개, Azure 서비스(PostgreSQL Flexible Server, Azure Managed Redis, **컨테이너를 미리 만든** 스토리지 계정), `langfuse` Secret([secret-example.yaml](secret-example.yaml)), TLS secret `langfuse-tls`를 준비하고 설치합니다.
 
+처음 설치할 때는 세 단계로 나눕니다(이후 업그레이드는 `helm upgrade` 한 번).
+
 ```bash
-helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-aks.yaml
+H="helm upgrade --install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-aks.yaml"
+ZERO="--set langfuse.web.replicas=null --set langfuse.worker.replicas=null --set langfuse.web.hpa.enabled=false --set langfuse.worker.hpa.enabled=false"
+$H $ZERO --set langfuse.replicas=0      # 1. ClickHouse와 Keeper만
+kubectl -n langfuse wait --for=condition=Ready keepercluster/langfuse clickhousecluster/langfuse --timeout=15m
+$H $ZERO --set langfuse.replicas=1      # 2. web pod 하나가 ClickHouse 마이그레이션 실행
+kubectl -n langfuse rollout status deploy/langfuse-web --timeout=15m
+$H                                      # 3. 전체 values
 ```
 
 ### 로컬 검증 실행
@@ -145,7 +161,7 @@ cd labs/v4/langfuse-aks
 ./01-kind-up.sh       # AKS 풀 모양의 kind 클러스터, cert-manager, operator, 대체 서비스, Secret
 ./02-install.sh       # values-aks.yaml + values-kind.yaml로 차트 설치
 ./03-checks.sh        # 배치, 연결, 데이터 경로, 장애 조치 (확인 19개)
-./04-render-aks.sh    # values-aks.yaml 단독: 렌더, server-side dry run, 필드 확인 (확인 10개)
+./04-render-aks.sh    # values-aks.yaml 단독: 렌더, server-side dry run, 필드 확인 (확인 11개)
 ./99-down.sh          # kind 클러스터 삭제
 ```
 
@@ -160,12 +176,12 @@ cd labs/v4/langfuse-aks
 - **데이터 경로:** public API로 보낸 trace가 다시 읽히고, 그 행이 replica 3개 모두에 있고, 원본 이벤트는 Blob 컨테이너에, 프로젝트는 Postgres에 있습니다.
 - **장애 조치:** ClickHouse replica 하나를 지운 상태에서도 새 trace가 수집되고 읽혔으며, 돌아온 replica에 그 행이 있었습니다. Keeper 하나를 지웠을 때도 같았습니다.
 
-`04-render-aks.sh`: 10개 PASS. `values-aks.yaml`만으로(자리표시자는 예시 값으로 바꿈) 객체 12개가 렌더링되고, kind API가 server-side dry run으로 받아들였습니다. web·worker는 `app`에 2 CPU / 4 GiB(대수는 HPA가 정함), ClickHouse는 taint 걸린 풀에 3 replica × 6 CPU / 24 GiB / 512 GiB `managed-csi-premium`, Keeper 3, ingress class `webapprouting.kubernetes.azure.com`과 TLS, Redis는 `rediss://…:10000`입니다.
+`04-render-aks.sh`: 11개 PASS. `values-aks.yaml`만으로(자리표시자는 예시 값으로 바꿈) 객체 12개가 렌더링되고, kind API가 server-side dry run으로 받아들였습니다. web·worker는 `app`에 2 CPU / 4 GiB(대수는 HPA가 정함), ClickHouse는 taint 걸린 풀에 3 replica × 6 CPU / 24 GiB / 512 GiB `managed-csi-premium`, Keeper 3, ingress class `webapprouting.kubernetes.azure.com`과 TLS, Redis는 `rediss://…:10000`입니다.
 
 ### 알아 둘 것
 
 - **Blob 컨테이너는 미리 만듭니다.** 차트 문서는 없는 컨테이너를 Langfuse가 만들려고 시도한다고 하지만, Langfuse 4.70.1은 업로드 때도 재시작한 뒤에도 만들지 않았습니다. 이벤트 PUT이 모두 404였고, OTLP 수집은 HTTP 500(`Failed to upload JSON to Azure Blob Storage`)이었습니다. Azure에서 IaC로 하듯, [01-kind-up.sh](01-kind-up.sh)가 미리 만듭니다.
-- **첫 기동에는 몇 번 재시작합니다.** Keeper가 뜨기 전까지 ClickHouse가 Keeper 연결 오류(exit 231)로 끝나고, ClickHouse가 응답하기 전까지 web이 재시작합니다. 둘 다 저절로 안정되므로, [02-install.sh](02-install.sh)는 pod 수가 아니라 CR 상태를 기다립니다.
+- **첫 기동에는 마이그레이션할 시간을 줍니다.** 첫 설치 두 번이 `Dirty database version 5`로 끝났습니다. 마이그레이션 상태가 중간에 멈춘 채 남았고, web은 계속 재시작했습니다. pod 이벤트에 이유가 있었습니다. `Container langfuse-web failed liveness probe, will be restarted`. 첫 기동은 Postgres 마이그레이션 461개와 replica 3개의 ClickHouse 마이그레이션을 적용하는데, 이것이 차트 기본 liveness 여유(20초 + 10초 × 3, web에는 startup probe 없음)보다 오래 걸립니다. `values-aks.yaml`은 `livenessProbe.initialDelaySeconds: 300`을 둡니다. [02-install.sh](02-install.sh)는 첫 설치를 단계로도 나눕니다. 데이터 저장소부터 띄워 `ClickHouseCluster`와 `KeeperCluster`의 Ready를 기다리고(Keeper가 뜰 때까지 ClickHouse가 Keeper 연결 오류 exit 231로 몇 번 재시작함), web pod 하나로 마이그레이션한 뒤 전체 values를 적용합니다.
 - **anti-affinity에는 operator의 라벨이 필요합니다.** clickhouse-operator 0.0.8은 pod에 `clickhouse.com/role=clickhouse-server`(Keeper는 `clickhouse-keeper`)를 붙이고, values가 이 라벨을 씁니다.
 - **HPA를 켜면 차트가 `spec.replicas`를 빼고 렌더링합니다.** HPA 최소값(2)이 하한입니다.
 - **Azurite에서만:** 클러스터 내부 hostname에는 `--disableProductStyleUrl`이 필요합니다. 없으면 Azurite가 `azurite.standins…`를 `<account>.<host>`로 읽어 400을 돌려줍니다. Azure에서는 상관없습니다.

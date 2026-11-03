@@ -56,6 +56,7 @@ for t in docs:
         env = {e['name']: e.get('value') for e in c.get('env', []) if 'name' in e}
         facts[n] = f"replicas={get(d,'spec','replicas') or 'HPA'} req={get(c,'resources','requests','cpu')}/{get(c,'resources','requests','memory')} pool={get(d,'spec','template','spec','nodeSelector','agentpool')}"
         if n.endswith('web'):
+            facts['web-liveness'] = f"initialDelaySeconds={get(c,'livenessProbe','initialDelaySeconds')}"
             facts['env'] = ' '.join(f"{k2}={env.get(k2)}" for k2 in ('CLICKHOUSE_CLUSTER_ENABLED','LANGFUSE_USE_AZURE_BLOB','DATABASE_HOST','REDIS_TLS_ENABLED')) + ' redis=' + re.sub(r'//[^@]*@', '//***@', env.get('REDIS_CONNECTION_STRING') or '')
     elif k == 'HorizontalPodAutoscaler':
         facts['hpa-' + n] = f"{get(d,'spec','minReplicas')}-{get(d,'spec','maxReplicas')}"
@@ -74,6 +75,7 @@ for d in langfuse-web langfuse-worker; do
   # With HPA on, the chart leaves spec.replicas out: the HPA (minimum 2) owns the count.
   o=$(f $d); [ "$o" = "replicas=HPA req=2/4Gi pool=app" ] && ok=1 || ok=0; row "$d" "replicas=HPA req=2/4Gi pool=app" "$o" $ok
 done
+o=$(f web-liveness); [ "$o" = "initialDelaySeconds=300" ] && ok=1 || ok=0; row "web liveness probe (first start migrates)" "initialDelaySeconds=300" "$o" $ok
 o="$(f hpa-langfuse-web) $(f hpa-langfuse-worker)"; [ "$o" = "2-4 2-6" ] && ok=1 || ok=0; row "HPA web, worker" "2-4 2-6" "$o" $ok
 o=$(f clickhouse); case "$o" in "replicas=3 shards=1 req=6/24Gi storage=512Gi class=managed-csi-premium pool=clickhouse taint=clickhouse") ok=1 ;; *) ok=0 ;; esac
 row "ClickHouseCluster" "replicas=3 shards=1 req=6/24Gi storage=512Gi class=managed-csi-premium pool=clickhouse taint=clickhouse" "$o" $ok

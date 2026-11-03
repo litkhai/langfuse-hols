@@ -44,6 +44,10 @@ langfuse:
     pdb:
       create: true
       maxUnavailable: 1
+    # The first start applies every Postgres and ClickHouse migration. With the chart default
+    # (20 s + 3 × 10 s) the probe killed web mid-migration and left "Dirty database version 5".
+    livenessProbe:
+      initialDelaySeconds: 300
 
   worker:
     replicas: 2

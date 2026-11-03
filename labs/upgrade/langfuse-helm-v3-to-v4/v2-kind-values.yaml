@@ -1,0 +1,8 @@
+# kind sizing for the chart v2 sibling, passed to the upstream script with --extra-values.
+# Production keeps the chart defaults (3 Keeper pods, 100Gi ClickHouse volume).
+clickhouse:
+  keeper:
+    replicas: 1
+    storage: {size: 2Gi}
+  cluster:
+    storage: {size: 10Gi}

@@ -26,6 +26,9 @@ Differences from the core repository:
   needs moves to `_base/`; what differs by track goes to `_base/<track>/` (`versions.env`,
   `requirements.txt`, `seed_traces.py`). The track is an explicit argument (`_base/bin/up.sh v4`,
   `. _base/lib/env.sh v3`), never a default.
+- Exception: `labs/upgrade/` holds labs that move a deployment between versions (#73). They run on
+  a local kind cluster with their own pins in the lab's `lib.sh`, not on `_base/`, and belong to
+  neither track.
 - v4 is the primary track. v3 keeps what it had at `1a93628` and gets no backports from v4; it is
   removed when v3 support ends (#35).
 - Verification lines name Langfuse, the Python SDK and ClickHouse versions

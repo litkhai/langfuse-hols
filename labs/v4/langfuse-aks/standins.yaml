@@ -1,0 +1,90 @@
+# Local stand-ins for the Azure managed services in values-aks.yaml, on the kind `app` node:
+#   postgres  ← Azure Database for PostgreSQL Flexible Server
+#   redis     ← Azure Managed Redis (password auth, noeviction)
+#   azurite   ← Azure Blob Storage (Microsoft's emulator; same native interface as the real service)
+# Passwords and the Azurite account key come from the `standins` Secret that 01-kind-up.sh generates.
+# No persistence: these exist to exercise Langfuse's wiring, not to keep data.
+apiVersion: v1
+kind: Namespace
+metadata: { name: standins }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: postgres, namespace: standins }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      nodeSelector: { agentpool: app }
+      containers:
+        - name: postgres
+          image: docker.io/postgres:17.11
+          env:
+            - { name: POSTGRES_USER, value: langfuse }
+            - { name: POSTGRES_DB, value: langfuse }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: standins, key: postgresql-password } }
+            - { name: TZ, value: UTC }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe: { exec: { command: ["pg_isready", "-U", "langfuse"] }, periodSeconds: 3 }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: standins }
+spec: { selector: { app: postgres }, ports: [{ port: 5432 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis, namespace: standins }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      nodeSelector: { agentpool: app }
+      containers:
+        - name: redis
+          image: docker.io/redis:7.2.16
+          command: ["sh", "-c", "exec redis-server --requirepass \"$REDIS_PASSWORD\" --maxmemory-policy noeviction"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: standins, key: redis-password } }
+          ports: [{ containerPort: 6379 }]
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis, namespace: standins }
+spec: { selector: { app: redis }, ports: [{ port: 6379 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: azurite, namespace: standins }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: azurite } }
+  template:
+    metadata: { labels: { app: azurite } }
+    spec:
+      nodeSelector: { agentpool: app }
+      containers:
+        - name: azurite
+          image: mcr.microsoft.com/azure-storage/azurite:3.37.0
+          # --disableProductStyleUrl: the in-cluster hostname would otherwise be read as <account>.<host> (HTTP 400)
+          command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000", "--location", "/data", "--loose", "--disableProductStyleUrl"]
+          env:
+            - name: AZURITE_ACCOUNTS          # <account>:<base64 key>, generated per run (no well-known dev key)
+              valueFrom: { secretKeyRef: { name: standins, key: azurite-accounts } }
+          ports: [{ containerPort: 10000 }]
+          volumeMounts: [{ name: data, mountPath: /data }]
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: azurite, namespace: standins }
+spec: { selector: { app: azurite }, ports: [{ port: 10000 }] }

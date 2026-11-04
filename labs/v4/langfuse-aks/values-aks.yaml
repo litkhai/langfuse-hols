@@ -1,0 +1,159 @@
+# values-aks.yaml — self-hosted Langfuse on AKS, sized with room to spare (chart langfuse 2.2.1).
+#
+#   helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-aks.yaml
+#
+# Layout (see README for the node pools and the reasoning):
+#   app pool         web ×2 and worker ×2 (HPA), Keeper ×3            e.g. 3 nodes, 4 vCPU / 16 GiB
+#   clickhouse pool  ClickHouse 1 shard × 3 replicas, one per node     3 nodes, 8 vCPU / 32 GiB, tainted
+#   Azure managed    PostgreSQL (Flexible Server), Redis (Azure Managed Redis), Blob Storage
+#
+# Every <…> is a placeholder. Secrets come from one Secret named `langfuse` (secret-example.yaml);
+# create it from your secret store before installing. Prerequisites, once per cluster: cert-manager
+# v1.20.2 and clickhouse-operator 0.0.8 (01-kind-up.sh shows the commands).
+
+langfuse:
+  nextauth:
+    url: https://<langfuse.example.internal>     # the address users open; also the OAuth redirect base
+    secret:
+      secretKeyRef: { name: langfuse, key: nextauth-secret }
+  salt:
+    secretKeyRef: { name: langfuse, key: salt }
+  encryptionKey:                                 # 64 hex characters: openssl rand -hex 32
+    secretKeyRef: { name: langfuse, key: encryption-key }
+  # Enterprise licence (remove for OSS)
+  licenseKey:
+    secretKeyRef: { name: langfuse, key: license-key }
+  features:
+    telemetryEnabled: false
+    signUpDisabled: true                         # accounts come from SSO / SCIM
+
+  # web and worker run on the app pool
+  nodeSelector:
+    agentpool: app
+
+  web:
+    replicas: 2
+    resources:
+      requests: { cpu: "2", memory: 4Gi }        # the documented minimum per container
+      limits: { memory: 4Gi }
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 50
+    pdb:
+      create: true
+      maxUnavailable: 1
+    # The first start applies every Postgres and ClickHouse migration. With the chart default
+    # (20 s + 3 × 10 s) the probe killed web mid-migration and left "Dirty database version 5".
+    livenessProbe:
+      initialDelaySeconds: 300
+
+  worker:
+    replicas: 2
+    resources:
+      requests: { cpu: "2", memory: 4Gi }
+      limits: { memory: 4Gi }
+    hpa:                                         # the docs scale workers when 2 CPU passes 50%
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 50
+    pdb:
+      create: true
+      maxUnavailable: 1
+
+  ingress:
+    enabled: true
+    className: webapprouting.kubernetes.azure.com   # AKS application routing add-on (managed NGINX)
+    hosts:
+      - host: <langfuse.example.internal>
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      enabled: true
+      secretName: langfuse-tls
+
+# ── ClickHouse OSS: 1 shard × 3 replicas + Keeper ×3, through the ClickHouse operator ──
+# Langfuse does not support a multi-shard cluster; replicas give availability, not scale-out.
+clickhouse:
+  deploy: true
+  auth:
+    existingSecret: langfuse
+    existingSecretKey: clickhouse-password
+  cluster:
+    enabled: true                    # CLICKHOUSE_CLUSTER_ENABLED: ON CLUSTER DDL, ReplicatedMergeTree
+    replicas: 3                      # the docs' production minimum; hard to change later
+    resources:                       # on 8 vCPU / 32 GiB nodes, leaving room for kubelet and Keeper
+      requests: { cpu: "6", memory: 24Gi }
+      limits: { memory: 26Gi }
+    storage:
+      size: 512Gi                    # per replica; every replica holds a full copy
+      className: managed-csi-premium # AKS built-in Premium SSD class per the Azure docs (not run here)
+    nodeSelector:
+      agentpool: clickhouse
+    tolerations:
+      - { key: dedicated, operator: Equal, value: clickhouse, effect: NoSchedule }
+    affinity:                        # one replica per node (label set by clickhouse-operator 0.0.8)
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels: { clickhouse.com/role: clickhouse-server }
+  keeper:
+    enabled: true
+    replicas: 3
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { memory: 2Gi }
+    storage:
+      size: 20Gi
+      className: managed-csi-premium
+    nodeSelector:
+      agentpool: app
+    affinity:                        # spread over the app pool's nodes when there are 3
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: { clickhouse.com/role: clickhouse-keeper }
+
+# ── Azure managed services (chart sub-charts off) ──
+postgresql:
+  deploy: false
+  host: <server>.postgres.database.azure.com     # Azure Database for PostgreSQL Flexible Server
+  port: 5432
+  args: sslmode=require
+  auth:
+    username: langfuse
+    database: langfuse
+    existingSecret: langfuse
+    secretKeys:
+      userPasswordKey: postgresql-password
+
+redis:
+  deploy: false
+  host: <name>.<region>.redis.azure.net          # Azure Managed Redis, non-clustered policy, eviction policy noeviction
+  port: 10000
+  tls:
+    enabled: true
+  auth:
+    username: null                               # access key auth
+    existingSecret: langfuse
+    existingSecretPasswordKey: redis-password
+
+s3:
+  deploy: false
+  storageProvider: azure                         # Azure Blob Storage, native interface
+  bucket: langfuse                               # container
+  endpoint: https://<account>.blob.core.windows.net
+  accessKeyId:
+    value: <account>                             # storage account name
+  secretAccessKey:
+    secretKeyRef: { name: langfuse, key: azure-storage-key }
+  eventUpload: { prefix: "events/" }
+  batchExport: { prefix: "exports/" }
+  mediaUpload: { prefix: "media/" }

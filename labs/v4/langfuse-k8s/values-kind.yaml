@@ -1,7 +1,8 @@
-# values-kind.yaml — layered on values-aks.yaml for the local check on kind:
-#   helm install … -f values-aks.yaml -f values-kind.yaml
-# Only sizes, addresses and the storage class change. Node pools, taints, replica counts, HPA/PDB,
-# the operator CRs and the external-service wiring stay exactly as on AKS.
+# values-kind.yaml — layered on values-base.yaml for the local check on kind:
+#   helm install … -f values-base.yaml -f values-kind.yaml
+# Sizes, addresses and the storage class change, and the stand-ins take the managed services' place:
+# Postgres, Redis, and Azurite for object storage (the chart's Azure Blob path). Node pools, taints,
+# replica counts, HPA/PDB, the operator CRs and the external-service wiring are the base's.
 langfuse:
   nextauth:
     url: http://localhost:3000
@@ -51,8 +52,13 @@ redis:
   port: 6379
   tls:
     enabled: false
+  auth:
+    username: null                   # requirepass on the stand-in
 
 s3:
+  storageProvider: azure
   endpoint: http://azurite.standins.svc.cluster.local:10000/langfuselab
   accessKeyId:
     value: langfuselab               # the Azurite account 01-kind-up.sh creates
+  secretAccessKey:
+    secretKeyRef: { name: langfuse, key: azure-storage-key }

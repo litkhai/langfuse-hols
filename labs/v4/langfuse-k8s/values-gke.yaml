@@ -1,0 +1,46 @@
+# values-gke.yaml — GKE on top of values-base.yaml:
+#   helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-base.yaml -f values-gke.yaml
+#
+#   storage      premium-rwo (built-in SSD persistent disk class, GKE docs)
+#   ingress      GKE Ingress, external Application Load Balancer. GKE takes the class from the
+#                kubernetes.io/ingress.class annotation only; spec.ingressClassName is not supported (GKE docs)
+#   Postgres     Cloud SQL for PostgreSQL, private IP
+#   Redis        Memorystore for Redis, in-transit encryption: port 6378 and the instance's server CA (GKE docs)
+#   objects      Cloud Storage, native interface, Workload Identity: with no credentials set the chart falls back
+#                to the pod's service account (chart values)
+langfuse:
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: <langfuse-gcs>@<project>.iam.gserviceaccount.com
+  ingress:
+    className: ""
+    annotations:
+      kubernetes.io/ingress.class: gce
+  # Memorystore's server CA, from `gcloud redis instances describe … --format='value(serverCaCerts[0].cert)'`
+  # stored as Secret memorystore-ca (key server-ca.pem)
+  extraVolumes:
+    - name: memorystore-ca
+      secret: { secretName: memorystore-ca }
+  extraVolumeMounts:
+    - { name: memorystore-ca, mountPath: /etc/memorystore-ca, readOnly: true }
+
+clickhouse:
+  cluster:
+    storage: { className: premium-rwo }
+  keeper:
+    storage: { className: premium-rwo }
+
+postgresql:
+  host: <cloud-sql-private-ip>
+  args: sslmode=require
+
+redis:
+  host: <memorystore-ip>
+  port: 6378
+  tls:
+    caPath: /etc/memorystore-ca/server-ca.pem
+  auth:
+    username: null                               # AUTH string
+
+s3:
+  storageProvider: gcs

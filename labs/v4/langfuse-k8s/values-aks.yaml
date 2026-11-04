@@ -1,0 +1,35 @@
+# values-aks.yaml — AKS on top of values-base.yaml:
+#   helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-base.yaml -f values-aks.yaml
+#
+#   storage      managed-csi-premium (built-in Premium SSD class, Azure docs)
+#   ingress      application routing add-on (managed NGINX), class webapprouting.kubernetes.azure.com
+#   Postgres     Azure Database for PostgreSQL Flexible Server
+#   Redis        Azure Managed Redis: port 10000, TLS (Azure docs), non-clustered policy, eviction policy noeviction
+#   objects      Azure Blob Storage, native interface, storage account key; create the container first
+langfuse:
+  ingress:
+    className: webapprouting.kubernetes.azure.com
+
+clickhouse:
+  cluster:
+    storage: { className: managed-csi-premium }
+  keeper:
+    storage: { className: managed-csi-premium }
+
+postgresql:
+  host: <server>.postgres.database.azure.com
+  args: sslmode=require
+
+redis:
+  host: <name>.<region>.redis.azure.net
+  port: 10000
+  auth:
+    username: null                               # access key auth
+
+s3:
+  storageProvider: azure
+  endpoint: https://<account>.blob.core.windows.net
+  accessKeyId:
+    value: <account>                             # storage account name
+  secretAccessKey:
+    secretKeyRef: { name: langfuse, key: azure-storage-key }

@@ -113,7 +113,7 @@ Needs `kind`, `kubectl`, `helm`, `jq`, `openssl`, `uv`. The langfuse-hols compos
 - Workload identity (IRSA, Pod Identity, GKE Workload Identity) against real cloud IAM, and Memorystore's CA.
 - Load: no throughput or latency measured; the sizing follows the docs' minimums plus room, not a benchmark.
 - Disk size: 512 GiB per replica is a placeholder; size it from daily observations × average size × retention, measured on PoC data.
-- Private registry: ACR, `az acr import`, `az aks update --attach-acr`, ACR anonymous-pull settings, ACR cache rules, Azure Firewall egress and network-isolated AKS (described from the docs); the bundled sub-charts behind a private registry (render only); finishing an image bump after mirroring it (Docker Hub limit).
+- Private registry: ACR, `az acr import`, `az aks update --attach-acr`, ACR anonymous-pull settings, ACR cache rules, Azure Firewall egress and network-isolated AKS (described from the docs); the bundled sub-charts behind a private registry (render only); finishing an image bump after mirroring it (Docker Hub limit); a fault injected into 06-private-registry-checks.sh (a public-image pod among the lab's pods): the kind API stopped answering (etcd timeouts) once other projects' containers started on the same Docker VM, at about 14:40 UTC. Its negatives so far are the three pull controls in 05 and the stalled 4.71.0 rollout.
 
 ### Install from a private registry (a regulated customer on AKS + ACR)
 
@@ -318,7 +318,7 @@ cd labs/v4/langfuse-k8s
 - 실제 클라우드 IAM에서의 워크로드 아이덴티티(IRSA, Pod Identity, GKE Workload Identity), Memorystore CA
 - 부하: 처리량이나 지연은 측정하지 않았습니다. 사이징은 벤치마크가 아니라 문서 최소치에 여유를 더한 값입니다.
 - 디스크 크기: replica당 512 GiB는 자리표시자입니다. 하루 observation 수 × 평균 크기 × 보존 기간을 PoC 데이터로 실측해 정합니다.
-- 사설 레지스트리: ACR, `az acr import`, `az aks update --attach-acr`, ACR 익명 pull 설정, ACR 캐시 규칙, Azure Firewall egress, network isolated AKS(문서 기준으로 적음). 사설 레지스트리 뒤의 내장 sub-chart(렌더만). 이미지 버전 올리기를 미러링 후 끝까지 진행(Docker Hub 제한).
+- 사설 레지스트리: ACR, `az acr import`, `az aks update --attach-acr`, ACR 익명 pull 설정, ACR 캐시 규칙, Azure Firewall egress, network isolated AKS(문서 기준으로 적음). 사설 레지스트리 뒤의 내장 sub-chart(렌더만). 이미지 버전 올리기를 미러링 후 끝까지 진행(Docker Hub 제한). 06-private-registry-checks.sh에 결함 넣기(실습 pod 사이에 공개 이미지 pod 하나): 같은 Docker VM에서 다른 프로젝트 컨테이너가 뜬 14:40 UTC쯤부터 kind API가 응답하지 않았습니다(etcd timeout). 지금까지의 음성 대조는 05의 pull 대조 실험 3개와 멈춘 4.71.0 rollout입니다.
 
 ### 사설 레지스트리에서 설치 (AKS + ACR을 쓰는 규제 업종 고객)
 

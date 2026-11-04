@@ -1,0 +1,10 @@
+m-lb-1793803890: 3000 files in blob storage, 3000 with rows, 0 short (rows < 4):
+m-lb-noretry-1793804166: 3610 files in blob storage, 2980 with rows, 0 short (rows < 4):
+m-deadline30-1793804486: 2966 files in blob storage, 2966 with rows, 0 short (rows < 4):
+m-deadline30-t1024-1793804705: 2553 files in blob storage, 2553 with rows, 0 short (rows < 4):
+m-otel-web-1793805382: 3002 files in blob storage, 3000 with rows, 2 short (rows < 4):
+m-otel-minio-1793805609: 2798 files in blob storage, 2553 with rows, 0 short (rows < 4):
+m-otel-restart-1793805827: 2636 files in blob storage, 2636 with rows, 0 short (rows < 4):
+# m-otel-web: the 2 files with 0 rows hold 4 spans each that are in events_full from another file a minute later:
+# the Collector re-sent two requests whose first copy web had stored as it died; one row per span_id remains.
+# m-otel-minio: 1,788 observations never reached blob storage (the Collector dropped the 500s): nothing to replay.

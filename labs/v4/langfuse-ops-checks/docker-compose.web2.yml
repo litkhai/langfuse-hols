@@ -1,0 +1,21 @@
+# Overlay for test 06a: a second web replica and HAProxy in front of both. Same image and environment as
+# langfuse-web; web-2 has no host port and skips the start-up migrations (web-1 owns them). Clients use the
+# load balancer on 127.0.0.1:3080; web-1 keeps :3000. The HAProxy config is haproxy-web2.cfg (06a's settings
+# and why); HAPROXY_CFG picks another file in this directory (06a's no-retry variant).
+services:
+  langfuse-web-2:
+    extends:
+      file: docker-compose.yml   # resolved against the project directory, _base/
+      service: langfuse-web
+    ports: !reset []
+    depends_on: !reset []
+    environment:
+      LANGFUSE_AUTO_POSTGRES_MIGRATION_DISABLED: "true"
+      LANGFUSE_AUTO_CLICKHOUSE_MIGRATION_DISABLED: "true"
+  lb:
+    image: docker.io/library/haproxy:3.2.24   # published 2026-09-25
+    restart: unless-stopped
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/${HAPROXY_CFG:-haproxy-web2.cfg}:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - 127.0.0.1:3080:80

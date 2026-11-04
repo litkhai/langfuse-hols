@@ -1,0 +1,160 @@
+== 05 audit log — 2026-11-04T13:23:02Z, Langfuse 4.75.0 + EE overlay, project langfuse-hols-v4audit (fresh volumes)
+-- pass: default
+  health: {"status":"OK","version":"4.75.0"}  web env LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=''
+  ClickHouse audit_logs columns: id, timestamp, org_id, project_id, event_kind, outcome, outcome_reason, actor_type, user_id, api_key_id, actor_name, actor_email, user_org_role, user_project_role, support_access, resource_type, resource_id, resource_refs, action, surface, route, params, result_count, before, after, ip, user_agent, request_id, inserted_at
+  Postgres tables: audit_log_staging, audit_logs
+  UI session for the init user: admin@example.com
+  ui.trace.detail response head: [{"result":{"data":{"json":{"observations":[{"id":"bd8c5ba642616935","traceId":"5f277bdfb74c5e9335d0297b0f50ee2c","startTime":"2026-11-04T13:24:21.314Z","endTim
+  ui.batchExport response head: [{"result":{"data":{"json":null,"meta":{"values":["undefined"]}}}}]
+  admin.replay of events/otel/llm-observability/2026/11/04/13/24/e4a49427-6644-4f1c-a1a2-d0e3ff06700e.json: {"queued":0,"skipped":1,"errors":["Unsupported replay type: otel"]}
+  web log lines about audit / access events (first 5):
+    Applying migration `20240212175433_add_audit_log_table`
+    Applying migration `20250310100328_add_api_key_to_audit_log`
+    Applying migration `20250711134738_add_patch_llm_tool_schema_audit_logs_background_migration`
+    Applying migration `20261012155316_add_audit_log_staging`
+    Applying migration `20261013123042_add_audit_log_staging_failure_columns`
+  actions sent (label, method path, HTTP):
+    prompt.create      POST /api/public/v2/prompts                             201
+    prompt.labels      PATCH /api/public/v2/prompts/audit-default/versions/1   200
+    prompt.get         GET /api/public/v2/prompts/audit-default                200
+    prompt.delete      DELETE /api/public/v2/prompts/audit-default             204
+    orgkey.create      POST /api/admin/organizations/ch-workshop/apiKeys       201
+    project.create     POST /api/public/projects                               201
+    project.update     PUT /api/public/projects/cmw25er78000gp53zpcgu9vzb      200
+    apikey.create      POST /api/public/projects/cmw25er78000gp53zpcgu9vzb/apiKeys 201
+    apikey.list        GET /api/public/projects/cmw25er78000gp53zpcgu9vzb/apiKeys 200
+    apikey.delete      DELETE /api/public/projects/cmw25er78000gp53zpcgu9vzb/apiKeys/cmw25erah000ip53zth13xcr8 200
+    scim.user.create   POST /api/public/scim/Users                             201
+    member.role        PUT /api/public/organizations/memberships               200
+    member.project     PUT /api/public/projects/cmw25er78000gp53zpcgu9vzb/memberships 200
+    member.list        GET /api/public/organizations/memberships               200
+    member.remove      DELETE /api/public/organizations/memberships            200
+    project.delete     DELETE /api/public/projects/cmw25er78000gp53zpcgu9vzb   202
+    read.trace         GET /api/public/traces/5f277bdfb74c5e9335d0297b0f50ee2c 404
+    read.traces.list   GET /api/public/traces                                  404
+    read.obs.v2.list   GET /api/public/v2/observations                         200
+    read.sessions.list GET /api/public/sessions                                404
+    read.session       GET /api/public/sessions/session-6863                   404
+    ui.trace.detail    GET /api/trpc/events.byTraceId                          200
+    ui.batchExport     POST /api/trpc/batchExport.create                       200
+    admin.replay       POST /api/admin/ingestion-replay                        200
+  Postgres audit_logs since 2026-11-04 13:24:19 (resource_type, action, by, count):
+       resource_type   | action |  actor  | count 
+    -------------------+--------+---------+-------
+     apiKey            | create | api_key |     2
+     apiKey            | delete | api_key |     1
+     batchExport       | create | user    |     1
+     orgMembership     | create | api_key |     1
+     orgMembership     | delete | api_key |     1
+     orgMembership     | update | api_key |     1
+     project           | delete | api_key |     1
+     projectMembership | create | api_key |     1
+     prompt            | create | api_key |     1
+     prompt            | delete | api_key |     1
+     prompt            | update | api_key |     1
+    (11 rows)
+    
+  Postgres audit_log_staging since 2026-11-04 13:24:19 (kind, resourceType, action, count; still waiting for the relay):
+     kind | rt | act | count 
+    ------+----+-----+-------
+    (0 rows)
+    
+  ClickHouse audit_logs since 2026-11-04 13:24:19 (kind, actor, resource_type, action, surface, route, rows, count):
+  ClickHouse audit_logs total rows: 0; staging rows total: 0
+  worker log lines about the audit relay (first 5):
+    2026-11-04T13:23:40.355Z info 	[Background Migration] Found background migrations 20250711_1347_patch_llm_tool_schema_audit_logs to run {"trace_id":"72c57d7f835ccff3a02990a3b001c326","span_id":"1b1642f40138d5b4","trace_flags":"01"}
+    2026-11-04T13:23:40.358Z info 	[Background Migration] Acquired lock for background migration 20250711_1347_patch_llm_tool_schema_audit_logs {"trace_id":"72c57d7f835ccff3a02990a3b001c326","span_id":"1b1642f40138d5b4","trace_flags":"01"}
+    2026-11-04T13:23:40.364Z info 	[Background Migration] Patching audit logs for LLMTool and LLMSchema {"trace_id":"72c57d7f835ccff3a02990a3b001c326","span_id":"c5294f1008681a7e","trace_flags":"01"}
+    2026-11-04T13:23:40.368Z info 	[Background Migration] Finished patching of audit logs for LLMTool and LLMSchema in 4ms - Rows: 0 {"trace_id":"72c57d7f835ccff3a02990a3b001c326","span_id":"c5294f1008681a7e","trace_flags":"01"}
+    2026-11-04T13:23:40.371Z info 	[Background Migration] Finished background migration 20250711_1347_patch_llm_tool_schema_audit_logs {"trace_id":"72c57d7f835ccff3a02990a3b001c326","span_id":"c5294f1008681a7e","trace_flags":"01"}
+-- pass: enforced
+  health: {"status":"OK","version":"4.75.0"}  web env LANGFUSE_AUDIT_LOG_ACCESS_EVENTS='enforced'
+  UI session for the init user: admin@example.com
+  ui.trace.detail response head: [{"result":{"data":{"json":{"observations":[{"id":"4174888c26032aea","traceId":"502c6a5007b352f757d8cac5b908c6c1","startTime":"2026-11-04T13:25:52.167Z","endTim
+  ui.batchExport response head: [{"result":{"data":{"json":null,"meta":{"values":["undefined"]}}}}]
+  admin.replay of events/otel/llm-observability/2026/11/04/13/25/1b545e4f-a4c7-4026-aa40-31ca3a010103.json: {"queued":0,"skipped":1,"errors":["Unsupported replay type: otel"]}
+  web log lines about audit / access events (first 5):
+    2026-11-04T13:25:55.313Z info 	Audit log: prompt.create e7561652-e05a-4276-b24a-627cd3794695 by API_KEY "pk-lf-workshop-public" {"auditLog":true,"resourceType":"prompt","resourceId":"e7561652-e05a-4276-b24a-627cd3794695","action":"create","actorType":"API_KEY","apiKeyId":"cmw25dy3x0004p53zbgcbqz0l",
+    2026-11-04T13:25:55.415Z info 	Updating prompt audit-enforced in project llm-observability version 1 with labels production {"trace_id":"1917e2395bb0907fd453db2d9145343d","span_id":"789b3a457d7fae26","trace_flags":"01"}
+    2026-11-04T13:25:55.421Z info 	Setting labels for prompt: e7561652-e05a-4276-b24a-627cd3794695, audit-enforced, 1, ["production","latest"] {"trace_id":"1917e2395bb0907fd453db2d9145343d","span_id":"f6daadc1cc097cbd","trace_flags":"01"}
+    2026-11-04T13:25:55.441Z info 	Audit log: prompt.update e7561652-e05a-4276-b24a-627cd3794695 by API_KEY "pk-lf-workshop-public" {"auditLog":true,"resourceType":"prompt","resourceId":"e7561652-e05a-4276-b24a-627cd3794695","action":"update","actorType":"API_KEY","apiKeyId":"cmw25dy3x0004p53zbgcbqz0l",
+    2026-11-04T13:25:55.585Z info 	Audit log: prompt.delete e7561652-e05a-4276-b24a-627cd3794695 by API_KEY "pk-lf-workshop-public" {"auditLog":true,"resourceType":"prompt","resourceId":"e7561652-e05a-4276-b24a-627cd3794695","action":"delete","actorType":"API_KEY","apiKeyId":"cmw25dy3x0004p53zbgcbqz0l",
+  actions sent (label, method path, HTTP):
+    prompt.create      POST /api/public/v2/prompts                             201
+    prompt.labels      PATCH /api/public/v2/prompts/audit-enforced/versions/1  200
+    prompt.get         GET /api/public/v2/prompts/audit-enforced               200
+    prompt.delete      DELETE /api/public/v2/prompts/audit-enforced            204
+    orgkey.create      POST /api/admin/organizations/ch-workshop/apiKeys       201
+    project.create     POST /api/public/projects                               201
+    project.update     PUT /api/public/projects/cmw25gqa6000bmq3rvegpudiv      200
+    apikey.create      POST /api/public/projects/cmw25gqa6000bmq3rvegpudiv/apiKeys 201
+    apikey.list        GET /api/public/projects/cmw25gqa6000bmq3rvegpudiv/apiKeys 200
+    apikey.delete      DELETE /api/public/projects/cmw25gqa6000bmq3rvegpudiv/apiKeys/cmw25gqfr000dmq3rn4kidppo 200
+    scim.user.create   POST /api/public/scim/Users                             201
+    member.role        PUT /api/public/organizations/memberships               200
+    member.project     PUT /api/public/projects/cmw25gqa6000bmq3rvegpudiv/memberships 200
+    member.list        GET /api/public/organizations/memberships               200
+    member.remove      DELETE /api/public/organizations/memberships            200
+    project.delete     DELETE /api/public/projects/cmw25gqa6000bmq3rvegpudiv   202
+    read.trace         GET /api/public/traces/502c6a5007b352f757d8cac5b908c6c1 404
+    read.traces.list   GET /api/public/traces                                  404
+    read.obs.v2.list   GET /api/public/v2/observations                         200
+    read.sessions.list GET /api/public/sessions                                404
+    read.session       GET /api/public/sessions/session-436                    404
+    ui.trace.detail    GET /api/trpc/events.byTraceId                          200
+    ui.batchExport     POST /api/trpc/batchExport.create                       200
+    admin.replay       POST /api/admin/ingestion-replay                        200
+  Postgres audit_logs since 2026-11-04 13:25:51 (resource_type, action, by, count):
+       resource_type   | action |  actor  | count 
+    -------------------+--------+---------+-------
+     apiKey            | create | api_key |     2
+     apiKey            | delete | api_key |     1
+     batchExport       | create | user    |     1
+     orgMembership     | create | api_key |     1
+     orgMembership     | delete | api_key |     1
+     orgMembership     | update | api_key |     1
+     project           | delete | api_key |     1
+     projectMembership | create | api_key |     1
+     prompt            | create | api_key |     1
+     prompt            | delete | api_key |     1
+     prompt            | update | api_key |     1
+    (11 rows)
+    
+  Postgres audit_log_staging since 2026-11-04 13:25:51 (kind, resourceType, action, count; still waiting for the relay):
+      kind  |  rt   | act  | count 
+    --------+-------+------+-------
+     access | trace | read |     1
+    (1 row)
+    
+  ClickHouse audit_logs since 2026-11-04 13:25:51 (kind, actor, resource_type, action, surface, route, rows, count):
+  ClickHouse audit_logs total rows: 0; staging rows total: 1
+  worker log lines about the audit relay (first 5):
+ Container langfuse-hols-v4-redis-1 Starting 
+ Container langfuse-hols-v4-postgres-1 Starting 
+ Container langfuse-hols-v4-clickhouse-1 Starting 
+ Container langfuse-hols-v4-minio-1 Starting 
+ Container langfuse-hols-v4-redis-1 Started 
+ Container langfuse-hols-v4-postgres-1 Started 
+ Container langfuse-hols-v4-clickhouse-1 Started 
+ Container langfuse-hols-v4-minio-1 Started 
+ Container langfuse-hols-v4-redis-1 Waiting 
+ Container langfuse-hols-v4-clickhouse-1 Waiting 
+ Container langfuse-hols-v4-postgres-1 Waiting 
+ Container langfuse-hols-v4-minio-1 Waiting 
+ Container langfuse-hols-v4-minio-1 Waiting 
+ Container langfuse-hols-v4-redis-1 Waiting 
+ Container langfuse-hols-v4-clickhouse-1 Waiting 
+ Container langfuse-hols-v4-postgres-1 Waiting 
+ Container langfuse-hols-v4-minio-1 Healthy 
+ Container langfuse-hols-v4-minio-1 Healthy 
+ Container langfuse-hols-v4-postgres-1 Healthy 
+ Container langfuse-hols-v4-redis-1 Healthy 
+ Container langfuse-hols-v4-postgres-1 Healthy 
+ Container langfuse-hols-v4-redis-1 Healthy 
+ Container langfuse-hols-v4-clickhouse-1 Healthy 
+ Container langfuse-hols-v4-langfuse-worker-1 Starting 
+ Container langfuse-hols-v4-clickhouse-1 Healthy 
+ Container langfuse-hols-v4-langfuse-web-1 Starting 
+ Container langfuse-hols-v4-langfuse-worker-1 Started 
+ Container langfuse-hols-v4-langfuse-web-1 Started 
+-- restored: _base/.env without the override, langfuse-hols-v4audit removed with its volumes, v4 stack up in OSS mode

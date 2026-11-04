@@ -1,0 +1,8 @@
+  11 Error: connect ECONNREFUSED 172.20.0.4:6379
+   5 2026-11-04T12:46:07.967Z error 	Redis error [connection-reset]: read ECONNRESET {"failureMode":"connection-reset","error":{"name":"Error","message":"read ECONNRESET","code":"ECONNRESET","errno":-104,"syscall":"read"},"trace_id":"d42638847b23152166d4d193eb6b83ed","span_id":"a9b66c8a3fab3458","trace_f
+   5 2026-11-04T12:46:07.966Z error 	Redis error [connection-reset]: read ECONNRESET {"failureMode":"connection-reset","error":{"name":"Error","message":"read ECONNRESET","code":"ECONNRESET","errno":-104,"syscall":"read"},"trace_id":"d42638847b23152166d4d193eb6b83ed","span_id":"a9b66c8a3fab3458","trace_f
+   4 2026-11-04T12:46:07.968Z error 	Redis error [connection-reset]: read ECONNRESET {"failureMode":"connection-reset","error":{"name":"Error","message":"read ECONNRESET","code":"ECONNRESET","errno":-104,"syscall":"read"},"trace_id":"d42638847b23152166d4d193eb6b83ed","span_id":"a9b66c8a3fab3458","trace_f
+   3 2026-11-04T12:46:37.962Z error 	V4LegacyApiUsageQueue error Socket timeout. Expecting data, but didn't receive any in 30000ms. {"trace_id":"4e5464e581b480e0b88c9ceeb9746d00","span_id":"837c1c00bfda12e8","trace_flags":"01"}
+   3 2026-11-04T12:46:37.960Z error 	EventPropagationQueue error Socket timeout. Expecting data, but didn't receive any in 30000ms. {"trace_id":"4e5464e581b480e0b88c9ceeb9746d00","span_id":"837c1c00bfda12e8","trace_flags":"01"}
+   3 2026-11-04T12:46:25.004Z error 	DataRetentionQueue error getaddrinfo ENOTFOUND redis {"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"redis"}
+   3 2026-11-04T12:46:21.307Z error 	EventPropagationQueue error getaddrinfo ENOTFOUND redis {"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"redis"}

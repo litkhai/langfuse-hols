@@ -1,0 +1,12 @@
+jav-explore	47.31%	315.7MiB / 15.6GiB
+langfuse-hols-v4-langfuse-web-1	76.57%	528.3MiB / 15.6GiB
+langfuse-hols-v4-langfuse-worker-2-1	74.88%	608.9MiB / 15.6GiB
+langfuse-hols-v4-langfuse-worker-1	71.72%	509.2MiB / 15.6GiB
+fix98-25-7	30.74%	826.6MiB / 15.6GiB
+fix98-25-6	7.12%	795.9MiB / 15.6GiB
+ch-reverify-2610	354.56%	796MiB / 15.6GiB
+prompt-enc-openbao-1	1.01%	26.25MiB / 15.6GiB
+langfuse-hols-v4-clickhouse-1	62.66%	1.546GiB / 15.6GiB
+langfuse-hols-v4-postgres-1	8.32%	16.33MiB / 15.6GiB
+langfuse-hols-v4-redis-1	8.03%	24.22MiB / 15.6GiB
+langfuse-hols-v4-minio-1	28.37%	665.6MiB / 15.6GiB

@@ -1,0 +1,24 @@
+<!-- Test 08: every replica of the cluster `langfuse` (1 shard × 3 replicas). CH_REPLICA names the replica and
+     is the host other replicas fetch parts from (interserver HTTP :9009). Lab values, not secrets. -->
+<clickhouse>
+    <remote_servers>
+        <langfuse>
+            <shard>
+                <internal_replication>true</internal_replication>
+                <replica><host>clickhouse</host><port>9000</port><user>clickhouse</user><password>clickhouse</password></replica>
+                <replica><host>clickhouse-2</host><port>9000</port><user>clickhouse</user><password>clickhouse</password></replica>
+                <replica><host>clickhouse-3</host><port>9000</port><user>clickhouse</user><password>clickhouse</password></replica>
+            </shard>
+        </langfuse>
+    </remote_servers>
+    <zookeeper>
+        <node><host>keeper</host><port>9181</port></node>
+        <session_timeout_ms>30000</session_timeout_ms>
+    </zookeeper>
+    <macros>
+        <shard>01</shard>
+        <replica from_env="CH_REPLICA"/>
+    </macros>
+    <interserver_http_host from_env="CH_REPLICA"/>
+    <distributed_ddl><path>/clickhouse/task_queue/ddl</path></distributed_ddl>
+</clickhouse>

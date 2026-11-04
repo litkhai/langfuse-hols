@@ -1,0 +1,21 @@
+== 08 cluster — 2026-11-04T15:44:10Z: stopping the v4 stack (volumes kept), starting langfuse-hols-v4ch3
+  Langfuse healthy 45 s after compose up (first start, migrations ON CLUSTER)
+== schema (15:45:15Z), Langfuse 4.56.0, ClickHouse 26.8.22.13
+  env: CLICKHOUSE_CLUSTER_ENABLED=true CLICKHOUSE_CLUSTER_NAME=langfuse CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000 CLICKHOUSE_URL=http://clickhouse:8123 
+  system.clusters on clickhouse: "langfuse",1,1,"clickhouse" "langfuse",1,2,"clickhouse-2" "langfuse",1,3,"clickhouse-3" 
+  clickhouse-1: "MaterializedView",1 "ReplicatedMergeTree",1 "ReplicatedReplacingMergeTree",12 "View",3 
+  clickhouse-2-1: "MaterializedView",1 "ReplicatedMergeTree",1 "ReplicatedReplacingMergeTree",12 "View",3 
+  clickhouse-3-1: "MaterializedView",1 "ReplicatedMergeTree",1 "ReplicatedReplacingMergeTree",12 "View",3 
+  schema_migrations: ReplicatedMergeTree, latest 51, dirty 0
+  events_full: ReplicatedReplacingMergeTree(\'/clickhouse/tables/{uuid}/{shard}\', \'{replica}\', event_ts, is_deleted) PARTITION BY toYYYYMM(start_time) PRIMARY KEY (project_id, toStartOfMinute(start_time), xxHash3
+  replicas of events_full: "clickhouse",3,3
+▶ r2: CLICKHOUSE_URL=http://clickhouse:8123, kill clickhouse-2-1 at 35 s for 20 s (run c-r2-1793807127)
+  sent 12000  accepted 12000  arrived 12000  server loss 0  client dropped 0  http {"200":3000}  catch-up 4 s  inserts clickhouse-1=150 clickhouse-2-1=0 clickhouse-3-1=0   rows clickhouse-1=12000 clickhouse-2-1=12000 clickhouse-3-1=12000 
+  worker log: 0 × 'Max attempts reached'
+▶ r1: CLICKHOUSE_URL=http://clickhouse:8123, kill clickhouse-1 at 35 s for 20 s (run c-r1-1793807342)
+  sent 12000  accepted 12000  arrived 10396  server loss 1604  client dropped 0  http {"200":3000}  catch-up 4 s  inserts clickhouse-1=123 clickhouse-2-1=0 clickhouse-3-1=0   rows clickhouse-1=10396 clickhouse-2-1=10396 clickhouse-3-1=10396 
+  worker log: 20 × 'Max attempts reached'
+▶ lb-r1: CLICKHOUSE_URL=http://chlb:8123, kill clickhouse-1 at 35 s for 20 s (run c-lb-r1-1793807582)
+  sent 12000  accepted 12000  arrived 12000  server loss 0  client dropped 0  http {"200":3000}  catch-up 5 s  inserts clickhouse-1=45 clickhouse-2-1=49 clickhouse-3-1=52   rows clickhouse-1=12000 clickhouse-2-1=12000 clickhouse-3-1=12000 
+  worker log: 0 × 'Max attempts reached'
+== removing langfuse-hols-v4ch3 and its volumes, starting the v4 stack again

@@ -19,9 +19,12 @@ runs. **v4 is the current track**; Langfuse v3 gets security patches only until 
 | langfuse-eval | [labs/v4/langfuse-eval](labs/v4/langfuse-eval/) | [labs/v3/langfuse-eval](labs/v3/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
 | langfuse-k8s | [labs/v4/langfuse-k8s](labs/v4/langfuse-k8s/) | — | Helm values for AKS, EKS and GKE with room to spare (chart 2.2.1, ClickHouse 1 shard × 3 replicas), verified on kind |
 | kong-gateway-otel | [labs/v4/kong-gateway-otel](labs/v4/kong-gateway-otel/) | — | Kong Gateway (OSS 3.9.4) → Langfuse over OTLP: a model gateway and an agent gateway feeding one trace, generations from `ai-proxy` via a Lua bridge, header → user/session mapping |
+| ai-gateway | [labs/v4/ai-gateway](labs/v4/ai-gateway/) | — | Langfuse AI Gateway (beta, 4.75.0) next to self-hosted Langfuse, real Anthropic calls: per-person and service account keys, cost per user, key and model, allowlist, expiry, revocation, audit log (EE), Claude Code |
 
-All four run on the shared stack in [`_base/`](_base/). The track is the first argument of
+All of them run on the shared stack in [`_base/`](_base/). The track is the first argument of
 its scripts (`_base/bin/up.sh v4`), and its pins are in `_base/<track>/versions.env`.
+`ai-gateway` uses the same compose file as its own project (`lf-gateway-lab`, other ports), because
+the gateway needs Langfuse 4.75.0 and the v4 pin is older.
 
 To run the ClickHouse SQL of v4 `langfuse-ee` 03–04 and `langfuse-eval` 07 without bringing
 Langfuse up, use [usecase/langfuse-on-clickhouse](https://github.com/litkhai/clickhouse-hols/tree/main/usecase/langfuse-on-clickhouse) in clickhouse-hols. It is a
@@ -91,9 +94,12 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 | langfuse-eval | [labs/v4/langfuse-eval](labs/v4/langfuse-eval/) | [labs/v3/langfuse-eval](labs/v3/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
 | langfuse-k8s | [labs/v4/langfuse-k8s](labs/v4/langfuse-k8s/) | — | 여유 있게 잡은 AKS·EKS·GKE용 Helm values(차트 2.2.1, ClickHouse 1 shard × 3 replica), kind에서 검증 |
 | kong-gateway-otel | [labs/v4/kong-gateway-otel](labs/v4/kong-gateway-otel/) | — | Kong Gateway(OSS 3.9.4) → OTLP로 Langfuse: 모델 게이트웨이와 에이전트 게이트웨이가 trace 하나로, Lua bridge로 `ai-proxy`의 generation, 헤더 → user/session 매핑 |
+| ai-gateway | [labs/v4/ai-gateway](labs/v4/ai-gateway/) | — | 셀프호스팅 Langfuse 옆의 Langfuse AI Gateway(베타, 4.75.0), 실제 Anthropic 호출: 개인별·서비스 계정 키, 사용자·키·모델별 비용, 허용 목록, 만료, 폐기, 감사 로그(EE), Claude Code |
 
-네 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다. 트랙은 스크립트의 첫 번째
+모든 실습이 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다. 트랙은 스크립트의 첫 번째
 인자(`_base/bin/up.sh v4`)이고, 트랙별 버전 고정은 `_base/<track>/versions.env`에 있습니다.
+`ai-gateway`는 같은 compose 파일을 별도 프로젝트(`lf-gateway-lab`, 다른 포트)로 씁니다.
+게이트웨이에는 Langfuse 4.75.0이 필요한데 v4 고정 버전이 그보다 오래됐기 때문입니다.
 
 Langfuse를 띄우지 않고 v4 `langfuse-ee` 03–04와 `langfuse-eval` 07의 ClickHouse SQL을
 돌리려면 clickhouse-hols의 [usecase/langfuse-on-clickhouse](https://github.com/litkhai/clickhouse-hols/tree/main/usecase/langfuse-on-clickhouse)를 쓰세요. v4 실행의

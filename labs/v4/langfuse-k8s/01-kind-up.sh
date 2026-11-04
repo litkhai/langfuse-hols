@@ -5,21 +5,36 @@
 # Pins: kind node image = kind's default; cert-manager v1.20.2 and clickhouse-operator 0.0.8, the
 # versions the langfuse 2.2.1 chart README lists. Secrets are generated here and never printed; the
 # Enterprise licence key is copied from _base/.env when present (EE features on, as on the AKS values).
+#
+# PRIVATE_REGISTRY=1 (after 05-private-registry.sh): both charts, their images, the stand-ins and the
+# blob-init pod come from the private registry, with its pull Secret; nothing from a public registry.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 for c in kind kubectl helm openssl; do command -v "$c" >/dev/null || { echo "✗ please install $c"; exit 1; }; done
 K="kubectl --context kind-langfuse-k8s"
+CM_CHART=oci://quay.io/jetstack/charts/cert-manager; OP_CHART=oci://ghcr.io/clickhouse/clickhouse-operator-helm
+CM_SET=(); OP_SET=(); PFX=""
+if [ -n "${PRIVATE_REGISTRY:-}" ]; then
+  . "$HERE/private-registry.inc.sh"
+  CM_CHART="oci://$HELM_HOST/quay.io/jetstack/charts/cert-manager"; OP_CHART="oci://$HELM_HOST/ghcr.io/clickhouse/clickhouse-operator-helm"
+  # cert-manager: imageRegistry (+ the default imageNamespace jetstack) covers controller, webhook,
+  # cainjector, the startupapicheck hook and the acmesolver argument
+  CM_SET=(--ca-file "$CA_FILE" --set imageRegistry="$REG_HOST/quay.io" --set "global.imagePullSecrets[0].name=$PULL_SECRET")
+  # clickhouse-operator: global.imageRegistry is prepended to the whole repository (…/ghcr.io/clickhouse/…)
+  OP_SET=(--ca-file "$CA_FILE" --set global.imageRegistry="$REG_HOST" --set "manager.imagePullSecrets[0].name=$PULL_SECRET")
+  PFX="$REG_HOST/"
+fi
 
 echo "════ 1. kind cluster (control plane, 1 app worker, 3 tainted clickhouse workers) ════"
 kind get clusters 2>/dev/null | grep -qx langfuse-k8s || kind create cluster --config "$HERE/kind-config.yaml" --wait 120s
 $K get nodes -L workload --no-headers | awk '{print "  "$1, (NF>5 ? $NF : "-")}'
 
 echo "════ 2. cert-manager v1.20.2 and clickhouse-operator 0.0.8 ════"
-helm --kube-context kind-langfuse-k8s upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+helm --kube-context kind-langfuse-k8s upgrade --install cert-manager "$CM_CHART" ${CM_SET[@]+"${CM_SET[@]}"} \
   --version v1.20.2 --namespace cert-manager --create-namespace --set crds.enabled=true --wait >/dev/null
 $K wait --for=condition=Established crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s >/dev/null
-helm --kube-context kind-langfuse-k8s upgrade --install clickhouse-operator oci://ghcr.io/clickhouse/clickhouse-operator-helm \
+helm --kube-context kind-langfuse-k8s upgrade --install clickhouse-operator "$OP_CHART" ${OP_SET[@]+"${OP_SET[@]}"} \
   --version 0.0.8 --namespace clickhouse-operator --create-namespace --wait >/dev/null
 $K wait --for=condition=Established crd/clickhouseclusters.clickhouse.com crd/keeperclusters.clickhouse.com --timeout=120s >/dev/null
 echo "  CRDs established"
@@ -31,7 +46,7 @@ if ! $K get secret standins -n standins >/dev/null 2>&1; then
   $K create secret generic standins -n standins --from-literal=postgresql-password="$PG_PW" \
     --from-literal=redis-password="$REDIS_PW" --from-literal=azurite-accounts="langfuselab:$AZ_KEY" >/dev/null
 fi
-$K apply -f "$HERE/standins.yaml" >/dev/null
+sed -E "s#(image: )#\1$PFX#" "$HERE/standins.yaml" | $K apply -f - >/dev/null
 $K -n standins rollout status deploy/postgres deploy/redis deploy/azurite --timeout=180s >/dev/null
 echo "  postgres, redis, azurite ready"
 # The Blob container must exist before Langfuse writes to it: Langfuse 4.70.1 did not create it, on
@@ -39,7 +54,7 @@ echo "  postgres, redis, azurite ready"
 # account (IaC). Here: the Azure SDK that ships in the Langfuse image, as a one-off pod.
 SDK=/app/node_modules/.pnpm/@azure+storage-blob@12.26.0_supports-color@8.1.1/node_modules/@azure/storage-blob
 $K -n standins delete pod blob-init --ignore-not-found >/dev/null
-$K -n standins run blob-init --restart=Never --image=docker.langfuse.com/langfuse/langfuse:4.70.1 \
+$K -n standins run blob-init --restart=Never --image="${PFX}docker.langfuse.com/langfuse/langfuse:4.70.1" \
   --overrides='{"spec":{"nodeSelector":{"workload":"app"}}}' \
   --env="AZKEY=$($K get secret standins -n standins -o jsonpath='{.data.azurite-accounts}' | base64 -d | cut -d: -f2-)" \
   --command -- node -e "

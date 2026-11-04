@@ -1,0 +1,80 @@
+# Overlay for test 08: ClickHouse as 1 shard × 3 replicas + one Keeper, under Langfuse in cluster mode.
+# Used with the base file as its OWN compose project (08-clickhouse-cluster.sh: -p langfuse-hols-v4ch3), so
+# every volume is fresh and the v4 stack's volumes are never touched; the v4 stack is stopped meanwhile (same
+# host ports). `clickhouse` (the base service) is replica 1; clickhouse-2 / -3 have no host port.
+# CH3_CLICKHOUSE_URL picks what Langfuse talks to: a single replica (default http://clickhouse:8123) or chlb,
+# an HAProxy over all three (08's third run). Migrations always go to replica 1 (native :9000).
+x-replica: &replica
+  image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:?}
+  restart: unless-stopped
+  user: "101:101"
+  depends_on:
+    keeper:
+      condition: service_started
+  healthcheck:
+    test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+    interval: 5s
+    timeout: 5s
+    retries: 10
+x-chenv: &chenv
+  CLICKHOUSE_DB: default
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+x-lfcluster: &lfcluster
+  CLICKHOUSE_CLUSTER_ENABLED: "true"
+  CLICKHOUSE_CLUSTER_NAME: langfuse
+  CLICKHOUSE_URL: ${CH3_CLICKHOUSE_URL:-http://clickhouse:8123}
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+services:
+  keeper:
+    image: docker.io/clickhouse/clickhouse-keeper:${CLICKHOUSE_VERSION:?}
+    restart: unless-stopped
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/ch3-keeper.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+      - ch3_keeper:/var/lib/clickhouse
+  clickhouse:
+    hostname: clickhouse
+    depends_on:
+      keeper:
+        condition: service_started
+    environment:
+      CH_REPLICA: clickhouse
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/ch3-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+  clickhouse-2:
+    <<: *replica
+    hostname: clickhouse-2
+    environment:
+      <<: *chenv
+      CH_REPLICA: clickhouse-2
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/ch3-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ch3_data_2:/var/lib/clickhouse
+  clickhouse-3:
+    <<: *replica
+    hostname: clickhouse-3
+    environment:
+      <<: *chenv
+      CH_REPLICA: clickhouse-3
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/ch3-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ch3_data_3:/var/lib/clickhouse
+  chlb:
+    image: docker.io/library/haproxy:3.2.24   # published 2026-09-25
+    restart: unless-stopped
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/haproxy-ch3.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+  langfuse-web:
+    depends_on: &lfdeps
+      clickhouse-2:
+        condition: service_healthy
+      clickhouse-3:
+        condition: service_healthy
+    environment: *lfcluster
+  langfuse-worker:
+    depends_on: *lfdeps
+    environment: *lfcluster
+volumes:
+  ch3_keeper:
+  ch3_data_2:
+  ch3_data_3:

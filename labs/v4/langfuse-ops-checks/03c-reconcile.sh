@@ -10,15 +10,17 @@
 # Not POST /api/admin/ingestion-replay: on 4.56.0 it rejects a full events/otel/… key ("Unsupported replay
 # type: otel") and queues a prefix-relative key that the worker then cannot download (NoSuchKey) (README).
 #   Usage: ./03c-reconcile.sh [--replay] [run_id ...]     (default: every run in results/03-failures.jsonl)
+#   Env:   RUNS_FILE=results/06-mitigations.jsonl (any file of timeline_load / 03 lines)
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 REPLAY=0; [[ "${1:-}" == --replay ]] && { REPLAY=1; shift; }
-runs=("$@"); [[ ${#runs[@]} -eq 0 ]] && while IFS= read -r r; do runs+=("$r"); done < <(jq -r .run_id "$RESULTS/03-failures.jsonl")
+RUNS_FILE="${RUNS_FILE:-$RESULTS/03-failures.jsonl}"   # 06 and 08 pass their own results file
+runs=("$@"); [[ ${#runs[@]} -eq 0 ]] && while IFS= read -r r; do runs+=("$r"); done < <(jq -r .run_id "$RUNS_FILE")
 PROJ="${LANGFUSE_INIT_PROJECT_ID:?}"
 mcx() { docker exec "$LF_PROJECT-minio-1" sh -c "mc alias set lab http://localhost:9000 '${MINIO_ROOT_USER:-minio}' '${MINIO_ROOT_PASSWORD:-miniosecret}' >/dev/null 2>&1; $1"; }
 
 for run in "${runs[@]}"; do
-  lg=$(jq -c --arg r "$run" 'select(.run_id == $r)' "$RESULTS/03-failures.jsonl")
+  lg=$(jq -c --arg r "$run" 'select(.run_id == $r)' "$RUNS_FILE" | tail -1)
   per=$(jq -r '.obs * .traces_per_post' <<<"$lg")
   t0=$(jq -r '.started_unix | floor' <<<"$lg"); t1=$(jq -r '(.started_unix + .wall_s + 60) | floor' <<<"$lg")
   keys="$(mktemp)"

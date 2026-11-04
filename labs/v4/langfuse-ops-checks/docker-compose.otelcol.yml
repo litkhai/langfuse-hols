@@ -1,0 +1,22 @@
+# Overlay for test 06c: an OpenTelemetry Collector (contrib) between the client and Langfuse. Clients send
+# OTLP/HTTP to 127.0.0.1:4318; the Collector forwards to langfuse-web with the project's keys (basicauth),
+# keeps its sending queue in file_storage on the named volume otelcol_queue (survives a container restart) and
+# exposes its own metrics on 127.0.0.1:18888 (queue size, sent / failed spans). Config: otelcol.yaml.
+# user 0: the image's user 10001 cannot write to a fresh named volume (lab only).
+services:
+  otelcol:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.162.0   # published 2026-09-29
+    restart: unless-stopped
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+    volumes:
+      - ../labs/v4/langfuse-ops-checks/otelcol.yaml:/etc/otelcol/config.yaml:ro
+      - otelcol_queue:/var/lib/otelcol/queue
+    ports:
+      - 127.0.0.1:4318:4318
+      - 127.0.0.1:18888:8888
+volumes:
+  otelcol_queue:

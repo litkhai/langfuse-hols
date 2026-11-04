@@ -1,0 +1,6 @@
+c-r1-1793807342: 3000 files in blob storage, 2599 with rows, 401 short (rows < 4):
+  requeue: {"queued":401}
+  after requeue: 12000 distinct observations of 12000 accepted
+clickhouse-1	12000	12000
+clickhouse-2-1	12000	12000
+clickhouse-3-1	12000	12000

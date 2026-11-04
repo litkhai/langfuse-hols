@@ -3,6 +3,7 @@
 
     loadgen.py --run-id R --rpm 4000 --seconds 60 [--obs 4] [--prompt-bytes 10000] [--output-bytes 1000]
                [--traces-per-post 1] [--read-ratio 0.0] [--threads 64] [--retry-deadline 0] [--out FILE]
+               [--endpoint URL]
 
 Adapted from the bench generator of clickhouse-hols `usecase/langfuse-prompt-encryption-perf` (not imported).
 Payloads are synthetic, so the lab needs no data file.
@@ -24,6 +25,8 @@ Payloads are synthetic, so the lab needs no data file.
   1.45.0 does: 429/502/503/504 and connection errors, backoff 2^n s ±20 % (Retry-After wins), at most 6
   attempts, never past S seconds after the first attempt. The Langfuse Python SDK 4.17.0 sets S = 5
   (LANGFUSE_TIMEOUT). Any other status (500 included) is not retried.
+* --endpoint URL sends the OTLP POSTs there instead of LANGFUSE_HOST/api/public/otel/v1/traces (e.g. an
+  OpenTelemetry Collector's http://localhost:4318/v1/traces, test 06). Reads still go to LANGFUSE_HOST.
 
 Env: LANGFUSE_HOST (default http://localhost:3000), LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY.
 Prints one JSON line (also to --out): sent/accepted/failed traces and observations, HTTP status counts,
@@ -55,12 +58,13 @@ p.add_argument("--read-ratio", type=float, default=0.0)
 p.add_argument("--threads", type=int, default=64)
 p.add_argument("--retry-deadline", type=float, default=0.0)
 p.add_argument("--out")
+p.add_argument("--endpoint")
 a = p.parse_args()
 
 host = os.environ.get("LANGFUSE_HOST", "http://localhost:3000")
 auth = "Basic " + base64.b64encode(
     f"{os.environ['LANGFUSE_PUBLIC_KEY']}:{os.environ['LANGFUSE_SECRET_KEY']}".encode()).decode()
-OTLP = f"{host}/api/public/otel/v1/traces"
+OTLP = a.endpoint or f"{host}/api/public/otel/v1/traces"
 
 rng = random.Random(a.run_id)
 WORDS = ("account balance policy transfer limit refund card branch loan rate statement customer "

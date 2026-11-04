@@ -8,12 +8,19 @@
 #   ch "<sql>"                   clickhouse-client in the stack's ClickHouse container (TSV out)
 #   s3_counts                    "<putobject> <getobject>" from MinIO's request counters
 #   measure <run_id> <loadgen json line>   one JSON line: what arrived, lag, inserts, blob calls
+#   settle_quiet <run_id>        wait until the run's rows are unchanged for 60 s (at most 6 min)
+#   timeline_load <run_id> <samples.tsv> "<t_s> <command>" ... -- <loadgen args>
+#                                load with scheduled commands (kill, start, …), then expected vs arrived (06, 08)
+#
+# CH_CTR (default $LF_PROJECT-clickhouse-1) is the container `ch` talks to; 08 points it at a live replica.
+# OPS_PROJECT replaces the compose project the helpers address (default langfuse-hols-v4).
 #
 # Knobs for the `knobs` overlay are plain shell variables (see docker-compose.knobs.yml); unset = Langfuse's
 # own default.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../../../_base/lib/env.sh" v4
 load_env "${LF_ENV_FILE:-$BASE_DIR/.env}"
+LF_PROJECT="${OPS_PROJECT:-$LF_PROJECT}"   # 08 runs a second compose project (langfuse-hols-v4ch3)
 export LANGFUSE_HOST="${NEXTAUTH_URL:-http://localhost:3000}"
 export LANGFUSE_PUBLIC_KEY="${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?missing in _base/.env}"
 export LANGFUSE_SECRET_KEY="${LANGFUSE_INIT_PROJECT_SECRET_KEY:?missing in _base/.env}"
@@ -67,7 +74,7 @@ ops_restore() {
 }
 
 ch() {
-  docker exec -i "$LF_PROJECT-clickhouse-1" clickhouse-client -u "${CLICKHOUSE_USER:-clickhouse}" \
+  docker exec -i "${CH_CTR:-$LF_PROJECT-clickhouse-1}" clickhouse-client -u "${CLICKHOUSE_USER:-clickhouse}" \
     --password "${CLICKHOUSE_PASSWORD:-clickhouse}" -q "$1"
 }
 
@@ -135,4 +142,55 @@ run_load() {
   c1=$(s3_counts)
   # shellcheck disable=SC2086
   measure "$run" "$lg" $c0 $c1
+}
+
+# settle_quiet <run_id> — rows of the run unchanged for 60 s, at most 6 min (BullMQ retries after 5…80 s, a
+# Collector after its own backoff). Same rule as 03's settle_long.
+settle_quiet() {
+  local run="$1" last=-1 same=0 cur
+  for _ in $(seq 1 72); do
+    cur=$(ch "SELECT count() FROM events_full WHERE has(tags, '$run')" 2>/dev/null || echo -1)
+    if [[ "$cur" == "$last" ]]; then same=$((same + 1)); [[ $same -ge 12 ]] && return 0; else same=0; fi
+    last="$cur"; sleep 5
+  done
+}
+
+# timeline_load <run_id> <samples.tsv> "<t_s> <command>" ... -- <loadgen args>
+#   Starts loadgen.py in the background and runs each command (eval'd) when <t_s> seconds have passed since the
+#   start; commands must be in time order. Every 4 s it appends "t_s<TAB>$(ops_sample)" to the samples file if a
+#   function ops_sample is defined. Then waits for the generator, settles, and prints one JSON line: the loadgen
+#   line + {events: [[planned, actual, command]…], arrived_obs (distinct span_id), arrived_rows,
+#   loss_obs (sent − arrived), server_loss_obs (accepted − arrived), client_dropped_obs (the client gave up)}.
+#   LOADGEN=<script in this directory> swaps the generator (06b-sdk-outage.py: the SDK itself).
+timeline_load() {
+  local run="$1" samples="$2"; shift 2
+  local -a ev=()
+  while [[ $# -gt 0 && "$1" != "--" ]]; do ev+=("$1"); shift; done
+  shift
+  local lgfile evfile t0 lgpid e at cmd now
+  lgfile="$(mktemp)"; evfile="$(mktemp)"
+  "$PY" "$HERE/${LOADGEN:-loadgen.py}" --run-id "$run" "$@" > "$lgfile" &
+  lgpid=$!
+  t0=$(date +%s)
+  _tl_sample() { declare -F ops_sample >/dev/null && printf '%s\t%s\n' "$(( $(date +%s) - t0 ))" "$(ops_sample)" >> "$samples"; return 0; }
+  for e in ${ev[@]+"${ev[@]}"}; do
+    at="${e%% *}"; cmd="${e#* }"
+    local el d
+    while (( (el = $(date +%s) - t0) < at )); do _tl_sample; d=$(( at - el )); sleep $(( d < 4 ? d : 4 )); done
+    now=$(( $(date +%s) - t0 ))
+    eval "$cmd" >/dev/null 2>&1 || true
+    jq -nc --argjson p "$at" --argjson a "$now" --arg c "$cmd" '[$p, $a, $c]' >> "$evfile"
+  done
+  while kill -0 "$lgpid" 2>/dev/null; do _tl_sample; sleep 4; done
+  wait "$lgpid" || true
+  settle_quiet "$run"
+  _tl_sample
+  local lg arr
+  lg=$(tail -1 "$lgfile")
+  arr=$(ch "SELECT uniqExact(span_id), count() FROM events_full WHERE has(tags, '$run') FORMAT JSONCompactEachRow")
+  jq -c --argjson a "$arr" --slurpfile ev "$evfile" \
+     '. + {events: $ev, arrived_obs: $a[0], arrived_rows: $a[1], loss_obs: (.sent_obs - $a[0]),
+           server_loss_obs: (if .accepted_obs == null then null else .accepted_obs - $a[0] end),
+           client_dropped_obs: (.failed_obs // 0)}' <<<"$lg"
+  rm -f "$lgfile" "$evfile"
 }

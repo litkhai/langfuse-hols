@@ -1,0 +1,9 @@
+f-worker-1793795669: 3660 files in blob storage, 3000 with rows, 0 short (rows < 4):
+f-web-1793795888: 2623 files in blob storage, 2601 with rows, 0 short (rows < 4):
+f-clickhouse-1793796118: 3497 files in blob storage, 2507 with rows, 493 short (rows < 4):
+  requeue: {"queued":493}
+  after requeue: 12000 distinct observations of 12000 accepted
+f-redis-1793796334: 3638 files in blob storage, 2998 with rows, 3 short (rows < 4):
+  requeue: {"queued":3}
+  after requeue: 12000 distinct observations of 12000 accepted
+f-minio-1793797190: 2619 files in blob storage, 2619 with rows, 0 short (rows < 4):

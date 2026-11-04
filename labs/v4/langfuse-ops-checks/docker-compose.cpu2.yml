@@ -1,0 +1,6 @@
+# Overlay: cap web and worker at 2 CPUs each (test 02), so a result maps to a pod request of cpu: "2".
+services:
+  langfuse-web:
+    cpus: 2.0
+  langfuse-worker:
+    cpus: 2.0

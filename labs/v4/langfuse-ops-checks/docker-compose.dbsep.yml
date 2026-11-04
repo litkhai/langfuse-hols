@@ -1,0 +1,67 @@
+# Overlay for test 04: two Langfuse instances, A and B, on ONE ClickHouse server, each in its own database
+# (CLICKHOUSE_DB lf_a / lf_b) as its own ClickHouse user that is granted only that database. They share the
+# stack's Postgres server (databases lf_a / lf_b), Redis server (logical databases 1 / 2) and MinIO bucket
+# (prefixes a/… and b/…). Web A on :3100, web B on :3200; workers have no host port.
+# All values below are local test values for this lab, not secrets.
+x-a: &a
+  NEXTAUTH_URL: http://localhost:3100
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/lf_a
+  CLICKHOUSE_DB: lf_a
+  CLICKHOUSE_USER: lf_a
+  CLICKHOUSE_PASSWORD: dbsep-test-a
+  REDIS_CONNECTION_STRING: redis://:${REDIS_AUTH:-myredissecret}@redis:6379/1
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: a/events/
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: a/media/
+  LANGFUSE_S3_BATCH_EXPORT_PREFIX: a/exports/
+x-b: &b
+  NEXTAUTH_URL: http://localhost:3200
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/lf_b
+  CLICKHOUSE_DB: lf_b
+  CLICKHOUSE_USER: lf_b
+  CLICKHOUSE_PASSWORD: dbsep-test-b
+  REDIS_CONNECTION_STRING: redis://:${REDIS_AUTH:-myredissecret}@redis:6379/2
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: b/events/
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: b/media/
+  LANGFUSE_S3_BATCH_EXPORT_PREFIX: b/exports/
+x-init-a: &init-a
+  LANGFUSE_INIT_ORG_ID: dbsep-org-a
+  LANGFUSE_INIT_ORG_NAME: dbsep A
+  LANGFUSE_INIT_PROJECT_ID: dbsep-proj-a
+  LANGFUSE_INIT_PROJECT_NAME: dbsep A
+  LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-dbsep-a
+  LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-dbsep-a
+  LANGFUSE_INIT_USER_EMAIL: ""
+x-init-b: &init-b
+  LANGFUSE_INIT_ORG_ID: dbsep-org-b
+  LANGFUSE_INIT_ORG_NAME: dbsep B
+  LANGFUSE_INIT_PROJECT_ID: dbsep-proj-b
+  LANGFUSE_INIT_PROJECT_NAME: dbsep B
+  LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-dbsep-b
+  LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-dbsep-b
+  LANGFUSE_INIT_USER_EMAIL: ""
+
+services:
+  lf-a-web:
+    extends: { file: docker-compose.yml, service: langfuse-web }   # resolved against _base/
+    ports: !override ["127.0.0.1:3100:3000"]
+    depends_on: !reset []
+    profiles: [dbsep]
+    environment: { <<: [*a, *init-a] }
+  lf-a-worker:
+    extends: { file: docker-compose.yml, service: langfuse-worker }
+    ports: !reset []
+    depends_on: !reset []
+    profiles: [dbsep]
+    environment: *a
+  lf-b-web:
+    extends: { file: docker-compose.yml, service: langfuse-web }
+    ports: !override ["127.0.0.1:3200:3000"]
+    depends_on: !reset []
+    profiles: [dbsep]
+    environment: { <<: [*b, *init-b] }
+  lf-b-worker:
+    extends: { file: docker-compose.yml, service: langfuse-worker }
+    ports: !reset []
+    depends_on: !reset []
+    profiles: [dbsep]
+    environment: *b

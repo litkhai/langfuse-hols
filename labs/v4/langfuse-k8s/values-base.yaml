@@ -1,15 +1,21 @@
-# values-aks.yaml — self-hosted Langfuse on AKS, sized with room to spare (chart langfuse 2.2.1).
+# values-base.yaml — self-hosted Langfuse on managed Kubernetes, sized with room to spare (chart langfuse 2.2.1).
+# Layer one cloud file on top:
 #
-#   helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-aks.yaml
+#   helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-base.yaml -f values-aks.yaml
+#                                                                             (or values-eks.yaml, values-gke.yaml)
 #
-# Layout (see README for the node pools and the reasoning):
-#   app pool         web ×2 and worker ×2 (HPA), Keeper ×3            e.g. 3 nodes, 4 vCPU / 16 GiB
-#   clickhouse pool  ClickHouse 1 shard × 3 replicas, one per node     3 nodes, 8 vCPU / 32 GiB, tainted
-#   Azure managed    PostgreSQL (Flexible Server), Redis (Azure Managed Redis), Blob Storage
+# What is the same on every cloud lives here: sizing, node placement, HPA/PDB, ClickHouse 1 shard × 3 replicas
+# and Keeper 3 through the operator, and "use external Postgres, Redis and object storage". The cloud file sets
+# the storage class, the ingress, the managed services' addresses and the identity.
 #
-# Every <…> is a placeholder. Secrets come from one Secret named `langfuse` (secret-example.yaml);
-# create it from your secret store before installing. Prerequisites, once per cluster: cert-manager
-# v1.20.2 and clickhouse-operator 0.0.8 (01-kind-up.sh shows the commands).
+# Node pools, created with this label and taint on every cloud (AKS --labels/--node-taints, EKS managed node
+# group labels/taints, GKE node pool label/--node-taints):
+#   workload=app         web ×2, worker ×2 (HPA), Keeper ×3        e.g. 3 nodes, 4 vCPU / 16 GiB
+#   workload=clickhouse  ClickHouse, one replica per node           3 nodes, 8 vCPU / 32 GiB,
+#                        taint dedicated=clickhouse:NoSchedule
+#
+# Every <…> is a placeholder. Secrets come from one Secret named `langfuse` (secret-example.yaml).
+# Prerequisites, once per cluster: cert-manager v1.20.2 and clickhouse-operator 0.0.8 (README).
 
 langfuse:
   nextauth:
@@ -29,7 +35,7 @@ langfuse:
 
   # web and worker run on the app pool
   nodeSelector:
-    agentpool: app
+    workload: app
 
   web:
     replicas: 2
@@ -64,8 +70,7 @@ langfuse:
       maxUnavailable: 1
 
   ingress:
-    enabled: true
-    className: webapprouting.kubernetes.azure.com   # AKS application routing add-on (managed NGINX)
+    enabled: true                                # class / annotations: the cloud file
     hosts:
       - host: <langfuse.example.internal>
         paths:
@@ -89,10 +94,9 @@ clickhouse:
       requests: { cpu: "6", memory: 24Gi }
       limits: { memory: 26Gi }
     storage:
-      size: 512Gi                    # per replica; every replica holds a full copy
-      className: managed-csi-premium # AKS built-in Premium SSD class per the Azure docs (not run here)
+      size: 512Gi                    # per replica; every replica holds a full copy. Class: the cloud file
     nodeSelector:
-      agentpool: clickhouse
+      workload: clickhouse
     tolerations:
       - { key: dedicated, operator: Equal, value: clickhouse, effect: NoSchedule }
     affinity:                        # one replica per node (label set by clickhouse-operator 0.0.8)
@@ -109,9 +113,8 @@ clickhouse:
       limits: { memory: 2Gi }
     storage:
       size: 20Gi
-      className: managed-csi-premium
     nodeSelector:
-      agentpool: app
+      workload: app
     affinity:                        # spread over the app pool's nodes when there are 3
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -121,12 +124,10 @@ clickhouse:
               labelSelector:
                 matchLabels: { clickhouse.com/role: clickhouse-keeper }
 
-# ── Azure managed services (chart sub-charts off) ──
+# ── Managed Postgres, Redis and object storage: the chart's sub-charts off; addresses in the cloud file ──
 postgresql:
   deploy: false
-  host: <server>.postgres.database.azure.com     # Azure Database for PostgreSQL Flexible Server
   port: 5432
-  args: sslmode=require
   auth:
     username: langfuse
     database: langfuse
@@ -136,24 +137,15 @@ postgresql:
 
 redis:
   deploy: false
-  host: <name>.<region>.redis.azure.net          # Azure Managed Redis, non-clustered policy, eviction policy noeviction
-  port: 10000
   tls:
     enabled: true
   auth:
-    username: null                               # access key auth
     existingSecret: langfuse
     existingSecretPasswordKey: redis-password
 
 s3:
   deploy: false
-  storageProvider: azure                         # Azure Blob Storage, native interface
-  bucket: langfuse                               # container
-  endpoint: https://<account>.blob.core.windows.net
-  accessKeyId:
-    value: <account>                             # storage account name
-  secretAccessKey:
-    secretKeyRef: { name: langfuse, key: azure-storage-key }
+  bucket: langfuse                               # bucket (S3, GCS) or container (Azure Blob)
   eventUpload: { prefix: "events/" }
   batchExport: { prefix: "exports/" }
   mediaUpload: { prefix: "media/" }

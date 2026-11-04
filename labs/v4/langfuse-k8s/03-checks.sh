@@ -10,8 +10,8 @@
 #   D. failover    one ClickHouse replica deleted: ingestion and reads go on, the replica comes back
 #                  with the missed rows; one Keeper deleted: ingestion goes on
 set -euo pipefail
-K="kubectl --context kind-langfuse-aks -n langfuse"
-S="kubectl --context kind-langfuse-aks -n standins"
+K="kubectl --context kind-langfuse-k8s -n langfuse"
+S="kubectl --context kind-langfuse-k8s -n standins"
 PORT=13000
 ROWS=""; FAILS=0
 row() {  # row <check> <expected> <observed> <ok:0|1>
@@ -22,7 +22,7 @@ row() {  # row <check> <expected> <observed> <ok:0|1>
 sec() { $K get secret langfuse -o "jsonpath={.data.$1}" | base64 -d; }
 CHPW=$(sec clickhouse-password); PK=$(sec init-public-key); SK=$(sec init-secret-key)
 chq() { $K exec "$1" -- clickhouse-client --password "$CHPW" -q "$2"; }
-node_pool() { kubectl --context kind-langfuse-aks get node "$1" -o jsonpath='{.metadata.labels.agentpool}'; }
+node_pool() { kubectl --context kind-langfuse-k8s get node "$1" -o jsonpath='{.metadata.labels.workload}'; }
 
 echo "════ A. Placement ════"
 nodes=$($K get pods -l clickhouse.com/role=clickhouse-server -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u)

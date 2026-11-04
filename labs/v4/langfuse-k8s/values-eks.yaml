@@ -1,0 +1,42 @@
+# values-eks.yaml — EKS on top of values-base.yaml:
+#   kubectl apply -f storageclass-eks.yaml
+#   helm install langfuse langfuse/langfuse --version 2.2.1 -n langfuse -f values-base.yaml -f values-eks.yaml
+#
+#   storage      langfuse-gp3 (storageclass-eks.yaml, EBS CSI driver add-on); the AWS docs name no default gp3 class
+#   ingress      AWS Load Balancer Controller, ALB, IP targets (annotations as in the EKS docs)
+#   Postgres     Amazon RDS for PostgreSQL (or Aurora PostgreSQL)
+#   Redis        Amazon ElastiCache, in-transit encryption on; port 6379 as in Langfuse's ElastiCache example
+#   objects      Amazon S3 through an IAM role on the service account (IRSA or EKS Pod Identity): no static keys;
+#                the Langfuse docs recommend an IAM role on AWS
+langfuse:
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::<account-id>:role/<langfuse-s3-role>   # IRSA; drop it for Pod Identity
+  ingress:
+    className: ""
+    annotations:
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/scheme: internet-facing        # internal for a private endpoint
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account-id>:certificate/<id>
+    tls:
+      enabled: false                                           # TLS ends at the ALB (ACM certificate)
+
+clickhouse:
+  cluster:
+    storage: { className: langfuse-gp3 }
+  keeper:
+    storage: { className: langfuse-gp3 }
+
+postgresql:
+  host: <instance>.<id>.<region>.rds.amazonaws.com
+  args: sslmode=require
+
+redis:
+  host: <primary-endpoint>.<id>.<region>.cache.amazonaws.com
+  port: 6379
+
+s3:
+  storageProvider: s3
+  region: <region>
+  forcePathStyle: false

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 01-kind-up.sh — a kind cluster shaped like the AKS layout, the two prerequisites, the stand-ins
-# for the Azure managed services, and the `langfuse` Secret that values-aks.yaml reads.
+# 01-kind-up.sh — a kind cluster shaped like the node pools, the two prerequisites, the stand-ins
+# for the Azure managed services, and the `langfuse` Secret that values-base.yaml reads.
 #
 # Pins: kind node image = kind's default; cert-manager v1.20.2 and clickhouse-operator 0.0.8, the
 # versions the langfuse 2.2.1 chart README lists. Secrets are generated here and never printed; the
@@ -9,17 +9,17 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 for c in kind kubectl helm openssl; do command -v "$c" >/dev/null || { echo "✗ please install $c"; exit 1; }; done
-K="kubectl --context kind-langfuse-aks"
+K="kubectl --context kind-langfuse-k8s"
 
 echo "════ 1. kind cluster (control plane, 1 app worker, 3 tainted clickhouse workers) ════"
-kind get clusters 2>/dev/null | grep -qx langfuse-aks || kind create cluster --config "$HERE/kind-config.yaml" --wait 120s
-$K get nodes -L agentpool --no-headers | awk '{print "  "$1, (NF>5 ? $NF : "-")}'
+kind get clusters 2>/dev/null | grep -qx langfuse-k8s || kind create cluster --config "$HERE/kind-config.yaml" --wait 120s
+$K get nodes -L workload --no-headers | awk '{print "  "$1, (NF>5 ? $NF : "-")}'
 
 echo "════ 2. cert-manager v1.20.2 and clickhouse-operator 0.0.8 ════"
-helm --kube-context kind-langfuse-aks upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+helm --kube-context kind-langfuse-k8s upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
   --version v1.20.2 --namespace cert-manager --create-namespace --set crds.enabled=true --wait >/dev/null
 $K wait --for=condition=Established crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s >/dev/null
-helm --kube-context kind-langfuse-aks upgrade --install clickhouse-operator oci://ghcr.io/clickhouse/clickhouse-operator-helm \
+helm --kube-context kind-langfuse-k8s upgrade --install clickhouse-operator oci://ghcr.io/clickhouse/clickhouse-operator-helm \
   --version 0.0.8 --namespace clickhouse-operator --create-namespace --wait >/dev/null
 $K wait --for=condition=Established crd/clickhouseclusters.clickhouse.com crd/keeperclusters.clickhouse.com --timeout=120s >/dev/null
 echo "  CRDs established"
@@ -40,7 +40,7 @@ echo "  postgres, redis, azurite ready"
 SDK=/app/node_modules/.pnpm/@azure+storage-blob@12.26.0_supports-color@8.1.1/node_modules/@azure/storage-blob
 $K -n standins delete pod blob-init --ignore-not-found >/dev/null
 $K -n standins run blob-init --restart=Never --image=docker.langfuse.com/langfuse/langfuse:4.70.1 \
-  --overrides='{"spec":{"nodeSelector":{"agentpool":"app"}}}' \
+  --overrides='{"spec":{"nodeSelector":{"workload":"app"}}}' \
   --env="AZKEY=$($K get secret standins -n standins -o jsonpath='{.data.azurite-accounts}' | base64 -d | cut -d: -f2-)" \
   --command -- node -e "
 const {BlobServiceClient,StorageSharedKeyCredential}=require('$SDK');
@@ -50,7 +50,7 @@ $K -n standins wait --for=jsonpath='{.status.phase}'=Succeeded pod/blob-init --t
 echo "  $($K -n standins logs blob-init) (false = it already existed)"
 $K -n standins delete pod blob-init >/dev/null
 
-echo "════ 4. The \`langfuse\` Secret (the keys values-aks.yaml reads) ════"
+echo "════ 4. The \`langfuse\` Secret (the keys values-base.yaml reads) ════"
 $K create namespace langfuse --dry-run=client -o yaml | $K apply -f - >/dev/null
 if ! $K get secret langfuse -n langfuse >/dev/null 2>&1; then
   sv() { $K get secret standins -n standins -o "jsonpath={.data.$1}" | base64 -d; }

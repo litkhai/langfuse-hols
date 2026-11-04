@@ -1,0 +1,13 @@
+# storageclass-eks.yaml — gp3 volumes for ClickHouse and Keeper on EKS (EBS CSI driver add-on).
+# Apply once before the chart. On EKS Auto Mode the provisioner is ebs.csi.eks.amazonaws.com instead.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: langfuse-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain

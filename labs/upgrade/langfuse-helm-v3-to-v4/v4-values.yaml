@@ -1,0 +1,12 @@
+# Langfuse v4 on the chart v2 release. The migration variables come from a ConfigMap, so moving
+# between write modes is `kubectl apply` + a rollout restart, not a values change (setmode in 07-10).
+langfuse:
+  image:
+    tag: "4.72.0"
+  additionalEnvFrom:
+    - configMapRef: {name: langfuse-v4-migration}
+  worker:
+    livenessProbe:
+      # Restart a worker that stopped consuming its queues (v4.0.0+) or whose dual-write
+      # propagation stalled (default threshold 15 min). Both pass when the condition is absent.
+      path: "/api/health?failIfQueueConsumptionStuck=true&failIfEventPropagationStuck=true"

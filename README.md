@@ -18,6 +18,7 @@ runs. **v4 is the current track**; Langfuse v3 gets security patches only until 
 | langfuse-ee | [labs/v4/langfuse-ee](labs/v4/langfuse-ee/) | [labs/v3/langfuse-ee](labs/v3/langfuse-ee/) | Self-hosting Langfuse on ClickHouse (OSS + Enterprise) |
 | langfuse-eval | [labs/v4/langfuse-eval](labs/v4/langfuse-eval/) | [labs/v3/langfuse-eval](labs/v3/langfuse-eval/) | Langfuse prompts, datasets, experiments and evals |
 | langfuse-k8s | [labs/v4/langfuse-k8s](labs/v4/langfuse-k8s/) | — | Helm values for AKS, EKS and GKE with room to spare (chart 2.2.1, ClickHouse 1 shard × 3 replicas), verified on kind |
+| kong-gateway-otel | [labs/v4/kong-gateway-otel](labs/v4/kong-gateway-otel/) | — | Kong Gateway (OSS 3.9.4) → Langfuse over OTLP: a model gateway and an agent gateway feeding one trace, generations from `ai-proxy` via a Lua bridge, header → user/session mapping |
 
 All four run on the shared stack in [`_base/`](_base/). The track is the first argument of
 its scripts (`_base/bin/up.sh v4`), and its pins are in `_base/<track>/versions.env`.
@@ -89,6 +90,7 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 | langfuse-ee | [labs/v4/langfuse-ee](labs/v4/langfuse-ee/) | [labs/v3/langfuse-ee](labs/v3/langfuse-ee/) | ClickHouse 기반 Langfuse 자체 호스팅 (OSS + Enterprise) |
 | langfuse-eval | [labs/v4/langfuse-eval](labs/v4/langfuse-eval/) | [labs/v3/langfuse-eval](labs/v3/langfuse-eval/) | Langfuse 프롬프트·데이터셋·실험·평가 |
 | langfuse-k8s | [labs/v4/langfuse-k8s](labs/v4/langfuse-k8s/) | — | 여유 있게 잡은 AKS·EKS·GKE용 Helm values(차트 2.2.1, ClickHouse 1 shard × 3 replica), kind에서 검증 |
+| kong-gateway-otel | [labs/v4/kong-gateway-otel](labs/v4/kong-gateway-otel/) | — | Kong Gateway(OSS 3.9.4) → OTLP로 Langfuse: 모델 게이트웨이와 에이전트 게이트웨이가 trace 하나로, Lua bridge로 `ai-proxy`의 generation, 헤더 → user/session 매핑 |
 
 네 실습 모두 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다. 트랙은 스크립트의 첫 번째
 인자(`_base/bin/up.sh v4`)이고, 트랙별 버전 고정은 `_base/<track>/versions.env`에 있습니다.

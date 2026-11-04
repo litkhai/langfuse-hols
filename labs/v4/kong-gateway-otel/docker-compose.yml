@@ -1,0 +1,52 @@
+# Kong in front of a model and an agent, both exporting OTLP to the shared v4 Langfuse stack.
+# Own compose project (lf-kong-lab) and host ports 18000 / 18100 / 18300; it never touches the
+# langfuse-hols-v4-* containers. Langfuse is reached through host.docker.internal:3000.
+# LF_OTEL_AUTH ("Basic base64(pk:sk)") comes from the shell — 01-up.sh sets it from _base/.env.
+name: lf-kong-lab
+
+x-kong-env: &kong-env
+  KONG_DATABASE: "off"
+  KONG_PROXY_LISTEN: 0.0.0.0:8000
+  KONG_ADMIN_LISTEN: 0.0.0.0:8001
+  KONG_TRACING_INSTRUMENTATIONS: ${KONG_TRACING_INSTRUMENTATIONS:-request,balancer}   # "all" adds ~7 kong.* spans per gateway
+  KONG_TRACING_SAMPLING_RATE: "1.0"
+  KONG_LOG_LEVEL: notice
+  LF_OTEL_AUTH: ${LF_OTEL_AUTH:?run 01-up.sh, which sets LF_OTEL_AUTH}
+
+services:
+  mock-llm:
+    image: python:3.12.13-slim
+    command: ["python", "/app/mock_llm.py"]
+    volumes: ["./mock_llm.py:/app/mock_llm.py:ro"]
+
+  kong-model:
+    image: kong:${KONG_OSS_VERSION:-3.9.4}
+    environment:
+      <<: *kong-env
+      KONG_DECLARATIVE_CONFIG: /kong/kong-model.yml
+    volumes: ["./kong-model.yml:/kong/kong-model.yml:ro"]
+    ports: ["127.0.0.1:18000:8000", "127.0.0.1:18001:8001"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on: [mock-llm]
+
+  kong-agent:
+    image: kong:${KONG_OSS_VERSION:-3.9.4}
+    environment:
+      <<: *kong-env
+      KONG_DECLARATIVE_CONFIG: /kong/kong-agent.yml
+    volumes: ["./kong-agent.yml:/kong/kong-agent.yml:ro"]
+    ports: ["127.0.0.1:18100:8000", "127.0.0.1:18101:8001"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+
+  # Comparison only (profile "ee"): the Enterprise image, which has native Gen AI spans from 3.13.
+  # Started without a licence; see the README for what that run showed.
+  kong-model-ee:
+    profiles: [ee]
+    image: kong/kong-gateway:${KONG_EE_VERSION:-3.14.0.16}
+    environment:
+      <<: *kong-env
+      KONG_DECLARATIVE_CONFIG: /kong/kong-model.yml
+    volumes: ["./kong-model.yml:/kong/kong-model.yml:ro"]
+    ports: ["127.0.0.1:18300:8000", "127.0.0.1:18301:8001"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on: [mock-llm]

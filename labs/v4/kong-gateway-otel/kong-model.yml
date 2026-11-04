@@ -1,0 +1,91 @@
+# Model gateway (Kong Gateway OSS 3.9.4, DB-less). Two routes to the same mock model:
+#   /raw   ai-proxy + opentelemetry only          — what OSS sends to Langfuse on its own
+#   /chat  the same plus the bridge (pre-function) — one generation per call, user/session from headers
+# The Langfuse credential is not in this file: {vault://env/lf-otel-auth} reads the env var
+# LF_OTEL_AUTH, which docker-compose.yml passes from the shell (01-up.sh builds it from _base/.env).
+_format_version: "3.0"
+
+services:
+  - name: llm
+    url: http://mock-llm:8080            # ai-proxy replaces the upstream with model.options.upstream_url
+    routes:
+      - name: raw
+        paths: [/raw]
+        protocols: [http, https]
+        plugins:
+          - name: ai-proxy
+            config: &ai_proxy
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key-not-a-secret" }
+              logging: { log_statistics: true, log_payloads: true }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+      - name: chat
+        paths: [/chat]
+        protocols: [http, https]
+        plugins:
+          - name: ai-proxy
+            config: *ai_proxy
+          - name: pre-function
+            config:
+              # log phase: pre-function (priority 1000000) runs before opentelemetry (14), so the
+              # attributes and the extra span below are in place when the spans are encoded.
+              log:
+                - |
+                  local tracing = kong.tracing
+                  local root = tracing.get_root_span()
+                  if not root then return end
+                  -- 1. header contract -> Langfuse attributes, on every span of this request (v4 does not copy them from the root)
+                  local h = kong.request.get_header
+                  local shared = {
+                    ["langfuse.user.id"] = h("x-user-id"),
+                    ["langfuse.session.id"] = h("x-session-id"),
+                    ["langfuse.trace.metadata.agent_id"] = h("x-agent-id"),
+                    ["langfuse.trace.metadata.project_id"] = h("x-project-id"),
+                    ["langfuse.trace.metadata.gateway"] = "model",
+                  }
+                  -- 2. ai-proxy statistics (log_statistics / log_payloads) -> one generation span
+                  local ai = (kong.log.serialize().ai or {}).proxy
+                  local spans = tracing.get_spans() or {}
+                  local balancer
+                  for _, s in ipairs(spans) do
+                    if s.name and s.name:find("balancer", 1, true) then balancer = s end
+                  end
+                  if ai and ai.meta then
+                    local meta, usage, payload = ai.meta, ai.usage or {}, ai.payload or {}
+                    local from = balancer or root
+                    local gen = tracing.start_span("chat " .. tostring(meta.request_model), {
+                      parent = from, start_time_ns = from.start_time_ns, span_kind = 3,
+                    })
+                    gen:set_attribute("langfuse.observation.type", "generation")
+                    gen:set_attribute("gen_ai.operation.name", "chat")
+                    gen:set_attribute("gen_ai.provider.name", meta.provider_name)
+                    gen:set_attribute("gen_ai.request.model", meta.request_model)
+                    gen:set_attribute("gen_ai.response.model", meta.response_model)
+                    gen:set_attribute("gen_ai.usage.input_tokens", usage.prompt_tokens)
+                    gen:set_attribute("gen_ai.usage.output_tokens", usage.completion_tokens)
+                    gen:set_attribute("langfuse.observation.input", payload.request)
+                    gen:set_attribute("langfuse.observation.output", payload.response)
+                    gen:finish(from.end_time_ns)
+                  end
+                  if not root.parent_id then root:set_attribute("langfuse.trace.name", "model-gateway " .. kong.router.get_route().name) end
+                  for _, s in ipairs(tracing.get_spans() or {}) do
+                    for k, v in pairs(shared) do s:set_attribute(k, v) end
+                  end
+
+plugins:
+  - name: opentelemetry
+    config:
+      traces_endpoint: http://host.docker.internal:3000/api/public/otel/v1/traces
+      headers:
+        Authorization: "{vault://env/lf-otel-auth}"
+        x-langfuse-ingestion-version: "4"
+      resource_attributes:
+        service.name: kong-model-gateway
+      propagation:
+        extract: [w3c]
+        inject: [w3c]
+        default_format: w3c
+      http_response_header_for_traceid: x-trace-id

@@ -1,0 +1,2 @@
+  10 	info	internal/retry_sender.go:136	Exporting failed. Will retry the request after interval.	{"resource": {"service.instance.id": "c0b94a40-5c8d-4492-b230-2b070103475e", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "
+  10 	info	internal/retry_sender.go:136	Exporting failed. Will retry the request after interval.	{"resource": {"service.instance.id": "8034b334-0ec4-4507-afab-a44dc203ca11", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "

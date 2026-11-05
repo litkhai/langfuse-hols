@@ -1,0 +1,29 @@
+# private-registry-images.txt — every image this lab pulls, and the charts it installs from.
+# 05-private-registry.sh mirrors each one to <registry>/<source reference> (the source host kept as the
+# first path segment, exactly as written here), with all platforms, so the digest stays the same.
+#
+# How the list was made (2026-11-04): `helm template` of langfuse 2.2.1 (values-base.yaml + values-kind.yaml),
+# cert-manager v1.20.2 (crds.enabled=true) and clickhouse-operator-helm 0.0.8, grepping image:,
+# repository:/tag: (the operator CRs) and image arguments; plus standins.yaml and 01-kind-up.sh.
+# The chart renders no hooks or init containers for this lab; cert-manager renders one hook (startupapicheck).
+# Not listed: kind's own system images (kube-*, etcd, coredns, kindnetd, local-path, pause), which come
+# preloaded in the node image and are never pulled.
+#
+# kind   source reference                                              used by
+image    docker.langfuse.com/langfuse/langfuse:4.70.1                  langfuse-web (chart); blob-init pod (01-kind-up.sh)
+image    docker.langfuse.com/langfuse/langfuse-worker:4.70.1           langfuse-worker (chart)
+image    docker.io/clickhouse/clickhouse-server:26.8.36.3              ClickHouseCluster CR (chart) → operator → StatefulSets
+image    docker.io/clickhouse/clickhouse-keeper:26.8.36.3              KeeperCluster CR (chart) → operator → StatefulSets
+image    ghcr.io/clickhouse/clickhouse-operator:v0.0.8                 clickhouse-operator chart
+image    quay.io/jetstack/cert-manager-controller:v1.20.2              cert-manager chart
+image    quay.io/jetstack/cert-manager-webhook:v1.20.2                 cert-manager chart
+image    quay.io/jetstack/cert-manager-cainjector:v1.20.2              cert-manager chart
+image    quay.io/jetstack/cert-manager-startupapicheck:v1.20.2         cert-manager chart, post-install hook Job
+image    quay.io/jetstack/cert-manager-acmesolver:v1.20.2              cert-manager controller argument (pulled only for ACME HTTP-01)
+image    docker.io/postgres:17.11                                      stand-in (standins.yaml)
+image    docker.io/redis:7.2.16                                        stand-in (standins.yaml)
+image    mcr.microsoft.com/azure-storage/azurite:3.37.0                stand-in (standins.yaml)
+image    docker.io/library/busybox:1.37.0                              pull controls in 05-private-registry.sh only
+chart    oci://quay.io/jetstack/charts/cert-manager:v1.20.2            01-kind-up.sh
+chart    oci://ghcr.io/clickhouse/clickhouse-operator-helm:0.0.8       01-kind-up.sh
+chart    https://langfuse.github.io/langfuse-k8s langfuse:2.2.1        02-install.sh (helm repo → pushed as oci://<registry>/charts/langfuse)

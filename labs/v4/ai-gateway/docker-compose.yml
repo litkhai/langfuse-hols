@@ -1,0 +1,64 @@
+# Overlay on _base/docker-compose.yml for this lab only (#84): Langfuse web and worker at a version
+# that has the AI Gateway (>= 4.75.0), the gateway turned on in web, and the gateway container itself.
+#
+# 01-up.sh starts it as its own compose project, lf-gateway-lab, with its own volumes, so the
+# shared langfuse-hols-v4-* stack (pinned at an older Langfuse) is never touched. Host ports, all on
+# 127.0.0.1: web 13000, gateway 18480, ClickHouse HTTP 18423. The other backends publish nothing.
+#
+# Langfuse documents the Helm chart as the supported self-hosted path during the beta; Docker
+# Compose does not ship the gateway. This file follows the "run the gateway image with the gateway
+# variables and set the web variables on Langfuse Web" route of the self-hosting page.
+# GW_SERVICE_KEY and GW_JWT_PRIVATE_KEY come from the shell: 01-up.sh generates them once into
+# .run/ (gitignored, mode 600).
+
+x-gateway-web-env: &gateway-web-env
+  NEXTAUTH_URL: http://localhost:13000
+  # 4.75.0 needs this to show the gateway pages on a self-hosted instance.
+  LANGFUSE_AI_GATEWAY_DEPLOYED: "true"
+  # Shown in the UI and in the coding-agent setup snippets.
+  LANGFUSE_AI_GATEWAY_PUBLIC_URL: http://localhost:18480
+  LANGFUSE_AI_GATEWAY_SERVICE_KEY: ${GW_SERVICE_KEY:?run 01-up.sh, which sets GW_SERVICE_KEY}
+  LANGFUSE_AI_GATEWAY_JWT_PRIVATE_KEY: ${GW_JWT_PRIVATE_KEY:?run 01-up.sh, which sets GW_JWT_PRIVATE_KEY}
+
+services:
+  langfuse-worker:
+    ports: !reset []
+    environment:
+      <<: *gateway-web-env
+
+  langfuse-web:
+    ports: !override
+      - 127.0.0.1:13000:3000
+    environment:
+      <<: *gateway-web-env
+
+  clickhouse:
+    ports: !override
+      - 127.0.0.1:18423:8123
+
+  minio:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  postgres:
+    ports: !reset []
+
+  ai-gateway:
+    # Same version as web, as the self-hosting page requires. Docker Hub directly; the Helm chart
+    # pulls the same image through docker.langfuse.com.
+    image: docker.io/langfuse/ai-gateway:${LANGFUSE_VERSION:?LANGFUSE_VERSION is not set}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on: [langfuse-web]
+    environment:
+      LANGFUSE_AI_GATEWAY_WEB_URL: http://langfuse-web:3000
+      # Plain http is refused unless this is set; fine on the compose network, never across a public one.
+      LANGFUSE_AI_GATEWAY_ALLOW_HTTP_WEB_URL: "true"
+      LANGFUSE_AI_GATEWAY_SERVICE_KEY: ${GW_SERVICE_KEY:?run 01-up.sh, which sets GW_SERVICE_KEY}
+      LANGFUSE_LOG_LEVEL: info
+    ports:
+      - 127.0.0.1:18480:8080

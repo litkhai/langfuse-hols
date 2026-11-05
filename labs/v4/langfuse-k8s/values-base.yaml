@@ -93,8 +93,11 @@ clickhouse:
     resources:                       # on 8 vCPU / 32 GiB nodes, leaving room for kubelet and Keeper
       requests: { cpu: "6", memory: 24Gi }
       limits: { memory: 26Gi }
-    storage:
-      size: 512Gi                    # per replica; every replica holds a full copy. Class: the cloud file
+    storage:                         # per replica; every replica holds a full copy. Class: the cloud file
+      # 30 days at 4,000 traces/min: 43.1 GiB/day × 30 ÷ 0.7 (30 % free for merges) ≈ 1,850 GiB.
+      # Measured 2026-11-04 (langfuse-ops-checks test 07: ~2.0 KB per observation of 10 KB in + 1 KB out,
+      # 4 observations per trace). Other retention: GiB/day × days ÷ 0.7 (README, "ClickHouse disk").
+      size: 1850Gi
     nodeSelector:
       workload: clickhouse
     tolerations:

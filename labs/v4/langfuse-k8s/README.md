@@ -23,7 +23,7 @@ values-gke.yaml     premium-rwo · GKE Ingress · Cloud SQL · Memorystore · GC
 |---|---|---|---|---|
 | Langfuse web | 2 (HPA 2–4) | 2 CPU / 4 GiB | `workload=app` | 2 CPU / 4 GiB |
 | Langfuse worker | 2 (HPA 2–6) | 2 CPU / 4 GiB | `workload=app` | 2 CPU / 4 GiB |
-| ClickHouse | 1 shard × 3 replicas | 6 CPU / 24 GiB (limit 26 GiB), 512 GiB SSD | `workload=clickhouse`, 1 per node | 2 CPU / 8 GiB; 16 GiB+ for larger deployments |
+| ClickHouse | 1 shard × 3 replicas | 6 CPU / 24 GiB (limit 26 GiB), 1,850 GiB SSD (30 days, [below](#clickhouse-disk)) | `workload=clickhouse`, 1 per node | 2 CPU / 8 GiB; 16 GiB+ for larger deployments |
 | ClickHouse Keeper | 3 | 0.5 CPU / 1 GiB, 20 GiB | `workload=app`, spread | — |
 | PostgreSQL | managed, HA | 2 vCPU / 8 GiB | cloud service | 2 CPU / 4 GiB |
 | Redis | managed, non-clustered, `noeviction` | ~4 GiB | cloud service | 1 CPU / 1.5 GiB |
@@ -36,6 +36,23 @@ Why these numbers:
 - **Web and worker stay at the documented minimum and scale out.** The docs scale workers when a 2-CPU container passes 50% CPU (or on the ingestion queue depth). The HPA needs metrics-server; on kind, which has none, it shows `<unknown>`.
 - **One shard, three replicas.** Langfuse does not support a multi-shard cluster ("Today, Langfuse does not support a multi-shard cluster"), and recommends at least 3 replicas for production. The replica count is hard to change later. Every replica holds a full copy: total disk = 3 × per-replica size.
 - **Postgres and Redis are small.** Traces go to ClickHouse; Postgres holds users, settings, prompts and the audit log, Redis the queue and cache.
+
+### ClickHouse disk
+
+Disk is sized by retention, not by load. Test 07 of [langfuse-ops-checks](../langfuse-ops-checks/README.md#07--clickhouse-resources-per-tier) (2026-11-04, laptop, Langfuse 4.56.0, ClickHouse 26.8.22.13; 4 observations per trace of 10 KB in + 1 KB out) measured **~2.0 KB on disk per observation, per replica**: 10.6 / 21.7 / 43.1 GiB per day at 1,000 / 2,000 / 4,000 traces/min. CPU and memory of the sizes above held with room in the same test; the disk did not: the earlier default of 512 GiB holds ~8 days at 4,000 traces/min.
+
+Per replica = GiB per day × retention days ÷ 0.7 (30 % kept free for merges). `values-base.yaml` sets **30 days at 4,000 traces/min: 1,850 GiB**. Total = 3 × per replica.
+
+| Traces/min | GiB per day | 7 days | 30 days | 90 days |
+|---|---|---|---|---|
+| 1,000 | 10.6 | 106 GiB | 454 GiB | 1,363 GiB |
+| 2,000 | 21.7 | 217 GiB | 930 GiB | 2,790 GiB |
+| 4,000 | 43.1 | 431 GiB | 1,847 GiB | 5,541 GiB |
+
+- **Another retention or rate:** set `clickhouse.cluster.storage.size` in a file layered after `values-base.yaml`, from the table or the formula.
+- **Payload changes it:** 2.0 KB is for 11 KB observations; smaller prompts need proportionally less. Re-measure GiB per day on PoC data.
+- **Growing after install was not tested.** The EKS class here sets `allowVolumeExpansion: true`; check the AKS and GKE built-in classes with `kubectl get storageclass`. Whether clickhouse-operator 0.0.8 resizes existing PVCs when the value changes was not checked; volumes cannot shrink.
+- **Blob storage** keeps the raw OTLP JSON in addition and is not sized here.
 
 ### What each cloud file sets
 
@@ -95,7 +112,7 @@ Needs `kind`, `kubectl`, `helm`, `jq`, `openssl`, `uv`. The langfuse-hols compos
 - **Data path:** a trace sent through the public API is read back, its row is on all three replicas, its raw event in the Blob container, the project in Postgres.
 - **Failover:** with one ClickHouse replica deleted, a new trace is ingested and read back, and the replica returns with that row. With one Keeper deleted, the same.
 
-`04-render-clouds.sh` (2026-11-04): 42 PASS, 14 per cloud. For each of AKS, EKS and GKE the rendered objects are accepted by the kind API in a server-side dry run (the EKS run includes the gp3 StorageClass), the base values come through unchanged (web and worker 2 CPU / 4 GiB on `app` with replicas owned by the HPA, liveness delay 300 s, ClickHouse 3 replicas × 6 CPU / 24 GiB / 512 GiB on the tainted pool, Keeper 3, cluster mode on), and the cloud file's choices land as intended: storage class, ingress class or annotation, `rediss://` port (10000, 6379, 6378 with the CA path on GKE), object storage interface with a static key only on AKS, and the workload identity annotation on EKS and GKE.
+`04-render-clouds.sh` (2026-11-05, re-run after the disk change; the 2026-11-04 run with 512 GiB also passed 42): 42 PASS, 14 per cloud. For each of AKS, EKS and GKE the rendered objects are accepted by the kind API in a server-side dry run (the EKS run includes the gp3 StorageClass), the base values come through unchanged (web and worker 2 CPU / 4 GiB on `app` with replicas owned by the HPA, liveness delay 300 s, ClickHouse 3 replicas × 6 CPU / 24 GiB / 1,850 GiB on the tainted pool, Keeper 3, cluster mode on), and the cloud file's choices land as intended: storage class, ingress class or annotation, `rediss://` port (10000, 6379, 6378 with the CA path on GKE), object storage interface with a static key only on AKS, and the workload identity annotation on EKS and GKE.
 
 ### Things worth knowing
 
@@ -112,7 +129,7 @@ Needs `kind`, `kubectl`, `helm`, `jq`, `openssl`, `uv`. The langfuse-hols compos
 - AKS, EKS and GKE clusters and their managed services, ingress controllers, load balancers and disks (checked only as rendered fields against the Kubernetes API).
 - Workload identity (IRSA, Pod Identity, GKE Workload Identity) against real cloud IAM, and Memorystore's CA.
 - Load: no throughput or latency measured; the sizing follows the docs' minimums plus room, not a benchmark.
-- Disk size: 512 GiB per replica is a placeholder; size it from daily observations × average size × retention, measured on PoC data.
+- Disk on a cloud: 1,850 GiB rests on 07's laptop measurement with 11 KB observations ([ClickHouse disk](#clickhouse-disk)); re-measure GiB per day on PoC data.
 - Private registry: ACR, `az acr import`, `az aks update --attach-acr`, ACR anonymous-pull settings, ACR cache rules, Azure Firewall egress and network-isolated AKS (described from the docs); the bundled sub-charts behind a private registry (render only); finishing an image bump after mirroring it (Docker Hub limit); a fault injected into 06-private-registry-checks.sh (a public-image pod among the lab's pods): the kind API stopped answering (etcd timeouts) once other projects' containers started on the same Docker VM, at about 14:40 UTC. Its negatives so far are the three pull controls in 05 and the stalled 4.71.0 rollout.
 
 ### Install from a private registry (a regulated customer on AKS + ACR)
@@ -228,7 +245,7 @@ values-gke.yaml     premium-rwo · GKE Ingress · Cloud SQL · Memorystore · Wo
 |---|---|---|---|---|
 | Langfuse web | 2 (HPA 2–4) | 2 CPU / 4 GiB | `workload=app` | 2 CPU / 4 GiB |
 | Langfuse worker | 2 (HPA 2–6) | 2 CPU / 4 GiB | `workload=app` | 2 CPU / 4 GiB |
-| ClickHouse | 1 shard × 3 replica | 6 CPU / 24 GiB(limit 26 GiB), SSD 512 GiB | `workload=clickhouse`, 노드당 1개 | 2 CPU / 8 GiB, 큰 배포는 16 GiB 이상 |
+| ClickHouse | 1 shard × 3 replica | 6 CPU / 24 GiB(limit 26 GiB), SSD 1,850 GiB(30일, [아래](#clickhouse-디스크)) | `workload=clickhouse`, 노드당 1개 | 2 CPU / 8 GiB, 큰 배포는 16 GiB 이상 |
 | ClickHouse Keeper | 3 | 0.5 CPU / 1 GiB, 20 GiB | `workload=app`, 분산 | — |
 | PostgreSQL | 관리형, HA | 2 vCPU / 8 GiB | 클라우드 서비스 | 2 CPU / 4 GiB |
 | Redis | 관리형, 비클러스터, `noeviction` | 4 GiB 안팎 | 클라우드 서비스 | 1 CPU / 1.5 GiB |
@@ -241,6 +258,23 @@ values-gke.yaml     premium-rwo · GKE Ingress · Cloud SQL · Memorystore · Wo
 - **web·worker는 문서 최소치로 두고 대수로 늘립니다.** 문서는 2 CPU 컨테이너가 CPU 50%를 넘거나 수집 큐가 쌓이면 worker를 늘립니다. HPA에는 metrics-server가 필요하고, metrics-server가 없는 kind에서는 `<unknown>`으로 보입니다.
 - **shard는 하나, replica는 셋.** Langfuse는 멀티 샤드를 지원하지 않고("Today, Langfuse does not support a multi-shard cluster"), 운영에는 replica 3개 이상을 권합니다. replica 수는 나중에 바꾸기 어렵습니다. replica마다 전체 사본이 있으므로 총 디스크는 replica 하나의 3배입니다.
 - **Postgres와 Redis는 작게.** trace는 ClickHouse로 가고, Postgres에는 사용자, 설정, 프롬프트, 감사 로그, Redis에는 큐와 캐시만 있습니다.
+
+### ClickHouse 디스크
+
+디스크는 부하가 아니라 보관 기간으로 정합니다. [langfuse-ops-checks](../langfuse-ops-checks/README.md#07--티어별-clickhouse-자원)의 07(2026-11-04, 노트북, Langfuse 4.56.0, ClickHouse 26.8.22.13, trace당 관측치 4개, 각 입력 10 KB + 출력 1 KB)에서 **관측치당 디스크는 replica마다 약 2.0 KB**였고, 분당 1,000 / 2,000 / 4,000 trace에서 하루 10.6 / 21.7 / 43.1 GiB였습니다. 같은 시험에서 위 사양의 CPU와 메모리는 여유가 있었지만 디스크는 아니었습니다. 이전 기본값 512 GiB는 분당 4,000 trace에서 약 8일 분입니다.
+
+replica당 = 하루 GiB × 보관 일수 ÷ 0.7(merge용 30 % 여유). `values-base.yaml`은 **분당 4,000 trace로 30일, 1,850 GiB**로 잡습니다. 총량 = replica당 × 3.
+
+| 분당 trace | 하루 GiB | 7일 | 30일 | 90일 |
+|---|---|---|---|---|
+| 1,000 | 10.6 | 106 GiB | 454 GiB | 1,363 GiB |
+| 2,000 | 21.7 | 217 GiB | 930 GiB | 2,790 GiB |
+| 4,000 | 43.1 | 431 GiB | 1,847 GiB | 5,541 GiB |
+
+- **다른 보관 기간이나 부하:** 표나 식으로 구한 값을 `values-base.yaml` 뒤에 겹치는 파일에서 `clickhouse.cluster.storage.size`로 지정합니다.
+- **payload에 따라 달라집니다:** 2.0 KB는 11 KB 관측치 기준이고 prompt가 작으면 그만큼 덜 듭니다. 하루 GiB는 PoC 데이터로 다시 재세요.
+- **설치 후 늘리기는 시험하지 않았습니다.** 여기 EKS 클래스는 `allowVolumeExpansion: true`입니다. AKS와 GKE 기본 클래스는 `kubectl get storageclass`로 확인하세요. 값을 바꿨을 때 clickhouse-operator 0.0.8이 기존 PVC를 늘리는지는 확인하지 않았고, 볼륨은 줄일 수 없습니다.
+- **blob storage**는 원본 OTLP JSON을 따로 보관하며 여기서 크기를 잡지 않았습니다.
 
 ### 클라우드 파일이 정하는 것
 
@@ -300,7 +334,7 @@ cd labs/v4/langfuse-k8s
 - **데이터 경로:** public API로 보낸 trace가 다시 읽히고, 그 행이 replica 3개 모두에 있고, 원본 이벤트는 Blob 컨테이너에, 프로젝트는 Postgres에 있습니다.
 - **장애 조치:** ClickHouse replica 하나를 지운 상태에서도 새 trace가 수집되고 읽혔으며, 돌아온 replica에 그 행이 있었습니다. Keeper 하나를 지웠을 때도 같았습니다.
 
-`04-render-clouds.sh`(2026-11-04): 42개 PASS, 클라우드마다 14개. AKS, EKS, GKE 각각에서 렌더된 객체를 kind API가 server-side dry run으로 받아들였습니다(EKS는 gp3 StorageClass 포함). base 값은 그대로 들어갔습니다. web·worker는 `app`에 2 CPU / 4 GiB이고 대수는 HPA가 정하며, liveness 대기 300초, ClickHouse는 taint 걸린 풀에 3 replica × 6 CPU / 24 GiB / 512 GiB, Keeper 3, 클러스터 모드입니다. 클라우드 파일이 정한 값도 의도대로였습니다. 스토리지 클래스, ingress 클래스나 어노테이션, `rediss://` 포트(10000, 6379, GKE는 CA 경로와 함께 6378), 오브젝트 스토리지 인터페이스(정적 키는 AKS만), EKS와 GKE의 워크로드 아이덴티티 어노테이션입니다.
+`04-render-clouds.sh`(2026-11-05, 디스크 변경 후 다시 실행. 512 GiB였던 2026-11-04 실행도 42개 통과): 42개 PASS, 클라우드마다 14개. AKS, EKS, GKE 각각에서 렌더된 객체를 kind API가 server-side dry run으로 받아들였습니다(EKS는 gp3 StorageClass 포함). base 값은 그대로 들어갔습니다. web·worker는 `app`에 2 CPU / 4 GiB이고 대수는 HPA가 정하며, liveness 대기 300초, ClickHouse는 taint 걸린 풀에 3 replica × 6 CPU / 24 GiB / 1,850 GiB, Keeper 3, 클러스터 모드입니다. 클라우드 파일이 정한 값도 의도대로였습니다. 스토리지 클래스, ingress 클래스나 어노테이션, `rediss://` 포트(10000, 6379, GKE는 CA 경로와 함께 6378), 오브젝트 스토리지 인터페이스(정적 키는 AKS만), EKS와 GKE의 워크로드 아이덴티티 어노테이션입니다.
 
 ### 알아 둘 것
 
@@ -317,7 +351,7 @@ cd labs/v4/langfuse-k8s
 - AKS, EKS, GKE 클러스터와 관리형 서비스, ingress 컨트롤러, 로드밸런서, 디스크(렌더된 필드를 Kubernetes API로만 확인)
 - 실제 클라우드 IAM에서의 워크로드 아이덴티티(IRSA, Pod Identity, GKE Workload Identity), Memorystore CA
 - 부하: 처리량이나 지연은 측정하지 않았습니다. 사이징은 벤치마크가 아니라 문서 최소치에 여유를 더한 값입니다.
-- 디스크 크기: replica당 512 GiB는 자리표시자입니다. 하루 observation 수 × 평균 크기 × 보존 기간을 PoC 데이터로 실측해 정합니다.
+- 클라우드의 디스크: 1,850 GiB는 11 KB 관측치로 잰 07의 노트북 측정에 근거합니다([ClickHouse 디스크](#clickhouse-디스크)). 하루 GiB는 PoC 데이터로 다시 재세요.
 - 사설 레지스트리: ACR, `az acr import`, `az aks update --attach-acr`, ACR 익명 pull 설정, ACR 캐시 규칙, Azure Firewall egress, network isolated AKS(문서 기준으로 적음). 사설 레지스트리 뒤의 내장 sub-chart(렌더만). 이미지 버전 올리기를 미러링 후 끝까지 진행(Docker Hub 제한). 06-private-registry-checks.sh에 결함 넣기(실습 pod 사이에 공개 이미지 pod 하나): 같은 Docker VM에서 다른 프로젝트 컨테이너가 뜬 14:40 UTC쯤부터 kind API가 응답하지 않았습니다(etcd timeout). 지금까지의 음성 대조는 05의 pull 대조 실험 3개와 멈춘 4.71.0 rollout입니다.
 
 ### 사설 레지스트리에서 설치 (AKS + ACR을 쓰는 규제 업종 고객)

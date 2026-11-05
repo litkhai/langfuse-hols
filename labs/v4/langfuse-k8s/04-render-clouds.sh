@@ -90,7 +90,7 @@ for cloud in aks eks gke; do
   eq "$cloud: langfuse-worker" "replicas=HPA req=2/4Gi pool=app" "$(f langfuse-worker)"
   eq "$cloud: HPA web, worker" "2-4 2-6" "$(f hpa-langfuse-web) $(f hpa-langfuse-worker)"
   eq "$cloud: web liveness initialDelaySeconds" 300 "$(f liveness)"
-  eq "$cloud: ClickHouseCluster" "replicas=3 shards=1 req=6/24Gi disk=512Gi pool=clickhouse taint=clickhouse" "$(f clickhouse)"
+  eq "$cloud: ClickHouseCluster" "replicas=3 shards=1 req=6/24Gi disk=1850Gi pool=clickhouse taint=clickhouse" "$(f clickhouse)"
   eq "$cloud: CLICKHOUSE_CLUSTER_ENABLED" true "$(f cluster)"
   # what the cloud file decides
   eq "$cloud: storage class (ClickHouse)" "$X_CLASS" "$(f class)"

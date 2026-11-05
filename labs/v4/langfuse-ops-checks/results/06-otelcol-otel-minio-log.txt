@@ -1,0 +1,1 @@
+  31 	error	internal/queue_sender.go:57	Exporting failed. Dropping data.	{"resource": {"service.instance.id": "c0b94a40-5c8d-4492-b230-2b070103475e", "service.name": "otelcol-contrib", "service.version": "0.162.0"}, "otelcol.component.id": "otlphttp/langfuse", "ote

@@ -1,0 +1,10 @@
+# Overlay for test 05: the read-access audit switch of Langfuse ≥ 4.73.0, passed from the shell to web and
+# worker. Unset or empty = Langfuse's default ("org": only organisations that turned Access Logging on).
+# Values: org | enforced | disabled (web env schema of langfuse/langfuse:4.75.0).
+services:
+  langfuse-web:
+    environment:
+      LANGFUSE_AUDIT_LOG_ACCESS_EVENTS: ${LANGFUSE_AUDIT_LOG_ACCESS_EVENTS:-}
+  langfuse-worker:
+    environment:
+      LANGFUSE_AUDIT_LOG_ACCESS_EVENTS: ${LANGFUSE_AUDIT_LOG_ACCESS_EVENTS:-}

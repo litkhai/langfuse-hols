@@ -1,0 +1,45 @@
+# values-private-registry.yaml — every image of the langfuse 2.2.1 chart from a private registry that needs
+# a login (05-private-registry.sh). Layer it last:
+#
+#   helm install langfuse oci://<registry>/charts/langfuse --version 2.2.1 -n langfuse \
+#     -f values-base.yaml -f values-<cloud>.yaml -f values-private-registry.yaml
+#
+# On AKS + ACR: replace privreg.lab.test with <registry>.azurecr.io, and keep the path layout you mirrored
+# with (`az acr import --source docker.io/clickhouse/clickhouse-server:26.8.36.3 --image <path>:<tag>`).
+# With `az aks update --attach-acr` the kubelet pulls with its identity and the pullSecrets lines can go;
+# with a pull Secret (token or service principal) they stay.
+#
+# The chart has NO global.imageRegistry: web, worker, ClickHouse and Keeper each need their own repository,
+# and the registry host goes into it. `global.imageRegistry` reaches only the valkey and seaweedfs
+# sub-charts (off here); the postgres sub-chart ignores it (postgresql.image.registry). README, findings.
+
+langfuse:
+  image:
+    pullSecrets:                       # web and worker (langfuse.web/worker.image.pullSecrets override it)
+      - name: regcred
+  web:
+    image:
+      repository: privreg.lab.test/docker.langfuse.com/langfuse/langfuse
+  worker:
+    image:
+      repository: privreg.lab.test/docker.langfuse.com/langfuse/langfuse-worker
+
+clickhouse:
+  cluster:
+    image:                             # → spec.containerTemplate.image on the ClickHouseCluster CR
+      repository: privreg.lab.test/docker.io/clickhouse/clickhouse-server
+      pullSecrets:                     # → spec.podTemplate.imagePullSecrets
+        - name: regcred
+  keeper:
+    image:
+      repository: privreg.lab.test/docker.io/clickhouse/clickhouse-keeper
+      pullSecrets:
+        - name: regcred
+
+# Only if you deploy the bundled sub-charts instead of managed services (not run in this lab; render-checked):
+# global:
+#   imageRegistry: privreg.lab.test/docker.io      # valkey → …/valkey/valkey:8.0, seaweedfs → …/chrislusf/seaweedfs:4.23
+#   imagePullSecrets: [regcred]
+# postgresql:
+#   image: { registry: privreg.lab.test/docker.io } # groundhog2k/postgres ignores global.imageRegistry
+#   imagePullSecrets: [{ name: regcred }]

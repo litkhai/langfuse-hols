@@ -29,3 +29,6 @@ venv/
 # Lab 17 keys and certificates — made by labs/v4/langfuse-ee/17-ee-encryption.sh, never committed
 _base/encryption/secrets/
 _base/encryption/certs/
+
+# Private-registry run state (CA, server key, htpasswd, pull config) — labs/v4/langfuse-k8s/05-private-registry.sh
+labs/v4/langfuse-k8s/.private-registry/

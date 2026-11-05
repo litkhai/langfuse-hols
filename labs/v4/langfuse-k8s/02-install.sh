@@ -9,13 +9,22 @@
 # The kubelet killed web mid-migration (liveness probe, chart default 20 s + 3 × 10 s; values-base.yaml now
 # waits 300 s). Staging keeps the migrations off a ClickHouse that still restarts waiting for Keeper, and
 # to one pod. Later upgrades run in one step.
+#
+# PRIVATE_REGISTRY=1 (after 05-private-registry.sh): the chart from oci://<registry>/charts/langfuse and
+# values-private-registry.yaml on top (every image from the registry, with its pull Secret).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K="kubectl --context kind-langfuse-k8s -n langfuse"
-H=(helm --kube-context kind-langfuse-k8s upgrade --install langfuse langfuse/langfuse --version 2.2.1 -n langfuse
-   -f "$HERE/values-base.yaml" -f "$HERE/values-kind.yaml" --timeout 15m)
-helm repo add langfuse https://langfuse.github.io/langfuse-k8s >/dev/null 2>&1 || true
-helm repo update langfuse >/dev/null
+CHART=(langfuse/langfuse); EXTRA=()
+if [ -n "${PRIVATE_REGISTRY:-}" ]; then
+  . "$HERE/private-registry.inc.sh"
+  CHART=("oci://$HELM_HOST/charts/langfuse" --ca-file "$CA_FILE"); EXTRA=(-f "$HERE/values-private-registry.yaml")
+else
+  helm repo add langfuse https://langfuse.github.io/langfuse-k8s >/dev/null 2>&1 || true
+  helm repo update langfuse >/dev/null
+fi
+H=(helm --kube-context kind-langfuse-k8s upgrade --install langfuse "${CHART[@]}" --version 2.2.1 -n langfuse
+   -f "$HERE/values-base.yaml" -f "$HERE/values-kind.yaml" ${EXTRA[@]+"${EXTRA[@]}"} --timeout 15m)
 # With HPA off the chart uses web.replicas, falling back to langfuse.replicas; clearing the per-deployment
 # value lets langfuse.replicas set both.
 scaled() {  # scaled <n> → overrides for n web and n worker pods, HPA off

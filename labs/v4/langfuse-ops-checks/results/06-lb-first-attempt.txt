@@ -1,0 +1,11 @@
+06a lb, first attempt — 2026-11-04 14:38 UTC (run m-lb-1793803112), discarded and re-run at 14:52 UTC.
+Same load and kill as the kept run (1,200 traces/min × 4 obs, 10 KB / 1 KB, 1 trace per POST, 150 s, web-1 SIGKILL 35–55 s,
+client retry deadline 5 s). Differences from the kept run: haproxy-web2.cfg had no `timeout check` (so it was `inter`,
+1 s), no HAProxy logging, and no 20 s warm-up through the load balancer before the run.
+
+  sent 12000  accepted 52  arrived 64  client dropped 11948  http {"200":13,"503":8239,"None":51}  retries 5303
+
+503 = HAProxy "no server available" from the first seconds on, before the kill. The HAProxy log was not captured; in the
+no-retry run (results/06-lb-noretry-haproxy-log.txt) web-2 failed a 3 s health check under load, so a 1 s check
+timeout marking both replicas DOWN is the likely cause. 64 arrived > 52 accepted: requests the client gave up on
+that the server had stored.

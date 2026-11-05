@@ -1,0 +1,4 @@
+# Overlay: the cpu2 cap for the second worker of docker-compose.worker2.yml.
+services:
+  langfuse-worker-2:
+    cpus: 2.0

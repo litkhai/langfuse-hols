@@ -8,6 +8,8 @@
 
 **Verified end to end on 2026-11-05** with **Langfuse v4.75.0 web and worker / `langfuse/ai-gateway` 4.75.0 / SDK 4.17.0 / CH 26.8.22.13** (its own compose project on the `_base/` compose file, `events_only` mode), **real calls to the Anthropic API** with Claude Haiku 4.5 (`claude-haiku-4-5-20251001`), Anthropic Python SDK 1.12.1, Claude Code 2.1.220, Docker 29.9.2, Compose v5.6.1, Python 3.12.14: [05-check.py](05-check.py) passed 34 checks (2 INFO); with an injected fault (a service forgets `langfuse-user-id`, an app forgets `traceparent`) 3 of them failed. [06-ee-audit.sh](06-ee-audit.sh) found no audit record without a licence, and `create` and `delete` in Postgres `audit_logs` with the Enterprise licence. Log: [lab-output.md](lab-output.md). All model calls of the run cost 0.04006 USD (16 generations; 0.0397 of it one Claude Code call), as Langfuse priced them.
 
+**Compared with LiteLLM Proxy, verified end to end on 2026-11-05** in a second run from deleted volumes: 01–05 again (05: 34 PASS, 2 INFO) and steps 07–10 with **LiteLLM Proxy v1.108.0** (`ghcr.io/berriai/litellm:v1.108.0`) on the same Langfuse project, Anthropic key, people and key metadata: [10-compare-check.py](10-compare-check.py) passed 17 checks (7 INFO); with an injected fault (a service forgets `x-litellm-end-user-id`, an app forgets `traceparent`) 2 of them failed. 06 was not re-run in the second run. Model calls of the second run: gateway 0.040 USD, LiteLLM 0.014 USD. See [Compared with LiteLLM Proxy](#compared-with-litellm-proxy).
+
 The gateway went into public beta with Langfuse v4.75.0 (released 2026-11-04). Apps and coding agents send their OpenAI or Anthropic requests to the gateway with a gateway key; the gateway swaps in the organization's provider key, forwards the request unchanged, and records the call as a Langfuse generation.
 
 ### The short answer
@@ -49,6 +51,11 @@ flowchart LR
 | [04-controls.py](04-controls.py) | Allowlist, expiry, revocation, role change, `USAGE` mode, and what the AI Gateway role may not do |
 | [05-check.py](05-check.py) | 34 checks against ClickHouse, Postgres, the gateway container and the v2 observations API |
 | [06-ee-audit.sh](06-ee-audit.sh) · [06-audit-probe.py](06-audit-probe.py) | Optional: a key created and revoked without and with the Enterprise licence, audit records counted |
+| [docker-compose.litellm.yml](docker-compose.litellm.yml) · [litellm-config.yaml](litellm-config.yaml) | LiteLLM Proxy and its Postgres in the same project, behind the profile `litellm` (host port 18440); models `claude-haiku-4-5`, `claude-haiku-4-5-20251001` and `haiku-broken` (a rejected key, for the fallback), callback `langfuse_otel` |
+| [07-litellm-up.sh](07-litellm-up.sh) | Generates LiteLLM's master and salt keys into `.run/` once and starts it |
+| [08-litellm-setup.py](08-litellm-setup.py) | The same people and keys on LiteLLM: internal users alice and bob, team `payments`, keys `alice-laptop`, `bob-laptop`, service account key `checkout-service`, same metadata |
+| [09-litellm-calls.py](09-litellm-calls.py) | The seven calls against LiteLLM (l1–l7), then model restriction, expiry, key delete, user delete, spend cap, rate limit, fallback, and latency against a direct call. `FAULT=1` injects the fault |
+| [10-compare-check.py](10-compare-check.py) | 17 checks on LiteLLM's side (its generations in Langfuse, its database and container) plus INFO rows for the comparison |
 | [99-down.sh](99-down.sh) | Stops the project; `--purge` also removes its volumes and `.run/` |
 
 | Scenario | Key | What it shows |
@@ -72,6 +79,10 @@ labs/v4/ai-gateway/01-up.sh
 .venv-v4/bin/python labs/v4/ai-gateway/04-controls.py
 .venv-v4/bin/python labs/v4/ai-gateway/05-check.py
 labs/v4/ai-gateway/06-ee-audit.sh                    # optional: needs LANGFUSE_EE_LICENSE_KEY
+labs/v4/ai-gateway/07-litellm-up.sh                  # LiteLLM comparison, after 01–05
+.venv-v4/bin/python labs/v4/ai-gateway/08-litellm-setup.py
+.venv-v4/bin/python labs/v4/ai-gateway/09-litellm-calls.py
+.venv-v4/bin/python labs/v4/ai-gateway/10-compare-check.py
 labs/v4/ai-gateway/99-down.sh                        # --purge removes the volumes and .run/
 ```
 
@@ -140,12 +151,47 @@ Alice's 0.0398 USD is almost all the single Claude Code call: Claude Code sends 
 
 Expiry, revocation and the role change did not wait for the 60 s resolve cache: web evicts the key on revoke and on the role change, and caps a cached lookup at the key's `expiresAt`. Config and credential changes evict the organization's entries too. A role change only stops the key because Langfuse deletes it.
 
+### Compared with LiteLLM Proxy
+
+Same questions, same Anthropic key, same people and key metadata, same Langfuse project; LiteLLM exports its generations with `langfuse_otel` (OTel v2, `llm_only`, message content on). Measured on 2026-11-05.
+
+| Question | Langfuse AI Gateway 4.75.0 | LiteLLM Proxy v1.108.0 |
+|---|---|---|
+| Client change | base URL + key; SDK, streaming, `claude -p` worked | the same (`/v1/messages`) |
+| Response body | relayed unchanged (`model: claude-haiku-4-5-20251001`) | rewritten: `model` is the requested name `claude-haiku-4-5` |
+| Where the provider key lives | encrypted in Langfuse's Postgres; the gateway has none | in the proxy (here its environment; LiteLLM can also keep it in its database, not tested) |
+| Client keys at rest | hashed | hashed |
+| Who the call belongs to | Langfuse `user_id` = key owner; a header cannot change it | key owner (`user_api_key_user_id`) cannot be changed; the client sets an end user (`x-litellm-end-user-id`); both only in metadata, Langfuse `user_id` empty on 27 of 27 |
+| Key, team, tags in Langfuse | key name, key metadata, `langfuse-*` headers | key alias, team, end user, `x-litellm-tags` |
+| Sessions | from the agent (`claude-code:<id>`) or a header | Claude Code's session id; empty otherwise |
+| `traceparent` from an app span | same trace, **child of the app span** | same trace, **no parent** (flat) |
+| Model restriction | exact ID: the alias gets `403` | exact name: the alias gets `403 key_model_access_denied` |
+| Expiry, revocation | `401` on the next call | `401` on the next call |
+| Person leaves | role change deletes their user keys | user delete deletes their keys |
+| Spend cap | none | `max_budget` 0.00006 USD: refused on call 6 with `422 budget_exceeded` at 0.000065 (one call over) |
+| Rate limit | none on self-hosted | `rpm_limit: 2`: `[200, 200, 429]` |
+| A failing model | error goes to the client (`404`), no fallback setting | `fallbacks`: answered from the next model, `x-litellm-attempted-fallbacks: 1` |
+| Providers | OpenAI, Anthropic | 100+ by its docs (only Anthropic run here) |
+| Audit log without a licence | none (Enterprise) | none (`LiteLLM_AuditLog` 0 rows; Enterprise by its docs) |
+| Latency, median of 5 after a warm-up | 526 ms | 547 ms (a direct call on a new connection: 610 ms) |
+| Extra infrastructure | one stateless container next to Langfuse | the proxy and its own Postgres |
+| Cost in Langfuse | priced by Langfuse's model table | LiteLLM's own cost, sent as provided cost |
+
+Both gateways were faster than the direct call because they reuse their upstream connection; the direct sample opened a new one each time. With 5 calls on one host, the 21 ms between the gateways is within noise.
+
+**What follows from it** (*recommendation*):
+- Needs spend caps, rate limits, fallbacks or providers beyond OpenAI and Anthropic: LiteLLM has them today; the Langfuse gateway does not.
+- Wants the trace to be the record (user field, nesting under the app span, the provider's response unchanged, evaluations on it): the Langfuse gateway gives that without extra work.
+- Both, LiteLLM in front with `langfuse_otel`: caps, limits and fallbacks from LiteLLM, generations in Langfuse; but identity sits in metadata (filter on `user_api_key_*`, the Users view stays empty) and the generation is not nested under the app span.
+- Pin LiteLLM by version or digest and verify its cosign signature: on 2026-10-21 its release pipeline was compromised, and credential-stealing malware shipped as `litellm==1.107.0` on PyPI for about 2 hours and in the Docker tags `v1.107.0`, `latest`, `main-latest` and `main-stable` for about 2.5 hours (LiteLLM's incident report). Its repository published 18 GitHub security advisories in 2026 up to 2026-11-05, 5 of them critical; the Langfuse repository published 2. Counts of published advisories are not a security rating; they say how often to plan upgrades.
+
 ### Gaps
 
 - **Allowlists match strings, not models.** The provider's model list gives dated IDs for older models (`claude-haiku-4-5-20251001`) and undated ones for newer models. Clients that send an alias get `403` once a credential has an explicit list, so allow the IDs your clients actually send, or tell clients to send the listed ID.
 - **Losing gateway access deletes keys.** A role change to VIEWER (or NONE) removes the person's user keys at once. Restoring the role does not restore them. Use service account keys for anything that must survive membership changes.
 - **Audit records need the Enterprise licence on a self-hosted instance** (`isAuditLogEnabled`: Cloud always, self-hosted only with the `audit-logs` entitlement). Without it, key creation and revocation leave no trace.
 - **The OpenAI route was not run** (no OpenAI key). Responses, Chat Completions, Codex and Copilot are documented by Langfuse but not tested here.
+- **LiteLLM, not run:** its Enterprise features (SSO beyond 5 users, audit logs, per-key guardrails), Redis and more than one proxy instance, credentials stored in its database, budgets on users and teams, the image's cosign signature (cosign was not installed), chaining LiteLLM in front of the Langfuse gateway.
 - **Not run:** the Helm chart, TLS in front of the gateway, more than one gateway replica, the memory budget and `503` under load, long streams and graceful shutdown, Claude Desktop, turn grouping for Claude Code (`CLAUDE_CODE_PROPAGATE_TRACEPARENT`), `NONE` mode, Langfuse Cloud and its rate limits.
 - **Known beta cost bugs** (Langfuse's list, not reproduced here): estimated cost on failed or cancelled OpenAI calls, OpenAI cache writes at $0, Anthropic 1-hour cache writes at the 5-minute rate. Input over 5 MiB is not stored; output over 1 MiB is cut in the record.
 - **Analytics loses the names of deleted keys.** Keys that were revoked or removed by a role change show up as raw IDs in *Cost by gateway key*; the name stays in each generation's `langfuse.gateway.api_key.name`, so a ClickHouse query still has it.
@@ -156,6 +202,7 @@ Expiry, revocation and the role change did not wait for the 60 s resolve cache: 
 ### Sources (all read 2026-11-04)
 
 - Langfuse: [AI Gateway overview](https://langfuse.com/docs/gateway/overview) · [Concepts](https://langfuse.com/docs/gateway/concepts) · [Set up as an admin](https://langfuse.com/docs/gateway/get-started/admin-setup) · [Send your first request](https://langfuse.com/docs/gateway/get-started/first-request) · [Authentication (keys)](https://langfuse.com/docs/gateway/features/api-keys) · [Model management](https://langfuse.com/docs/gateway/features/models) · [Tracing](https://langfuse.com/docs/gateway/features/tracing) · [REST API](https://langfuse.com/docs/gateway/features/rest-api) · [Analytics](https://langfuse.com/docs/gateway/features/analytics) · [Known limitations](https://langfuse.com/faq/all/ai-gateway-known-limitations) · [Self-hosting the AI Gateway](https://langfuse.com/self-hosting/configuration/ai-gateway) · [Claude Code with the gateway](https://langfuse.com/integrations/developer-tools/claude-code-gateway)
+- LiteLLM (read 2026-11-05): [docs index](https://docs.litellm.ai/llms.txt) · [Virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys) · [Budgets, rate limits](https://docs.litellm.ai/docs/proxy/users) · [Customers / end users](https://docs.litellm.ai/docs/proxy/customers) · [Fallbacks](https://docs.litellm.ai/docs/proxy/reliability) · [Claude Code](https://docs.litellm.ai/docs/proxy/client_setup/claude_code) · [OpenTelemetry v2, `langfuse_otel`](https://docs.litellm.ai/docs/observability/opentelemetry_v2) · [Audit logs](https://docs.litellm.ai/docs/proxy/audit_logs) · [Docker image security](https://docs.litellm.ai/docs/proxy/docker_image_security) · [Oct 21, 2026 incident](https://docs.litellm.ai/blog/security-incident-oct-21-2026) · [security advisories](https://github.com/BerriAI/litellm/security/advisories) · [releases](https://github.com/BerriAI/litellm/releases) (v1.108.0, 2026-11-04)
 - Release and image: [langfuse v4.75.0](https://github.com/langfuse/langfuse/releases/tag/v4.75.0) (2026-11-04) · [`langfuse/ai-gateway` on Docker Hub](https://hub.docker.com/r/langfuse/ai-gateway) (tag 4.75.0)
 - Source read at v4.75.0: `ai-gateway/src/resolution/contracts.rs` (official provider origins), `ai-gateway/src/providers/mod.rs` (origin override only in tests), `web/src/features/ai-gateway/server/router.ts` (tRPC control plane), `web/src/features/ai-gateway/fns/isGatewayModelAllowed.ts` (exact match), `web/src/features/ai-gateway/server/apiKey/{gatewayApiKeyService,userBoundApiKeys}.ts` (revoke, delete on role change), `web/src/features/ai-gateway/server/availability.ts`, `web/src/features/audit-logs/isAuditLogEnabled.ts`
 
@@ -164,6 +211,8 @@ Expiry, revocation and the role change did not wait for the 60 s resolve cache: 
 ## 한국어
 
 **2026-11-05 처음부터 끝까지 검증.** 대상은 **Langfuse v4.75.0 web·worker / `langfuse/ai-gateway` 4.75.0 / SDK 4.17.0 / CH 26.8.22.13**(`_base/` compose 파일 위의 별도 compose 프로젝트, `events_only` 모드)이고, Claude Haiku 4.5(`claude-haiku-4-5-20251001`)로 **Anthropic API를 실제로 호출**했습니다(Anthropic Python SDK 1.12.1, Claude Code 2.1.220, Docker 29.9.2, Compose v5.6.1, Python 3.12.14). [05-check.py](05-check.py)는 34개 검사를 통과했습니다(INFO 2개). 결함을 넣으면(서비스가 `langfuse-user-id`를, 앱이 `traceparent`를 빠뜨림) 그중 3개가 실패합니다. [06-ee-audit.sh](06-ee-audit.sh)는 라이선스 없이는 감사 기록이 없고, Enterprise 라이선스가 있으면 Postgres `audit_logs`에 `create`와 `delete`가 남는 것을 확인했습니다. 로그: [lab-output.md](lab-output.md). 이 실행의 모델 호출 비용은 Langfuse 계산으로 0.04006 USD였습니다(generation 16개, 그중 0.0397은 Claude Code 호출 한 번).
+
+**LiteLLM Proxy와의 비교도 2026-11-05 처음부터 끝까지 검증했습니다.** 볼륨을 지우고 다시 돌린 두 번째 실행에서 01–05를 다시 돌렸고(05: 34 PASS, INFO 2개), 07–10단계로 **LiteLLM Proxy v1.108.0**(`ghcr.io/berriai/litellm:v1.108.0`)을 같은 Langfuse 프로젝트, Anthropic 키, 사람, 키 metadata로 돌렸습니다. [10-compare-check.py](10-compare-check.py)는 17개 검사를 통과했습니다(INFO 7개). 결함을 넣으면(서비스가 `x-litellm-end-user-id`를, 앱이 `traceparent`를 빠뜨림) 그중 2개가 실패합니다. 두 번째 실행에서 06은 다시 돌리지 않았습니다. 두 번째 실행의 모델 호출 비용: 게이트웨이 0.040 USD, LiteLLM 0.014 USD. [LiteLLM Proxy와 비교](#litellm-proxy와-비교)를 보세요.
 
 게이트웨이는 Langfuse v4.75.0(2026-11-04 출시)과 함께 공개 베타가 됐습니다. 앱과 코딩 에이전트가 OpenAI나 Anthropic 요청을 게이트웨이 키와 함께 게이트웨이로 보내면, 게이트웨이가 조직의 공급자 키로 바꿔 끼워 요청을 그대로 넘기고, 그 호출을 Langfuse generation으로 기록합니다.
 
@@ -206,6 +255,11 @@ flowchart LR
 | [04-controls.py](04-controls.py) | 허용 목록, 만료, 폐기, 역할 변경, `USAGE` 모드, AI Gateway 역할이 못 하는 일 |
 | [05-check.py](05-check.py) | ClickHouse, Postgres, 게이트웨이 컨테이너, v2 observations API로 34개 검사 |
 | [06-ee-audit.sh](06-ee-audit.sh) · [06-audit-probe.py](06-audit-probe.py) | 선택: Enterprise 라이선스 없이와 있이 키 하나를 만들고 폐기해 감사 기록을 셉니다 |
+| [docker-compose.litellm.yml](docker-compose.litellm.yml) · [litellm-config.yaml](litellm-config.yaml) | 같은 프로젝트 안의 LiteLLM Proxy와 그 Postgres, 프로필 `litellm`(호스트 포트 18440). 모델 `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `haiku-broken`(fallback 시험용으로 거부되는 키), 콜백 `langfuse_otel` |
+| [07-litellm-up.sh](07-litellm-up.sh) | LiteLLM master key와 salt key를 `.run/`에 한 번 만들고 띄웁니다 |
+| [08-litellm-setup.py](08-litellm-setup.py) | LiteLLM에 같은 사람과 키: 내부 사용자 alice·bob, 팀 `payments`, 키 `alice-laptop`, `bob-laptop`, 서비스 계정 키 `checkout-service`, 같은 metadata |
+| [09-litellm-calls.py](09-litellm-calls.py) | LiteLLM으로 같은 호출 7개(l1–l7), 이어서 모델 제한, 만료, 키 삭제, 사용자 삭제, 예산 상한, rate limit, fallback, 직접 호출과의 지연 비교. `FAULT=1`은 결함 주입 |
+| [10-compare-check.py](10-compare-check.py) | LiteLLM 쪽 17개 검사(Langfuse에 들어간 generation, LiteLLM DB와 컨테이너)와 비교용 INFO 행 |
 | [99-down.sh](99-down.sh) | 프로젝트를 멈춥니다. `--purge`는 볼륨과 `.run/`까지 지웁니다 |
 
 | 시나리오 | 키 | 보여 주는 것 |
@@ -229,6 +283,10 @@ labs/v4/ai-gateway/01-up.sh
 .venv-v4/bin/python labs/v4/ai-gateway/04-controls.py
 .venv-v4/bin/python labs/v4/ai-gateway/05-check.py
 labs/v4/ai-gateway/06-ee-audit.sh                    # 선택: LANGFUSE_EE_LICENSE_KEY 필요
+labs/v4/ai-gateway/07-litellm-up.sh                  # LiteLLM 비교, 01–05 다음에
+.venv-v4/bin/python labs/v4/ai-gateway/08-litellm-setup.py
+.venv-v4/bin/python labs/v4/ai-gateway/09-litellm-calls.py
+.venv-v4/bin/python labs/v4/ai-gateway/10-compare-check.py
 labs/v4/ai-gateway/99-down.sh                        # --purge는 볼륨과 .run/까지 삭제
 ```
 
@@ -297,12 +355,47 @@ Alice의 0.0398 USD는 거의 전부 Claude Code 호출 한 번입니다. Claude
 
 만료, 폐기, 역할 변경은 60초 resolve 캐시를 기다리지 않았습니다. web이 폐기와 역할 변경 때 키를 캐시에서 지우고, 캐시된 조회를 키의 `expiresAt`까지로 자릅니다. 설정과 자격 증명을 바꿔도 그 조직의 캐시가 지워집니다. 역할 변경으로 키가 멈추는 것은 Langfuse가 키를 지우기 때문입니다.
 
+### LiteLLM Proxy와 비교
+
+같은 질문, 같은 Anthropic 키, 같은 사람과 키 metadata, 같은 Langfuse 프로젝트입니다. LiteLLM은 `langfuse_otel`(OTel v2, `llm_only`, 메시지 내용 포함)로 generation을 보냅니다. 2026-11-05 측정.
+
+| 질문 | Langfuse AI Gateway 4.75.0 | LiteLLM Proxy v1.108.0 |
+|---|---|---|
+| 클라이언트 변경 | base URL + 키. SDK, 스트리밍, `claude -p` 동작 | 같음(`/v1/messages`) |
+| 응답 본문 | 그대로 전달(`model: claude-haiku-4-5-20251001`) | 바뀜: `model`이 요청한 이름 `claude-haiku-4-5` |
+| 공급자 키 위치 | Langfuse Postgres에 암호화. 게이트웨이에는 없음 | 프록시가 보관(여기서는 환경 변수. LiteLLM DB에 둘 수도 있으나 시험하지 않음) |
+| 클라이언트 키 저장 | 해시 | 해시 |
+| 호출의 주인 | Langfuse `user_id` = 키 주인. 헤더로 못 바꿈 | 키 주인(`user_api_key_user_id`)은 못 바꿈. 최종 사용자는 클라이언트가 정함(`x-litellm-end-user-id`). 둘 다 metadata에만 있고 Langfuse `user_id`는 27개 중 27개가 비어 있음 |
+| Langfuse의 키·팀·태그 | 키 이름, 키 metadata, `langfuse-*` 헤더 | 키 별칭, 팀, 최종 사용자, `x-litellm-tags` |
+| 세션 | 에이전트에서(`claude-code:<id>`) 또는 헤더 | Claude Code의 세션 ID. 그 밖에는 비어 있음 |
+| 앱 span의 `traceparent` | 같은 trace, **앱 span의 자식** | 같은 trace, **부모 없음**(평평함) |
+| 모델 제한 | 정확한 ID: 별칭은 `403` | 정확한 이름: 별칭은 `403 key_model_access_denied` |
+| 만료, 폐기 | 다음 호출부터 `401` | 다음 호출부터 `401` |
+| 사람이 떠날 때 | 역할 변경이 사용자 키를 지움 | 사용자 삭제가 키를 지움 |
+| 예산 상한 | 없음 | `max_budget` 0.00006 USD: 6번째 호출이 0.000065에서 `422 budget_exceeded`(한 호출만큼 초과) |
+| Rate limit | 셀프호스팅에는 없음 | `rpm_limit: 2`: `[200, 200, 429]` |
+| 실패하는 모델 | 에러가 클라이언트로(`404`), fallback 설정 없음 | `fallbacks`: 다음 모델로 응답, `x-litellm-attempted-fallbacks: 1` |
+| 공급자 | OpenAI, Anthropic | 문서상 100개 이상(여기서는 Anthropic만 실행) |
+| 라이선스 없는 감사 로그 | 없음(Enterprise) | 없음(`LiteLLM_AuditLog` 0행, 문서상 Enterprise) |
+| 지연 시간, 워밍업 뒤 5회 중앙값 | 526 ms | 547 ms(새 연결로 한 직접 호출: 610 ms) |
+| 추가 인프라 | Langfuse 옆 상태 없는 컨테이너 하나 | 프록시와 전용 Postgres |
+| Langfuse의 비용 | Langfuse 모델 가격표로 계산 | LiteLLM이 계산한 비용을 provided cost로 보냄 |
+
+두 게이트웨이가 직접 호출보다 빨랐던 것은 upstream 연결을 재사용하기 때문입니다. 직접 호출 쪽은 매번 새 연결을 열었습니다. 한 호스트에서 5회라 두 게이트웨이 사이의 21 ms 차이는 오차 범위입니다.
+
+**정리** (*권장, 측정 아님*):
+- 예산 상한, rate limit, fallback, OpenAI·Anthropic 밖의 공급자가 필요하면: 지금은 LiteLLM에 있고 Langfuse 게이트웨이에는 없습니다.
+- trace를 기록 그 자체로 쓰고 싶으면(사용자 칸, 앱 span 아래 중첩, 공급자 응답 그대로, 그 위의 평가): Langfuse 게이트웨이가 별도 작업 없이 줍니다.
+- 둘 다, 즉 LiteLLM을 앞에 두고 `langfuse_otel`로 보내면: 상한·제한·fallback은 LiteLLM이, generation은 Langfuse가 갖습니다. 다만 사람 정보가 metadata에만 있고(`user_api_key_*`로 필터, Users 화면은 비어 있음) generation이 앱 span 아래에 들어가지 않습니다.
+- LiteLLM은 버전이나 digest로 고정하고 cosign 서명을 확인하세요. 2026-10-21 릴리스 파이프라인이 뚫려, 자격 증명을 훔치는 악성 코드가 PyPI의 `litellm==1.107.0`으로 약 2시간, Docker 태그 `v1.107.0`, `latest`, `main-latest`, `main-stable`로 약 2.5시간 배포됐습니다(LiteLLM 사고 보고). 이 저장소는 2026년(2026-11-05까지) GitHub 보안 공지를 18건 냈고 그중 5건이 critical입니다. Langfuse 저장소는 2건입니다. 공지 건수는 보안 등급이 아니라 업그레이드를 얼마나 자주 계획해야 하는지를 말해 줍니다.
+
 ### 한계
 
 - **허용 목록은 모델이 아니라 문자열을 맞춥니다.** 공급자의 모델 목록은 오래된 모델에는 날짜가 붙은 ID(`claude-haiku-4-5-20251001`), 새 모델에는 날짜 없는 ID를 줍니다. 자격 증명에 명시적인 목록이 생기면 별칭을 보내는 클라이언트는 `403`을 받습니다. 클라이언트가 실제로 보내는 ID를 허용하거나, 목록에 있는 ID를 보내게 하세요.
 - **게이트웨이 권한을 잃으면 키가 지워집니다.** VIEWER(또는 NONE)로 바꾸면 그 사람의 사용자 키가 바로 삭제되고, 역할을 되돌려도 복구되지 않습니다. 멤버십 변화에도 살아 있어야 하는 것은 서비스 계정 키로 쓰세요.
 - **셀프호스팅에서 감사 기록에는 Enterprise 라이선스가 필요합니다**(`isAuditLogEnabled`: Cloud는 항상, 셀프호스팅은 `audit-logs` entitlement가 있을 때만). 없으면 키 생성과 폐기가 아무 흔적도 남기지 않습니다.
 - **OpenAI 경로는 실행하지 않았습니다**(OpenAI 키 없음). Responses, Chat Completions, Codex, Copilot은 Langfuse 문서에 있지만 여기서 시험하지 않았습니다.
+- **LiteLLM, 실행하지 않은 것:** Enterprise 기능(5명 넘는 SSO, 감사 로그, 키별 guardrail), Redis와 프록시 여러 대, DB에 저장한 자격 증명, 사용자·팀 예산, 이미지의 cosign 서명(cosign 미설치), LiteLLM을 Langfuse 게이트웨이 앞에 연결하는 구성.
 - **실행하지 않은 것:** Helm 차트, 게이트웨이 앞의 TLS, 게이트웨이 replica 두 개 이상, 메모리 예산과 부하 시 `503`, 긴 스트림과 graceful shutdown, Claude Desktop, Claude Code 턴 묶기(`CLAUDE_CODE_PROPAGATE_TRACEPARENT`), `NONE` 모드, Langfuse Cloud와 그 rate limit.
 - **알려진 베타 비용 버그**(Langfuse 목록, 여기서 재현하지 않음): 실패하거나 취소된 OpenAI 호출의 추정 비용, OpenAI 캐시 쓰기 $0, Anthropic 1시간 캐시 쓰기를 5분 요율로 계산. 5 MiB가 넘는 입력은 저장되지 않고, 1 MiB가 넘는 출력은 기록에서 잘립니다.
 - **Analytics는 지워진 키의 이름을 잃습니다.** 폐기되거나 역할 변경으로 지워진 키는 *Cost by gateway key*에 ID로만 나옵니다. 이름은 각 generation의 `langfuse.gateway.api_key.name`에 남아 있으므로 ClickHouse 쿼리에서는 보입니다.
@@ -312,4 +405,4 @@ Alice의 0.0398 USD는 거의 전부 Claude Code 호출 한 번입니다. Claude
 
 ### 출처(모두 2026-11-04 확인)
 
-위 English 절의 목록과 같습니다: Langfuse AI Gateway 문서(개요, 개념, 관리자 설정, 첫 요청, 키, 모델 관리, tracing, REST API, Analytics, 알려진 한계, 셀프호스팅, Claude Code), 릴리스 v4.75.0과 `langfuse/ai-gateway` 이미지, v4.75.0 소스 파일.
+위 English 절의 목록과 같습니다: LiteLLM 문서(가상 키, 예산·rate limit, 최종 사용자, fallback, Claude Code, OpenTelemetry v2, 감사 로그, 이미지 보안, 2026-10-21 사고 보고, 보안 공지, 릴리스; 2026-11-05 확인), Langfuse AI Gateway 문서(개요, 개념, 관리자 설정, 첫 요청, 키, 모델 관리, tracing, REST API, Analytics, 알려진 한계, 셀프호스팅, Claude Code), 릴리스 v4.75.0과 `langfuse/ai-gateway` 이미지, v4.75.0 소스 파일.

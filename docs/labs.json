@@ -1,6 +1,6 @@
 {
   "repo": "langfuse-hols",
-  "generated": "2026-11-02T08:55:54Z",
+  "generated": "2026-11-05T04:18:31Z",
   "labs": [
     {
       "path": "labs/v3/langfuse-ee",
@@ -30,6 +30,22 @@
       ],
       "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v3/langfuse-eval/README.md#한국어",
       "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v3/langfuse-eval/README.md#english"
+    },
+    {
+      "path": "labs/v4/ai-gateway",
+      "title_ko": "Langfuse AI Gateway(베타) 셀프호스팅 실습과 LiteLLM Proxy 비교",
+      "summary_ko": "Langfuse 4.75.0 옆에 AI Gateway를 띄워 실제 Anthropic 호출로 키·비용·통제를 확인하고, 같은 시나리오로 LiteLLM Proxy와 비교합니다. Helm, TLS, replica 2개까지.",
+      "title_en": "Langfuse AI Gateway (beta) self-hosted, compared with LiteLLM Proxy",
+      "summary_en": "The AI Gateway next to Langfuse 4.75.0 with real Anthropic calls: keys, cost per user, controls; the same scenarios on LiteLLM Proxy; the gateway on Helm with TLS and two replicas.",
+      "category": "langfuse",
+      "tags": [
+        "langfuse",
+        "llm",
+        "ai-agents",
+        "opentelemetry"
+      ],
+      "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/ai-gateway/README.md#한국어",
+      "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/ai-gateway/README.md#english"
     },
     {
       "path": "labs/v4/langfuse-ee",

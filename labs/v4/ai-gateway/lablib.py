@@ -25,12 +25,20 @@ import httpx
 LAB_DIR = Path(__file__).resolve().parent
 REPO = LAB_DIR.parents[2]
 RUN_DIR = LAB_DIR / ".run"
-STATE = RUN_DIR / "state.json"
+# Steps 13–15 (Helm on kind, #91) point the same code at another instance: LAB_WEB and LAB_GATEWAY
+# replace the URLs, LAB_STATE the state file, LAB_CA adds a CA bundle for the self-signed TLS.
+STATE = RUN_DIR / os.environ.get("LAB_STATE", "state.json")
 
-WEB = "http://localhost:13000"
-GATEWAY = "http://localhost:18480"
+WEB = os.environ.get("LAB_WEB", "http://localhost:13000")
+GATEWAY = os.environ.get("LAB_GATEWAY", "http://localhost:18480")
 CLICKHOUSE = "http://localhost:18423"
 LITELLM = "http://localhost:18440"
+if os.environ.get("LAB_CA"):
+    import ssl
+
+    VERIFY: ssl.SSLContext | bool = ssl.create_default_context(cafile=os.environ["LAB_CA"])
+else:
+    VERIFY = True
 PROJECT = "lf-gateway-lab"
 CONNECTION = "anthropic-lab"  # the credential name becomes the model-ID prefix: anthropic-lab:<model>
 MODEL = "claude-haiku-4-5"  # cheapest current Anthropic model; the provider returns the dated ID
@@ -97,7 +105,7 @@ def _superjson(value: dict) -> dict:
 class Session:
     def __init__(self, email: str, password: str):
         self.email = email
-        self.http = httpx.Client(base_url=WEB, timeout=90, follow_redirects=False)
+        self.http = httpx.Client(base_url=WEB, timeout=90, follow_redirects=False, verify=VERIFY)
         csrf = self.http.get("/api/auth/csrf").json()["csrfToken"]
         self.http.post(
             "/api/auth/callback/credentials",

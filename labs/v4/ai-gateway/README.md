@@ -10,6 +10,8 @@
 
 **Compared with LiteLLM Proxy, verified end to end on 2026-11-05** in a second run from deleted volumes: 01–05 again (05: 34 PASS, 2 INFO) and steps 07–10 with **LiteLLM Proxy v1.108.0** (`ghcr.io/berriai/litellm:v1.108.0`) on the same Langfuse project, Anthropic key, people and key metadata: [10-compare-check.py](10-compare-check.py) passed 17 checks (7 INFO); with an injected fault (a service forgets `x-litellm-end-user-id`, an app forgets `traceparent`) 2 of them failed. 06 was not re-run in the second run. Model calls of the second run: gateway 0.040 USD, LiteLLM 0.014 USD. See [Compared with LiteLLM Proxy](#compared-with-litellm-proxy).
 
+**Follow-ups verified on 2026-11-05** ([#91](https://github.com/litkhai/langfuse-hols/issues/91)): LiteLLM in front of the gateway ([12-chain-check.py](12-chain-check.py) 6 PASS, 2 INFO; a wrong upstream key fails 5), the gateway through the Helm chart 2.2.3 on kind with Traefik TLS and two replicas ([14-helm-check.py](14-helm-check.py) 15 PASS; one replica fails 2), and the cosign signature of the LiteLLM image (verified; the rotated-out key does not verify). Model calls of the follow-ups: about 0.27 USD at Claude Haiku 4.5 list prices, most of it two 8,000-token streams and four Claude Code calls. See [LiteLLM in front of the gateway](#litellm-in-front-of-the-gateway) and [On Helm with TLS and two replicas](#on-helm-with-tls-and-two-replicas).
+
 The gateway went into public beta with Langfuse v4.75.0 (released 2026-11-04). Apps and coding agents send their OpenAI or Anthropic requests to the gateway with a gateway key; the gateway swaps in the organization's provider key, forwards the request unchanged, and records the call as a Langfuse generation.
 
 ### The short answer
@@ -56,6 +58,12 @@ flowchart LR
 | [08-litellm-setup.py](08-litellm-setup.py) | The same people and keys on LiteLLM: internal users alice and bob, team `payments`, keys `alice-laptop`, `bob-laptop`, service account key `checkout-service`, same metadata |
 | [09-litellm-calls.py](09-litellm-calls.py) | The seven calls against LiteLLM (l1–l7), then model restriction, expiry, key delete, user delete, spend cap, rate limit, fallback, and latency against a direct call. `FAULT=1` injects the fault |
 | [10-compare-check.py](10-compare-check.py) | 17 checks on LiteLLM's side (its generations in Langfuse, its database and container) plus INFO rows for the comparison |
+| [11-chain.py](11-chain.py) · [12-chain-check.py](12-chain-check.py) | LiteLLM's model `haiku-via-gateway` calls the gateway with a gateway service account key; plain call, client headers, spend cap, fallback; 12 pairs each LiteLLM generation with the gateway's and checks both |
+| [helm/](helm/) | `kind-config.yaml` (one node, 443 → 127.0.0.1:18443), `values.yaml` (chart values: gateway on, 2 replicas, Traefik Ingress with TLS, small resources), `traefik-values.yaml` (620 s timeouts) |
+| [13-helm-up.sh](13-helm-up.sh) | kind cluster `lf-gateway-helm`, cert-manager v1.20.2, clickhouse-operator 0.0.8, Traefik 42.3.0, a self-signed CA, secrets into `.run/`, chart 2.2.3; restarts the worker once if it missed the default model prices |
+| [14-helm-check.py](14-helm-check.py) | 15 checks: what the chart deployed, TLS with and without the CA, SDK and Claude Code over HTTPS, pricing, a stream whose pod is deleted, a rolling restart, a pod deleted under traffic. `FAULT=1` runs on one replica |
+| [15-helm-down.sh](15-helm-down.sh) | Deletes the kind cluster; `--purge` also removes its secrets, CA and state in `.run/` |
+| [lab.yaml](lab.yaml) | Publishing keys: a card on the notes site (`web: true`, owner's choice 2026-11-05) |
 | [99-down.sh](99-down.sh) | Stops the project; `--purge` also removes its volumes and `.run/` |
 
 | Scenario | Key | What it shows |
@@ -83,6 +91,11 @@ labs/v4/ai-gateway/07-litellm-up.sh                  # LiteLLM comparison, after
 .venv-v4/bin/python labs/v4/ai-gateway/08-litellm-setup.py
 .venv-v4/bin/python labs/v4/ai-gateway/09-litellm-calls.py
 .venv-v4/bin/python labs/v4/ai-gateway/10-compare-check.py
+.venv-v4/bin/python labs/v4/ai-gateway/11-chain.py      # LiteLLM in front of the gateway, after 07–08
+.venv-v4/bin/python labs/v4/ai-gateway/12-chain-check.py
+labs/v4/ai-gateway/13-helm-up.sh                     # Helm on kind; independent of the compose project
+.venv-v4/bin/python labs/v4/ai-gateway/14-helm-check.py
+labs/v4/ai-gateway/15-helm-down.sh                   # --purge also removes the Helm secrets and CA
 labs/v4/ai-gateway/99-down.sh                        # --purge removes the volumes and .run/
 ```
 
@@ -185,14 +198,51 @@ Both gateways were faster than the direct call because they reuse their upstream
 - Both, LiteLLM in front with `langfuse_otel`: caps, limits and fallbacks from LiteLLM, generations in Langfuse; but identity sits in metadata (filter on `user_api_key_*`, the Users view stays empty) and the generation is not nested under the app span.
 - Pin LiteLLM by version or digest and verify its cosign signature: on 2026-10-21 its release pipeline was compromised, and credential-stealing malware shipped as `litellm==1.107.0` on PyPI for about 2 hours and in the Docker tags `v1.107.0`, `latest`, `main-latest` and `main-stable` for about 2.5 hours (LiteLLM's incident report). Its repository published 18 GitHub security advisories in 2026 up to 2026-11-05, 5 of them critical; the Langfuse repository published 2. Counts of published advisories are not a security rating; they say how often to plan upgrades.
 
+### LiteLLM in front of the gateway
+
+LiteLLM's model `haiku-via-gateway` points its Anthropic route at the gateway (`api_base: http://ai-gateway:8080/anthropic`; LiteLLM appends `/v1/messages`) with a gateway service account key `litellm-upstream`; clients keep their LiteLLM virtual keys. Measured on 2026-11-05:
+
+| Question | Result |
+|---|---|
+| Does it answer | `200`; the response `model` is LiteLLM's name `haiku-via-gateway` |
+| LiteLLM's spend cap | the second call on a 0.00004 USD key got `422`; the refused call never reached the gateway |
+| Fallback `haiku-broken-chain` → `haiku-via-gateway` | `200`, `x-litellm-attempted-fallbacks: 1`, recorded by the gateway |
+| Records per call | **two**, LiteLLM's and the gateway's, in separate traces (LiteLLM sends no `traceparent` upstream), so the project counts the cost twice |
+| Who the gateway sees | one identity for every caller: the key `litellm-upstream` (user source `api_key_name`) |
+| Client headers | `langfuse-user-id` is not forwarded (LiteLLM forwards `x-` headers only); `x-pass-langfuse-user-id` and `x-pass-langfuse-tags` did not arrive on `/v1/messages` either |
+| A wrong upstream key | the first call `401`; LiteLLM then cooled the deployment down and answered `429 No deployments available` (fault run) |
+
+**What follows from it** (*recommendation*): chain them only when you need LiteLLM's caps and fallbacks and also want the provider key out of LiteLLM. Then turn off one of the two Langfuse exports, or send them to different projects, and attribute people from LiteLLM's metadata: the gateway sees only LiteLLM's key.
+
+### On Helm with TLS and two replicas
+
+The supported self-hosted path, on a local kind cluster: kind 0.33.0 (one node), cert-manager v1.20.2 and clickhouse-operator 0.0.8 (the chart's ClickHouse runs on the operator), Traefik 42.3.0 (v3.7.17) as the TLS front, the langfuse chart 2.2.3 (Langfuse 4.75.0) with [helm/values.yaml](helm/values.yaml): `langfuse.gateway.enabled: true`, `replicas: 2`, an Ingress with TLS on `gateway.127.0.0.1.nip.io`. Langfuse's page shows ingress-nginx annotations; ingress-nginx was retired in March 2026 (Kubernetes' announcement; the repository is archived, last push 2026-03-23), so Traefik takes the long timeouts on its entrypoint (`620s`) and does not buffer responses. Measured on 2026-11-05, from a deleted cluster:
+
+| Check | Result |
+|---|---|
+| What the chart deploys | gateway Deployment with 2 replicas, Service, Ingress, PDB `maxUnavailable: 1`, `terminationGracePeriodSeconds: 350`; web gets `LANGFUSE_AI_GATEWAY_DEPLOYED=true` and the public URL; the gateway reaches web on its in-cluster Service over http (`LANGFUSE_AI_GATEWAY_ALLOW_HTTP_WEB_URL=true`) |
+| TLS | `/health` with the lab CA `200`; without it `CERTIFICATE_VERIFY_FAILED` |
+| Clients over HTTPS | Anthropic SDK with the CA (anthropic 1.12.1 runs on httpx2: pass `anthropic.DefaultHttpxClient(verify=…)`; an `httpx.Client` is refused); `claude -p` fails without `NODE_EXTRA_CA_CERTS` and works with it |
+| The pod serving a stream is deleted | the stream ran 49.5 s more and finished (8,000 tokens); the pod logged `gateway draining`; the generation was recorded |
+| Rolling restart | new pods ready after 16.4 s, old pods gone after 28.9 s |
+| A pod deleted under traffic | 20 of 20 calls `200` |
+| One replica (fault run) | deleting the only pod: 14 of 20 calls `503` until the new pod was ready |
+| Pricing on a first install | the worker started before Postgres answered, logged `Error upserting default model prices` and did not retry: 87 model rows, none for `claude-haiku-4-5`, every cost 0. A worker restart loaded them (188 rows) and costs appeared; 13-helm-up.sh now does that. Seen on both fresh installs |
+
+A short stream finishes inside the 10 s `preStop` sleep, before the pod even gets `SIGTERM`; the 8,000-token stream outlived it and was carried by the drain.
+
+### Image signature (LiteLLM)
+
+`cosign verify` (cosign v3.1.4) of `ghcr.io/berriai/litellm@sha256:c560d317…` against `cosign.pub` at LiteLLM commit `e82a3c6`: verified. The key file's SHA-256 equals the fingerprint LiteLLM's docs publish (`e3fe3e08…`). Negative control: the key from before the October rotation (commit `0112e53`) gives `no matching signatures`.
+
 ### Gaps
 
 - **Allowlists match strings, not models.** The provider's model list gives dated IDs for older models (`claude-haiku-4-5-20251001`) and undated ones for newer models. Clients that send an alias get `403` once a credential has an explicit list, so allow the IDs your clients actually send, or tell clients to send the listed ID.
 - **Losing gateway access deletes keys.** A role change to VIEWER (or NONE) removes the person's user keys at once. Restoring the role does not restore them. Use service account keys for anything that must survive membership changes.
 - **Audit records need the Enterprise licence on a self-hosted instance** (`isAuditLogEnabled`: Cloud always, self-hosted only with the `audit-logs` entitlement). Without it, key creation and revocation leave no trace.
 - **The OpenAI route was not run** (no OpenAI key). Responses, Chat Completions, Codex and Copilot are documented by Langfuse but not tested here.
-- **LiteLLM, not run:** its Enterprise features (SSO beyond 5 users, audit logs, per-key guardrails), Redis and more than one proxy instance, credentials stored in its database, budgets on users and teams, the image's cosign signature (cosign was not installed), chaining LiteLLM in front of the Langfuse gateway.
-- **Not run:** the Helm chart, TLS in front of the gateway, more than one gateway replica, the memory budget and `503` under load, long streams and graceful shutdown, Claude Desktop, turn grouping for Claude Code (`CLAUDE_CODE_PROPAGATE_TRACEPARENT`), `NONE` mode, Langfuse Cloud and its rate limits.
+- **LiteLLM, not run:** its Enterprise features (SSO beyond 5 users, audit logs, per-key guardrails), Redis and more than one proxy instance, credentials stored in its database, budgets on users and teams, long streams and failures on LiteLLM's side.
+- **Not run:** the Helm chart on a cloud cluster, the HPA, certificates from cert-manager, the memory budget and `503` under load, Claude Desktop, turn grouping for Claude Code (`CLAUDE_CODE_PROPAGATE_TRACEPARENT`), `NONE` mode, Langfuse Cloud and its rate limits.
 - **Known beta cost bugs** (Langfuse's list, not reproduced here): estimated cost on failed or cancelled OpenAI calls, OpenAI cache writes at $0, Anthropic 1-hour cache writes at the 5-minute rate. Input over 5 MiB is not stored; output over 1 MiB is cut in the record.
 - **Analytics loses the names of deleted keys.** Keys that were revoked or removed by a role change show up as raw IDs in *Cost by gateway key*; the name stays in each generation's `langfuse.gateway.api_key.name`, so a ClickHouse query still has it.
 - **Key metadata is fixed at creation.** To change `team` or `cost_center`, issue a new key and revoke the old one.
@@ -202,6 +252,7 @@ Both gateways were faster than the direct call because they reuse their upstream
 ### Sources (all read 2026-11-04)
 
 - Langfuse: [AI Gateway overview](https://langfuse.com/docs/gateway/overview) · [Concepts](https://langfuse.com/docs/gateway/concepts) · [Set up as an admin](https://langfuse.com/docs/gateway/get-started/admin-setup) · [Send your first request](https://langfuse.com/docs/gateway/get-started/first-request) · [Authentication (keys)](https://langfuse.com/docs/gateway/features/api-keys) · [Model management](https://langfuse.com/docs/gateway/features/models) · [Tracing](https://langfuse.com/docs/gateway/features/tracing) · [REST API](https://langfuse.com/docs/gateway/features/rest-api) · [Analytics](https://langfuse.com/docs/gateway/features/analytics) · [Known limitations](https://langfuse.com/faq/all/ai-gateway-known-limitations) · [Self-hosting the AI Gateway](https://langfuse.com/self-hosting/configuration/ai-gateway) · [Claude Code with the gateway](https://langfuse.com/integrations/developer-tools/claude-code-gateway)
+- Helm and the TLS front (read 2026-11-05): [langfuse chart](https://github.com/langfuse/langfuse-k8s) 2.2.3 values · [Traefik chart](https://github.com/traefik/traefik-helm-chart) 42.3.0 · [Ingress NGINX retirement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) and the [archived repository](https://github.com/kubernetes/ingress-nginx) · [LiteLLM: forward client headers](https://docs.litellm.ai/docs/proxy/forward_client_headers)
 - LiteLLM (read 2026-11-05): [docs index](https://docs.litellm.ai/llms.txt) · [Virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys) · [Budgets, rate limits](https://docs.litellm.ai/docs/proxy/users) · [Customers / end users](https://docs.litellm.ai/docs/proxy/customers) · [Fallbacks](https://docs.litellm.ai/docs/proxy/reliability) · [Claude Code](https://docs.litellm.ai/docs/proxy/client_setup/claude_code) · [OpenTelemetry v2, `langfuse_otel`](https://docs.litellm.ai/docs/observability/opentelemetry_v2) · [Audit logs](https://docs.litellm.ai/docs/proxy/audit_logs) · [Docker image security](https://docs.litellm.ai/docs/proxy/docker_image_security) · [Oct 21, 2026 incident](https://docs.litellm.ai/blog/security-incident-oct-21-2026) · [security advisories](https://github.com/BerriAI/litellm/security/advisories) · [releases](https://github.com/BerriAI/litellm/releases) (v1.108.0, 2026-11-04)
 - Release and image: [langfuse v4.75.0](https://github.com/langfuse/langfuse/releases/tag/v4.75.0) (2026-11-04) · [`langfuse/ai-gateway` on Docker Hub](https://hub.docker.com/r/langfuse/ai-gateway) (tag 4.75.0)
 - Source read at v4.75.0: `ai-gateway/src/resolution/contracts.rs` (official provider origins), `ai-gateway/src/providers/mod.rs` (origin override only in tests), `web/src/features/ai-gateway/server/router.ts` (tRPC control plane), `web/src/features/ai-gateway/fns/isGatewayModelAllowed.ts` (exact match), `web/src/features/ai-gateway/server/apiKey/{gatewayApiKeyService,userBoundApiKeys}.ts` (revoke, delete on role change), `web/src/features/ai-gateway/server/availability.ts`, `web/src/features/audit-logs/isAuditLogEnabled.ts`
@@ -213,6 +264,8 @@ Both gateways were faster than the direct call because they reuse their upstream
 **2026-11-05 처음부터 끝까지 검증.** 대상은 **Langfuse v4.75.0 web·worker / `langfuse/ai-gateway` 4.75.0 / SDK 4.17.0 / CH 26.8.22.13**(`_base/` compose 파일 위의 별도 compose 프로젝트, `events_only` 모드)이고, Claude Haiku 4.5(`claude-haiku-4-5-20251001`)로 **Anthropic API를 실제로 호출**했습니다(Anthropic Python SDK 1.12.1, Claude Code 2.1.220, Docker 29.9.2, Compose v5.6.1, Python 3.12.14). [05-check.py](05-check.py)는 34개 검사를 통과했습니다(INFO 2개). 결함을 넣으면(서비스가 `langfuse-user-id`를, 앱이 `traceparent`를 빠뜨림) 그중 3개가 실패합니다. [06-ee-audit.sh](06-ee-audit.sh)는 라이선스 없이는 감사 기록이 없고, Enterprise 라이선스가 있으면 Postgres `audit_logs`에 `create`와 `delete`가 남는 것을 확인했습니다. 로그: [lab-output.md](lab-output.md). 이 실행의 모델 호출 비용은 Langfuse 계산으로 0.04006 USD였습니다(generation 16개, 그중 0.0397은 Claude Code 호출 한 번).
 
 **LiteLLM Proxy와의 비교도 2026-11-05 처음부터 끝까지 검증했습니다.** 볼륨을 지우고 다시 돌린 두 번째 실행에서 01–05를 다시 돌렸고(05: 34 PASS, INFO 2개), 07–10단계로 **LiteLLM Proxy v1.108.0**(`ghcr.io/berriai/litellm:v1.108.0`)을 같은 Langfuse 프로젝트, Anthropic 키, 사람, 키 metadata로 돌렸습니다. [10-compare-check.py](10-compare-check.py)는 17개 검사를 통과했습니다(INFO 7개). 결함을 넣으면(서비스가 `x-litellm-end-user-id`를, 앱이 `traceparent`를 빠뜨림) 그중 2개가 실패합니다. 두 번째 실행에서 06은 다시 돌리지 않았습니다. 두 번째 실행의 모델 호출 비용: 게이트웨이 0.040 USD, LiteLLM 0.014 USD. [LiteLLM Proxy와 비교](#litellm-proxy와-비교)를 보세요.
+
+**후속 확인도 2026-11-05 검증했습니다**([#91](https://github.com/litkhai/langfuse-hols/issues/91)). LiteLLM을 게이트웨이 앞에 잇는 구성([12-chain-check.py](12-chain-check.py) 6 PASS, INFO 2개, 위쪽 키를 틀리게 넣으면 5개 실패), kind 위 Helm 차트 2.2.3과 Traefik TLS, replica 2개인 게이트웨이([14-helm-check.py](14-helm-check.py) 15 PASS, replica 1개면 2개 실패), LiteLLM 이미지의 cosign 서명(검증됨, 교체 전 키로는 검증 안 됨)입니다. 후속 확인의 모델 호출 비용은 Claude Haiku 4.5 정가 기준 약 0.27 USD로, 대부분 8,000토큰 스트림 두 번과 Claude Code 호출 네 번입니다. [LiteLLM을 게이트웨이 앞에 잇기](#litellm을-게이트웨이-앞에-잇기)와 [Helm, TLS, replica 2개](#helm-tls-replica-2개)를 보세요.
 
 게이트웨이는 Langfuse v4.75.0(2026-11-04 출시)과 함께 공개 베타가 됐습니다. 앱과 코딩 에이전트가 OpenAI나 Anthropic 요청을 게이트웨이 키와 함께 게이트웨이로 보내면, 게이트웨이가 조직의 공급자 키로 바꿔 끼워 요청을 그대로 넘기고, 그 호출을 Langfuse generation으로 기록합니다.
 
@@ -260,6 +313,12 @@ flowchart LR
 | [08-litellm-setup.py](08-litellm-setup.py) | LiteLLM에 같은 사람과 키: 내부 사용자 alice·bob, 팀 `payments`, 키 `alice-laptop`, `bob-laptop`, 서비스 계정 키 `checkout-service`, 같은 metadata |
 | [09-litellm-calls.py](09-litellm-calls.py) | LiteLLM으로 같은 호출 7개(l1–l7), 이어서 모델 제한, 만료, 키 삭제, 사용자 삭제, 예산 상한, rate limit, fallback, 직접 호출과의 지연 비교. `FAULT=1`은 결함 주입 |
 | [10-compare-check.py](10-compare-check.py) | LiteLLM 쪽 17개 검사(Langfuse에 들어간 generation, LiteLLM DB와 컨테이너)와 비교용 INFO 행 |
+| [11-chain.py](11-chain.py) · [12-chain-check.py](12-chain-check.py) | LiteLLM의 모델 `haiku-via-gateway`가 게이트웨이 서비스 계정 키로 게이트웨이를 부름. 일반 호출, 클라이언트 헤더, 예산 상한, fallback. 12는 LiteLLM generation과 게이트웨이 generation을 짝지어 양쪽을 검사 |
+| [helm/](helm/) | `kind-config.yaml`(노드 하나, 443 → 127.0.0.1:18443), `values.yaml`(차트 값: 게이트웨이 켬, replica 2개, TLS Traefik Ingress, 작은 자원), `traefik-values.yaml`(620초 타임아웃) |
+| [13-helm-up.sh](13-helm-up.sh) | kind 클러스터 `lf-gateway-helm`, cert-manager v1.20.2, clickhouse-operator 0.0.8, Traefik 42.3.0, 자체 서명 CA, `.run/`의 비밀값, 차트 2.2.3. worker가 기본 모델 가격을 못 읽었으면 한 번 재시작 |
+| [14-helm-check.py](14-helm-check.py) | 15개 검사: 차트가 배포한 것, CA 있이·없이 TLS, HTTPS로 SDK와 Claude Code, 가격 계산, 처리 중인 파드를 지운 스트림, rolling restart, 트래픽 중 파드 삭제. `FAULT=1`은 replica 1개로 |
+| [15-helm-down.sh](15-helm-down.sh) | kind 클러스터를 지웁니다. `--purge`는 `.run/`의 비밀값, CA, 상태까지 |
+| [lab.yaml](lab.yaml) | 게시 키: notes 사이트의 실습 카드(`web: true`, 2026-11-05 소유자 결정) |
 | [99-down.sh](99-down.sh) | 프로젝트를 멈춥니다. `--purge`는 볼륨과 `.run/`까지 지웁니다 |
 
 | 시나리오 | 키 | 보여 주는 것 |
@@ -287,6 +346,11 @@ labs/v4/ai-gateway/07-litellm-up.sh                  # LiteLLM 비교, 01–05 �
 .venv-v4/bin/python labs/v4/ai-gateway/08-litellm-setup.py
 .venv-v4/bin/python labs/v4/ai-gateway/09-litellm-calls.py
 .venv-v4/bin/python labs/v4/ai-gateway/10-compare-check.py
+.venv-v4/bin/python labs/v4/ai-gateway/11-chain.py      # LiteLLM을 게이트웨이 앞에, 07–08 다음에
+.venv-v4/bin/python labs/v4/ai-gateway/12-chain-check.py
+labs/v4/ai-gateway/13-helm-up.sh                     # kind 위 Helm, compose 프로젝트와 무관
+.venv-v4/bin/python labs/v4/ai-gateway/14-helm-check.py
+labs/v4/ai-gateway/15-helm-down.sh                   # --purge는 Helm 비밀값과 CA까지 삭제
 labs/v4/ai-gateway/99-down.sh                        # --purge는 볼륨과 .run/까지 삭제
 ```
 
@@ -389,14 +453,51 @@ Alice의 0.0398 USD는 거의 전부 Claude Code 호출 한 번입니다. Claude
 - 둘 다, 즉 LiteLLM을 앞에 두고 `langfuse_otel`로 보내면: 상한·제한·fallback은 LiteLLM이, generation은 Langfuse가 갖습니다. 다만 사람 정보가 metadata에만 있고(`user_api_key_*`로 필터, Users 화면은 비어 있음) generation이 앱 span 아래에 들어가지 않습니다.
 - LiteLLM은 버전이나 digest로 고정하고 cosign 서명을 확인하세요. 2026-10-21 릴리스 파이프라인이 뚫려, 자격 증명을 훔치는 악성 코드가 PyPI의 `litellm==1.107.0`으로 약 2시간, Docker 태그 `v1.107.0`, `latest`, `main-latest`, `main-stable`로 약 2.5시간 배포됐습니다(LiteLLM 사고 보고). 이 저장소는 2026년(2026-11-05까지) GitHub 보안 공지를 18건 냈고 그중 5건이 critical입니다. Langfuse 저장소는 2건입니다. 공지 건수는 보안 등급이 아니라 업그레이드를 얼마나 자주 계획해야 하는지를 말해 줍니다.
 
+### LiteLLM을 게이트웨이 앞에 잇기
+
+LiteLLM의 모델 `haiku-via-gateway`가 Anthropic 경로를 게이트웨이로 보냅니다(`api_base: http://ai-gateway:8080/anthropic`, LiteLLM이 `/v1/messages`를 붙임). 키는 게이트웨이의 서비스 계정 키 `litellm-upstream`이고, 클라이언트는 LiteLLM 가상 키를 그대로 씁니다. 2026-11-05 측정:
+
+| 질문 | 결과 |
+|---|---|
+| 응답이 오나 | `200`. 응답의 `model`은 LiteLLM의 이름 `haiku-via-gateway` |
+| LiteLLM 예산 상한 | 0.00004 USD 키의 두 번째 호출이 `422`. 막힌 호출은 게이트웨이까지 가지 않음 |
+| Fallback `haiku-broken-chain` → `haiku-via-gateway` | `200`, `x-litellm-attempted-fallbacks: 1`, 게이트웨이가 기록 |
+| 호출당 기록 | **두 개**. LiteLLM의 것과 게이트웨이의 것이 서로 다른 trace에 있음(LiteLLM이 위쪽으로 `traceparent`를 보내지 않음). 프로젝트 비용이 두 번 잡힘 |
+| 게이트웨이가 보는 사람 | 모든 호출이 한 사람: 키 `litellm-upstream`(사용자 출처 `api_key_name`) |
+| 클라이언트 헤더 | `langfuse-user-id`는 전달되지 않음(LiteLLM은 `x-` 헤더만 넘김). `x-pass-langfuse-user-id`, `x-pass-langfuse-tags`도 `/v1/messages`에서는 도착하지 않음 |
+| 위쪽 키가 틀리면 | 첫 호출 `401`. 이후 LiteLLM이 그 배포를 쉬게 해서(cooldown) `429 No deployments available`(결함 실행) |
+
+**정리** (*권장*): LiteLLM의 상한·fallback이 필요하면서 공급자 키도 LiteLLM 밖에 두고 싶을 때만 이으세요. 그때는 Langfuse로 보내는 쪽을 하나만 켜거나 서로 다른 프로젝트로 나누고, 사람별 분석은 LiteLLM의 metadata로 하세요. 게이트웨이에는 LiteLLM의 키 하나만 보입니다.
+
+### Helm, TLS, replica 2개
+
+지원하는 셀프호스팅 경로를 로컬 kind 클러스터에서 돌렸습니다. kind 0.33.0(노드 하나), cert-manager v1.20.2와 clickhouse-operator 0.0.8(차트의 ClickHouse는 operator 위에서 돌아감), TLS 앞단 Traefik 42.3.0(v3.7.17), langfuse 차트 2.2.3(Langfuse 4.75.0)과 [helm/values.yaml](helm/values.yaml): `langfuse.gateway.enabled: true`, `replicas: 2`, `gateway.127.0.0.1.nip.io`에 TLS Ingress. Langfuse 페이지는 ingress-nginx 어노테이션을 예로 들지만 ingress-nginx는 2026년 3월에 퇴역했으므로(Kubernetes 공지, 저장소는 archive 상태이고 마지막 push 2026-03-23) Traefik을 썼습니다. Traefik은 응답을 버퍼링하지 않고, 긴 타임아웃(`620s`)은 entrypoint에 둡니다. 2026-11-05, 지운 클러스터에서 처음부터 측정:
+
+| 검사 | 결과 |
+|---|---|
+| 차트가 배포하는 것 | replica 2개인 게이트웨이 Deployment, Service, Ingress, PDB `maxUnavailable: 1`, `terminationGracePeriodSeconds: 350`. web에는 `LANGFUSE_AI_GATEWAY_DEPLOYED=true`와 공개 URL. 게이트웨이는 클러스터 안 Service로 web에 http로 접속(`LANGFUSE_AI_GATEWAY_ALLOW_HTTP_WEB_URL=true`) |
+| TLS | 실습 CA로 `/health` `200`, CA 없이는 `CERTIFICATE_VERIFY_FAILED` |
+| HTTPS 클라이언트 | CA를 준 Anthropic SDK(anthropic 1.12.1은 httpx2 위에서 돌아서 `anthropic.DefaultHttpxClient(verify=…)`로 넘겨야 하고 `httpx.Client`는 거부됨). `claude -p`는 `NODE_EXTRA_CA_CERTS` 없이는 실패, 있으면 동작 |
+| 스트림을 처리하던 파드를 지움 | 스트림이 49.5초 더 이어져 끝까지 나옴(8,000토큰). 그 파드가 `gateway draining`을 기록. generation도 기록됨 |
+| Rolling restart | 새 파드 준비 16.4초, 이전 파드가 모두 사라지기까지 28.9초 |
+| 트래픽 중 파드 하나 삭제 | 20건 중 20건 `200` |
+| replica 1개(결함 실행) | 하나뿐인 파드를 지우자 새 파드가 준비될 때까지 20건 중 14건 `503` |
+| 첫 설치의 가격 계산 | worker가 Postgres보다 먼저 떠서 `Error upserting default model prices`를 남기고 다시 시도하지 않음: 모델 행 87개, `claude-haiku-4-5` 없음, 모든 비용 0. worker를 재시작하자 188개가 되고 비용이 붙음. 13-helm-up.sh가 이제 이 재시작을 함. 처음부터 설치한 두 번 모두 발생 |
+
+짧은 스트림은 파드가 `SIGTERM`을 받기도 전에, 10초 `preStop` 대기 안에 끝납니다. 8,000토큰 스트림은 그보다 길어서 drain 단계가 받아 냈습니다.
+
+### 이미지 서명(LiteLLM)
+
+`ghcr.io/berriai/litellm@sha256:c560d317…`을 LiteLLM 커밋 `e82a3c6`의 `cosign.pub`로 `cosign verify`(cosign v3.1.4)했고, 검증됐습니다. 키 파일의 SHA-256은 LiteLLM 문서에 적힌 지문(`e3fe3e08…`)과 같습니다. 음성 대조: 10월 교체 전의 키(커밋 `0112e53`)로는 `no matching signatures`입니다.
+
 ### 한계
 
 - **허용 목록은 모델이 아니라 문자열을 맞춥니다.** 공급자의 모델 목록은 오래된 모델에는 날짜가 붙은 ID(`claude-haiku-4-5-20251001`), 새 모델에는 날짜 없는 ID를 줍니다. 자격 증명에 명시적인 목록이 생기면 별칭을 보내는 클라이언트는 `403`을 받습니다. 클라이언트가 실제로 보내는 ID를 허용하거나, 목록에 있는 ID를 보내게 하세요.
 - **게이트웨이 권한을 잃으면 키가 지워집니다.** VIEWER(또는 NONE)로 바꾸면 그 사람의 사용자 키가 바로 삭제되고, 역할을 되돌려도 복구되지 않습니다. 멤버십 변화에도 살아 있어야 하는 것은 서비스 계정 키로 쓰세요.
 - **셀프호스팅에서 감사 기록에는 Enterprise 라이선스가 필요합니다**(`isAuditLogEnabled`: Cloud는 항상, 셀프호스팅은 `audit-logs` entitlement가 있을 때만). 없으면 키 생성과 폐기가 아무 흔적도 남기지 않습니다.
 - **OpenAI 경로는 실행하지 않았습니다**(OpenAI 키 없음). Responses, Chat Completions, Codex, Copilot은 Langfuse 문서에 있지만 여기서 시험하지 않았습니다.
-- **LiteLLM, 실행하지 않은 것:** Enterprise 기능(5명 넘는 SSO, 감사 로그, 키별 guardrail), Redis와 프록시 여러 대, DB에 저장한 자격 증명, 사용자·팀 예산, 이미지의 cosign 서명(cosign 미설치), LiteLLM을 Langfuse 게이트웨이 앞에 연결하는 구성.
-- **실행하지 않은 것:** Helm 차트, 게이트웨이 앞의 TLS, 게이트웨이 replica 두 개 이상, 메모리 예산과 부하 시 `503`, 긴 스트림과 graceful shutdown, Claude Desktop, Claude Code 턴 묶기(`CLAUDE_CODE_PROPAGATE_TRACEPARENT`), `NONE` 모드, Langfuse Cloud와 그 rate limit.
+- **LiteLLM, 실행하지 않은 것:** Enterprise 기능(5명 넘는 SSO, 감사 로그, 키별 guardrail), Redis와 프록시 여러 대, DB에 저장한 자격 증명, 사용자·팀 예산, LiteLLM 쪽의 긴 스트림과 장애.
+- **실행하지 않은 것:** 클라우드 클러스터의 Helm 차트, HPA, cert-manager가 발급한 인증서, 메모리 예산과 부하 시 `503`, Claude Desktop, Claude Code 턴 묶기(`CLAUDE_CODE_PROPAGATE_TRACEPARENT`), `NONE` 모드, Langfuse Cloud와 그 rate limit.
 - **알려진 베타 비용 버그**(Langfuse 목록, 여기서 재현하지 않음): 실패하거나 취소된 OpenAI 호출의 추정 비용, OpenAI 캐시 쓰기 $0, Anthropic 1시간 캐시 쓰기를 5분 요율로 계산. 5 MiB가 넘는 입력은 저장되지 않고, 1 MiB가 넘는 출력은 기록에서 잘립니다.
 - **Analytics는 지워진 키의 이름을 잃습니다.** 폐기되거나 역할 변경으로 지워진 키는 *Cost by gateway key*에 ID로만 나옵니다. 이름은 각 generation의 `langfuse.gateway.api_key.name`에 남아 있으므로 ClickHouse 쿼리에서는 보입니다.
 - **키 metadata는 만들 때 정해집니다.** `team`이나 `cost_center`를 바꾸려면 새 키를 발급하고 옛 키를 폐기하세요.
@@ -405,4 +506,4 @@ Alice의 0.0398 USD는 거의 전부 Claude Code 호출 한 번입니다. Claude
 
 ### 출처(모두 2026-11-04 확인)
 
-위 English 절의 목록과 같습니다: LiteLLM 문서(가상 키, 예산·rate limit, 최종 사용자, fallback, Claude Code, OpenTelemetry v2, 감사 로그, 이미지 보안, 2026-10-21 사고 보고, 보안 공지, 릴리스; 2026-11-05 확인), Langfuse AI Gateway 문서(개요, 개념, 관리자 설정, 첫 요청, 키, 모델 관리, tracing, REST API, Analytics, 알려진 한계, 셀프호스팅, Claude Code), 릴리스 v4.75.0과 `langfuse/ai-gateway` 이미지, v4.75.0 소스 파일.
+위 English 절의 목록과 같습니다: Helm과 TLS 앞단(langfuse 차트 2.2.3, Traefik 차트 42.3.0, Ingress NGINX 퇴역 공지와 archive된 저장소, LiteLLM 헤더 전달 문서; 2026-11-05 확인), LiteLLM 문서(가상 키, 예산·rate limit, 최종 사용자, fallback, Claude Code, OpenTelemetry v2, 감사 로그, 이미지 보안, 2026-10-21 사고 보고, 보안 공지, 릴리스; 2026-11-05 확인), Langfuse AI Gateway 문서(개요, 개념, 관리자 설정, 첫 요청, 키, 모델 관리, tracing, REST API, Analytics, 알려진 한계, 셀프호스팅, Claude Code), 릴리스 v4.75.0과 `langfuse/ai-gateway` 이미지, v4.75.0 소스 파일.

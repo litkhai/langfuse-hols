@@ -1,0 +1,61 @@
+# Langfuse chart 2.2.3 (appVersion 4.75.0) on one kind node with the AI Gateway (#91).
+# Secrets (NEXTAUTH, salt, encryption key, database passwords, headless init) come from the values
+# file 13-helm-up.sh writes into .run/ (mode 600). Hostnames use nip.io, which resolves
+# *.127.0.0.1.nip.io to 127.0.0.1; TLS is a self-signed CA made by 13-helm-up.sh and terminated by
+# Traefik (helm/traefik-values.yaml). Langfuse's page shows ingress-nginx annotations; ingress-nginx
+# was retired in March 2026 (repository archived; last push 2026-03-23), so this lab uses Traefik, which does not buffer
+# responses and gets the long timeouts on its entrypoint instead of per-Ingress annotations.
+langfuse:
+  nextauth:
+    url: https://langfuse.127.0.0.1.nip.io:18443
+  web:
+    # The first start runs the migrations; the default liveness delay killed web mid-migration in the
+    # langfuse-k8s lab (#76), so give it room.
+    livenessProbe: { initialDelaySeconds: 300 }
+    resources:
+      requests: { cpu: 250m, memory: 768Mi }
+      limits: { memory: 1536Mi }
+  worker:
+    resources:
+      requests: { cpu: 250m, memory: 768Mi }
+      limits: { memory: 1536Mi }
+  ingress:
+    enabled: true
+    className: traefik
+    hosts:
+      - host: langfuse.127.0.0.1.nip.io
+        paths: [{ path: /, pathType: Prefix }]
+    tls:
+      enabled: true
+      secretName: lf-web-tls
+  gateway:
+    enabled: true
+    replicas: 2
+    publicUrl: https://gateway.127.0.0.1.nip.io:18443
+    ingress:
+      enabled: true
+      className: traefik
+      hosts: [gateway.127.0.0.1.nip.io]
+      tls:
+        enabled: true
+        secretName: lf-gateway-tls
+    pod:
+      # Smaller than the 1 GiB default memory budget so two replicas fit the kind node; the limit
+      # stays above budget + 512 MiB as the page asks.
+      additionalEnv:
+        - { name: LANGFUSE_AI_GATEWAY_MEMORY_BUDGET_BYTES, value: "268435456" }
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 1Gi }
+clickhouse:
+  cluster:
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { memory: 2Gi }
+    storage: { size: 5Gi, className: standard }
+  keeper:
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 512Mi }
+    storage: { size: 1Gi, className: standard }

@@ -1,0 +1,22 @@
+# Traefik 42.3.0 (v3.7.17) as the TLS front of web and gateway on the kind node (#91).
+# The node's 443 is the host's 127.0.0.1:18443 (helm/kind-config.yaml).
+ports:
+  web:
+    expose: { default: false }
+  websecure:
+    hostPort: 443
+    transport:
+      # The gateway lets a request run 600 s and stay quiet 120 s; nothing in front may cut it first.
+      respondingTimeouts:
+        readTimeout: 620s
+        writeTimeout: 620s
+        idleTimeout: 620s
+service:
+  type: ClusterIP
+nodeSelector:
+  ingress-ready: "true"
+tolerations:
+  - { key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule }
+ingressClass:
+  enabled: true
+  isDefaultClass: true

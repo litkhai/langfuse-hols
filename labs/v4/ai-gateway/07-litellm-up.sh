@@ -18,6 +18,11 @@ if [[ ! -s "$RUN_DIR/litellm-master-key" ]]; then
 fi
 load_gateway_secrets
 load_litellm_secrets
+# Step 11 writes this file; restarting LiteLLM through this script then hands the key to haiku-via-gateway.
+if [[ -s "$RUN_DIR/litellm-upstream-gateway-key" ]]; then
+  LITELLM_UPSTREAM_GATEWAY_KEY="$(cat "$RUN_DIR/litellm-upstream-gateway-key")"
+  export LITELLM_UPSTREAM_GATEWAY_KEY
+fi
 
 echo "▶ Starting LiteLLM $(grep -o 'v1\.[0-9.]*' "$LAB_DIR/docker-compose.litellm.yml" | head -1) and its Postgres…"
 lab_compose --profile litellm up -d litellm-db litellm

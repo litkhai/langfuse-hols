@@ -18,9 +18,20 @@ model_list:
     litellm_params:
       model: anthropic/claude-haiku-4-5
       api_key: not-a-valid-anthropic-key
+  # Step 11 (#91): LiteLLM in front of the Langfuse AI Gateway. The Anthropic route goes to the gateway
+  # (LiteLLM appends /v1/messages) with a gateway service account key instead of the provider key.
+  - model_name: haiku-via-gateway
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_base: http://ai-gateway:8080/anthropic
+      api_key: os.environ/LITELLM_UPSTREAM_GATEWAY_KEY
+  - model_name: haiku-broken-chain
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: not-a-valid-anthropic-key
 
 router_settings:
-  fallbacks: [{"haiku-broken": ["claude-haiku-4-5"]}]
+  fallbacks: [{"haiku-broken": ["claude-haiku-4-5"]}, {"haiku-broken-chain": ["haiku-via-gateway"]}]
   num_retries: 0
 
 litellm_settings:

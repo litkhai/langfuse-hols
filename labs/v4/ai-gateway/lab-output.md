@@ -386,3 +386,214 @@ exit 1
 After restoring the state, `10-compare-check.py` again: 17 PASS · 0 FAIL · 7 INFO (the cost row now includes the fault run's 6 calls).
 
 After the run, for the pre-commit guard: the LiteLLM database credentials in `docker-compose.litellm.yml` became variables whose defaults are the values the run used (`docker compose config` resolves to the same `DATABASE_URL`, user and password; LiteLLM was not restarted), and one f-string in `10-compare-check.py` was rewritten for Python 3.9. `10-compare-check.py` re-run on the same data: 17 PASS · 0 FAIL · 7 INFO.
+
+---
+
+# Third run, follow-ups (#91)
+
+Run on **2026-11-05** (KST; 04:05–04:45 UTC). Same host and tools; cosign v3.1.4; kind v0.33.0, kubectl v1.36.1, Helm v4.3.1. Real Anthropic calls; about 0.27 USD at Claude Haiku 4.5 list prices for all follow-ups (the second Helm cluster's two check runs: 0.134 USD from its token counts; the first cluster's runs were of the same shape).
+
+## Compose stack from deleted volumes, then LiteLLM in front of the gateway (11–12)
+
+```text
+$ 01-up.sh
+▶ generated gateway service key and JWT signing key in <clone>/labs/v4/ai-gateway/.run
+▶ Starting lf-gateway-lab (Langfuse 4.75.0 web · worker · ai-gateway + backends)…
+▶ Waiting for web (first boot runs the Postgres and ClickHouse migrations)…
+  web healthy after ~15 s
+  gateway /health → {"status":"ok"}
+  gateway /ready → {"status":"ready"}
+  versions: web docker.io/langfuse/langfuse:4.75.0 · gateway image docker.io/langfuse/ai-gateway:4.75.0
+✅ UI http://localhost:13000 · gateway http://localhost:18480 — next: 02-setup.py
+$ 02-setup.py
+✓ alice@example.com added with org role AI_GATEWAY
+✓ bob@example.com added with org role AI_GATEWAY
+✓ gateway config: project llm-observability · mode FULL
+✓ provider credential anthropic-lab created: status ENABLED, shown in the UI as sk-ant...<last 4>
+✓ key alice-laptop (user, by alice) sk-lf-da37… metadata {'team': 'platform', 'cost_center': '1001'}
+✓ key bob-laptop (user, by bob) sk-lf-4c90… metadata {'team': 'data', 'cost_center': '2002'}
+✓ key checkout-service (serviceAccount, by owner) sk-lf-de84… metadata {'team': 'payments', 'cost_center': '3003'}
+✓ GET /anthropic/v1/models with alice's key: HTTP 200, 14 models, e.g. ['anthropic-lab:claude-fable-5', 'anthropic-lab:claude-fable-5-1', 'anthropic-lab:claude-haiku-4-5-20251001', 'anthropic-lab:claude-haiku-5-5']
+$ 07-litellm-up.sh
+▶ generated LiteLLM master key and salt key in <clone>/labs/v4/ai-gateway/.run
+▶ Starting LiteLLM v1.108.0 and its Postgres…
+  LiteLLM live after ~15 s
+  image: ghcr.io/berriai/litellm:v1.108.0
+✅ LiteLLM http://localhost:18440 (UI /ui, user admin, password = .run/litellm-master-key) — next: 08-litellm-setup.py
+$ 08-litellm-setup.py
+✓ internal user alice (alice@example.com)
+✓ internal user bob (bob@example.com)
+✓ team payments
+✓ key alice-laptop via /key/generate: user_id alice · team_id None · sk-PKyZ…
+✓ key bob-laptop via /key/generate: user_id bob · team_id None · sk-IYXS…
+✓ key checkout-service via /key/service-account/generate: user_id None · team_id payments · sk-MAup…
+✓ /v1/models: ['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'haiku-broken']
+$ 11-chain.py
+✓ gateway service account key litellm-upstream sk-lf-342a…
+✓ LiteLLM restarted with LITELLM_UPSTREAM_GATEWAY_KEY
+k1 plain      HTTP 200 model haiku-via-gateway call 422d3ab9-6278-4e55-adbb-f4c5d986297e
+k2 headers    HTTP 200 call 1cd6aa88-a517-4f7b-80d4-d9e84ee4d5ab
+k3 spend cap  [(1, 200), (2, 422)] · Budget has been exceeded! Key=<key hash, redacted>
+k4 fallback   HTTP 200 attempted fallbacks 1
+→ recorded in .run/state.json — next: 12-chain-check.py
+$ 12-chain-check.py
+── chain run · 4 LiteLLM generations of haiku-via-gateway · 4 gateway generations
+PASS  k1 LiteLLM → gateway → Anthropic answers  — HTTP 200 · response model 'haiku-via-gateway'
+PASS  every call that reached the gateway is recorded by the gateway  — 4 of 4 paired
+INFO  each chained call is recorded twice in the project (LiteLLM and gateway)  — 4 + 4 generations · cost 0.00016 + 0.00016 USD
+PASS  the gateway sees one identity: LiteLLM's service account key  — users ['litellm-upstream'] · LiteLLM keys ['alice-budget-chain', 'alice-laptop', 'checkout-service']
+INFO  k2 client headers on the gateway's record (langfuse-user-id, x-pass-langfuse-user-id, x-pass-langfuse-tags)  — user litellm-upstream · tags []
+PASS  the two records of a call are in separate traces (LiteLLM sends no traceparent upstream)  — 4 of 4 separate
+PASS  k3 LiteLLM's spend cap stops the call before it reaches the gateway  — [(1, 200), (2, 422)] · gateway records 1 of them
+PASS  k4 fallback haiku-broken-chain → haiku-via-gateway, recorded by the gateway  — HTTP 200 · attempted 1
+── 6 PASS · 0 FAIL · 2 INFO
+```
+
+The first `12-chain-check.py` reported k4 as FAIL: its time window ended on a whole second and cut the last generation (start time 04:09:26.107). The window end now has 2 s of slack; re-run on the same data, output above.
+
+Fault: the upstream gateway key replaced by a wrong one, `11-chain.py`, `12-chain-check.py`, then the key and state put back and LiteLLM restarted. A first attempt stopped inside 11 (it re-used the budget key alias, which LiteLLM refuses as a duplicate); 11 now makes a unique alias and asserts the key call.
+
+```text
+$ (fault: wrong gateway key for LiteLLM) 11-chain.py
+✓ LiteLLM restarted with LITELLM_UPSTREAM_GATEWAY_KEY
+k1 plain      HTTP 401 model None call ab050cae-3e92-4eef-bd47-521ddbe4fe54
+k2 headers    HTTP 429 call 201196f8-71bc-4a10-b28a-ca8be6a62e34
+k3 spend cap  [(1, 429)] · No deployments available for selected model, Try again in 5 seconds. All deploym
+k4 fallback   HTTP 429 attempted fallbacks None
+→ recorded in .run/state.json — next: 12-chain-check.py
+$ 12-chain-check.py
+── chain run · 1 LiteLLM generations of haiku-via-gateway · 0 gateway generations
+FAIL  k1 LiteLLM → gateway → Anthropic answers  — HTTP 401 · response model 'None'
+FAIL  every call that reached the gateway is recorded by the gateway  — 0 of 1 paired
+INFO  each chained call is recorded twice in the project (LiteLLM and gateway)  — 1 + 0 generations · cost 0 + 0 USD
+FAIL  the gateway sees one identity: LiteLLM's service account key  — users [] · LiteLLM keys ['alice-laptop']
+INFO  k2 client headers on the gateway's record (langfuse-user-id, x-pass-langfuse-user-id, x-pass-langfuse-tags)  — user - · tags -
+FAIL  the two records of a call are in separate traces (LiteLLM sends no traceparent upstream)  — 0 of 1 separate
+PASS  k3 LiteLLM's spend cap stops the call before it reaches the gateway  — [(1, 429)] · gateway records 0 of them
+FAIL  k4 fallback haiku-broken-chain → haiku-via-gateway, recorded by the gateway  — HTTP 429 · attempted None
+── 1 PASS · 5 FAIL · 2 INFO
+exit 1
+```
+
+## LiteLLM image signature
+
+```text
+$ cosign verify --key cosign.pub@e82a3c6 ghcr.io/berriai/litellm@sha256:c560d317136880ea92d62334d4367ab10955b1af189dd3ea24f6551290b1d6c1
+file sha256 of cosign.pub: e3fe3e08c44b16407fe0b37c43b4f8b603b3a0f4ee74c29e647bc022d762c2c0  (= LiteLLM docs fingerprint)
+Verification for ghcr.io/berriai/litellm@sha256:c560d317… --
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The signatures were verified against the specified public key
+$ cosign verify --key cosign.pub@0112e53 (the key before the October rotation) …
+Error: no matching signatures: error verifying bundle: comparing public key PEMs …   (exit 12)
+```
+
+## Helm on kind (13–15)
+
+Development on a first cluster, in order: 14 stopped at the SDK step (anthropic 1.12.1 refuses an `httpx.Client`; it runs on httpx2, so the CA now goes through `anthropic.DefaultHttpxClient`); a run where "all old pods gone" failed right after `rollout status` (they were still draining; the check now waits and reports the time); a run where the deleted pod's stream ended inside the 10 s `preStop` sleep (the stream is now 8,000 tokens and the check requires the drain log); a run where all passed. The costs of those runs were 0 in Langfuse: the worker had logged `Error upserting default model prices` at start (Postgres not answering yet) and never retried; a worker restart fixed it (87 → 188 model rows), and 14 gained a pricing check.
+
+The run below started from a deleted cluster (`15-helm-down.sh --purge`). Its 13 did not restart the worker although the error was in the log: under `pipefail`, `kubectl logs | grep -q` reports the SIGPIPE of kubectl when grep stops early, so the condition was false. 14 then failed only the new pricing check:
+
+```text
+$ 15-helm-down.sh --purge
+Deleted nodes: ["lf-gateway-helm-control-plane"]
+$ 13-helm-up.sh
+════ 1. kind cluster lf-gateway-helm ════
+════ 2. cert-manager v1.20.2, clickhouse-operator 0.0.8, Traefik 42.3.0 ════
+  ready
+════ 3. Self-signed CA and certificates ════
+  CA <clone>/labs/v4/ai-gateway/.run/helm-tls/ca.pem · secrets lf-web-tls, lf-gateway-tls
+════ 4. Secrets values (generated once) ════
+  wrote <clone>/labs/v4/ai-gateway/.run/helm-secrets.yaml
+════ 5. langfuse chart 2.2.3 with the gateway ════
+  langfuse-gateway         2     2     docker.langfuse.com/langfuse/ai-gateway:4.75.0
+  langfuse-redis           1     1     docker.io/valkey/valkey:8.0
+  langfuse-s3-all-in-one   1     1     chrislusf/seaweedfs:4.23
+  langfuse-web             1     1     docker.langfuse.com/langfuse/langfuse:4.75.0
+  langfuse-worker          1     1     docker.langfuse.com/langfuse/langfuse-worker:4.75.0
+════ 6. Over TLS from the host ════
+  https://langfuse.127.0.0.1.nip.io:18443/api/public/health  {"status":"OK","version":"4.75.0"}
+  https://gateway.127.0.0.1.nip.io:18443/health              {"status":"ok"}
+  https://gateway.127.0.0.1.nip.io:18443/ready               {"status":"ready"}
+✅ next: .venv-v4/bin/python labs/v4/ai-gateway/14-helm-check.py
+13 exit 0
+$ 14-helm-check.py
+── Helm run · web https://langfuse.127.0.0.1.nip.io:18443 · gateway https://gateway.127.0.0.1.nip.io:18443
+PASS  chart: gateway Deployment with 2 ready replicas  — ready 2 of 2 · image docker.langfuse.com/langfuse/ai-gateway:4.75.0
+PASS  chart: web knows the gateway is deployed and its public URL  — https://gateway.127.0.0.1.nip.io:18443
+PASS  chart: PodDisruptionBudget keeps all but one gateway pod  — maxUnavailable 1
+PASS  chart: graceful shutdown settings  — terminationGracePeriodSeconds 350
+PASS  TLS: /health through Traefik with the lab CA  — 200 {"status":"ok"}
+PASS  TLS: without the lab CA the certificate is refused  — [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer cer
+PASS  SDK over HTTPS: 200 and the generation is stored  — trace 4dd6f7a71f815023d37c73bdba28b670 · [('GENERATION', 'anthropic.messages')]
+FAIL  the generation is priced (default model prices loaded)  — cost None USD · model id None
+PASS  Claude Code over HTTPS without the CA  — exit 1 · API Error: Unable to connect to API: SSL certificate verification failed. Check your proxy
+PASS  Claude Code over HTTPS with NODE_EXTRA_CA_CERTS  — exit 0 · hello gateway
+PASS  the pod serving a stream is deleted: the stream finishes (graceful drain)  — pod langfuse-gateway-754d977764-g9h2p terminating 0.1 s after delete · stream ran 49.5 s more · 2001 chunks, 8000 tokens, stop max_tokens · error None
+PASS  that stream's generation is recorded  — [('GENERATION', 'anthropic.messages')]
+PASS  the stream outlived the 10 s preStop sleep and the pod logged its drain (SIGTERM → drain)  — 'gateway draining' in its log: True
+PASS  rolling restart: new pods ready, old pods gone within the grace period  — rollout status after 16.4 s · old pods gone after 28.9 s (grace period 350 s)
+PASS  a gateway pod deleted under traffic: no failed request  — deleted langfuse-gateway-8679459bbc-7tmtn before call 4 · [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200]
+── 14 PASS · 1 FAIL · 0 INFO
+14 exit 1
+```
+
+13 now reads the log into a variable before `grep`. 13 again on the same cluster (it restarted the worker), then 14:
+
+```text
+$ 13-helm-up.sh (again, same cluster)
+════ 1. kind cluster lf-gateway-helm ════
+════ 2. cert-manager v1.20.2, clickhouse-operator 0.0.8, Traefik 42.3.0 ════
+  ready
+════ 3. Self-signed CA and certificates ════
+  CA <clone>/labs/v4/ai-gateway/.run/helm-tls/ca.pem · secrets lf-web-tls, lf-gateway-tls
+════ 4. Secrets values (generated once) ════
+════ 5. langfuse chart 2.2.3 with the gateway ════
+  worker could not load the default model prices at start; restarting it
+  langfuse-gateway         2     2     docker.langfuse.com/langfuse/ai-gateway:4.75.0
+  langfuse-redis           1     1     docker.io/valkey/valkey:8.0
+  langfuse-s3-all-in-one   1     1     chrislusf/seaweedfs:4.23
+  langfuse-web             1     1     docker.langfuse.com/langfuse/langfuse:4.75.0
+  langfuse-worker          1     1     docker.langfuse.com/langfuse/langfuse-worker:4.75.0
+════ 6. Over TLS from the host ════
+  https://langfuse.127.0.0.1.nip.io:18443/api/public/health  {"status":"OK","version":"4.75.0"}
+  https://gateway.127.0.0.1.nip.io:18443/health              {"status":"ok"}
+  https://gateway.127.0.0.1.nip.io:18443/ready               {"status":"ready"}
+✅ next: .venv-v4/bin/python labs/v4/ai-gateway/14-helm-check.py
+13 exit 0
+$ 14-helm-check.py
+── Helm run · web https://langfuse.127.0.0.1.nip.io:18443 · gateway https://gateway.127.0.0.1.nip.io:18443
+PASS  chart: gateway Deployment with 2 ready replicas  — ready 2 of 2 · image docker.langfuse.com/langfuse/ai-gateway:4.75.0
+PASS  chart: web knows the gateway is deployed and its public URL  — https://gateway.127.0.0.1.nip.io:18443
+PASS  chart: PodDisruptionBudget keeps all but one gateway pod  — maxUnavailable 1
+PASS  chart: graceful shutdown settings  — terminationGracePeriodSeconds 350
+PASS  TLS: /health through Traefik with the lab CA  — 200 {"status":"ok"}
+PASS  TLS: without the lab CA the certificate is refused  — [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer cer
+PASS  SDK over HTTPS: 200 and the generation is stored  — trace 76f71dfd6db84d8a5543f34959b66334 · [('GENERATION', 'anthropic.messages')]
+PASS  the generation is priced (default model prices loaded)  — cost 4e-05 USD · model id cmgt5gnkv000104jx171tbq4e
+PASS  Claude Code over HTTPS without the CA  — exit 1 · API Error: Unable to connect to API: SSL certificate verification failed. Check your proxy
+PASS  Claude Code over HTTPS with NODE_EXTRA_CA_CERTS  — exit 0 · hello gateway
+PASS  the pod serving a stream is deleted: the stream finishes (graceful drain)  — pod langfuse-gateway-8679459bbc-c5llw terminating 0.1 s after delete · stream ran 49.6 s more · 2001 chunks, 8000 tokens, stop max_tokens · error None
+PASS  that stream's generation is recorded  — [('GENERATION', 'anthropic.messages')]
+PASS  the stream outlived the 10 s preStop sleep and the pod logged its drain (SIGTERM → drain)  — 'gateway draining' in its log: True
+PASS  rolling restart: new pods ready, old pods gone within the grace period  — rollout status after 15.9 s · old pods gone after 28.4 s (grace period 350 s)
+PASS  a gateway pod deleted under traffic: no failed request  — deleted langfuse-gateway-767b9565dd-87ndm before call 4 · [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200]
+── 15 PASS · 0 FAIL · 0 INFO
+14 exit 0
+```
+
+Fault (first cluster, before the pricing check existed): the gateway scaled to 1 replica, Claude Code and the long stream skipped, back to 2 replicas afterwards.
+
+```text
+── Helm run (FAULT: 1 replica) · web https://langfuse.127.0.0.1.nip.io:18443 · gateway https://gateway.127.0.0.1.nip.io:18443
+FAIL  chart: gateway Deployment with 2 ready replicas  — ready 1 of 1 · image docker.langfuse.com/langfuse/ai-gateway:4.75.0
+PASS  chart: web knows the gateway is deployed and its public URL  — https://gateway.127.0.0.1.nip.io:18443
+PASS  chart: PodDisruptionBudget keeps all but one gateway pod  — maxUnavailable 1
+PASS  chart: graceful shutdown settings  — terminationGracePeriodSeconds 350
+PASS  TLS: /health through Traefik with the lab CA  — 200 {"status":"ok"}
+PASS  TLS: without the lab CA the certificate is refused  — [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer cer
+PASS  SDK over HTTPS: 200 and the generation is stored  — trace c4a71da13cf8852eaf73496d576c1f8a · [('GENERATION', 'anthropic.messages')]
+FAIL  a gateway pod deleted under traffic: no failed request  — deleted langfuse-gateway-5f6586c8b8-sntcj before call 4 · [200, 200, 200, 200, 503, 503, 503, 503, 503, 503, 503, 503, 503, 503, 503, 503, 503, 503, 200, 200]
+── 6 PASS · 2 FAIL · 0 INFO
+exit 1
+```

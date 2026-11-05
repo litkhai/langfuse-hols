@@ -3,7 +3,7 @@
 # file 13-helm-up.sh writes into .run/ (mode 600). Hostnames use nip.io, which resolves
 # *.127.0.0.1.nip.io to 127.0.0.1; TLS is a self-signed CA made by 13-helm-up.sh and terminated by
 # Traefik (helm/traefik-values.yaml). Langfuse's page shows ingress-nginx annotations; ingress-nginx
-# was retired (repository archived 2026-03-23), so this lab uses Traefik, which does not buffer
+# was retired in March 2026 (repository archived; last push 2026-03-23), so this lab uses Traefik, which does not buffer
 # responses and gets the long timeouts on its entrypoint instead of per-Ingress annotations.
 langfuse:
   nextauth:

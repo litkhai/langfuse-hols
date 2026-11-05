@@ -216,7 +216,7 @@ LiteLLM's model `haiku-via-gateway` points its Anthropic route at the gateway (`
 
 ### On Helm with TLS and two replicas
 
-The supported self-hosted path, on a local kind cluster: kind 0.33.0 (one node), cert-manager v1.20.2 and clickhouse-operator 0.0.8 (the chart's ClickHouse runs on the operator), Traefik 42.3.0 (v3.7.17) as the TLS front, the langfuse chart 2.2.3 (Langfuse 4.75.0) with [helm/values.yaml](helm/values.yaml): `langfuse.gateway.enabled: true`, `replicas: 2`, an Ingress with TLS on `gateway.127.0.0.1.nip.io`. Langfuse's page shows ingress-nginx annotations; ingress-nginx was retired (its repository was archived on 2026-03-23), so Traefik takes the long timeouts on its entrypoint (`620s`) and does not buffer responses. Measured on 2026-11-05, from a deleted cluster:
+The supported self-hosted path, on a local kind cluster: kind 0.33.0 (one node), cert-manager v1.20.2 and clickhouse-operator 0.0.8 (the chart's ClickHouse runs on the operator), Traefik 42.3.0 (v3.7.17) as the TLS front, the langfuse chart 2.2.3 (Langfuse 4.75.0) with [helm/values.yaml](helm/values.yaml): `langfuse.gateway.enabled: true`, `replicas: 2`, an Ingress with TLS on `gateway.127.0.0.1.nip.io`. Langfuse's page shows ingress-nginx annotations; ingress-nginx was retired in March 2026 (Kubernetes' announcement; the repository is archived, last push 2026-03-23), so Traefik takes the long timeouts on its entrypoint (`620s`) and does not buffer responses. Measured on 2026-11-05, from a deleted cluster:
 
 | Check | Result |
 |---|---|
@@ -471,7 +471,7 @@ LiteLLM의 모델 `haiku-via-gateway`가 Anthropic 경로를 게이트웨이로 
 
 ### Helm, TLS, replica 2개
 
-지원하는 셀프호스팅 경로를 로컬 kind 클러스터에서 돌렸습니다. kind 0.33.0(노드 하나), cert-manager v1.20.2와 clickhouse-operator 0.0.8(차트의 ClickHouse는 operator 위에서 돌아감), TLS 앞단 Traefik 42.3.0(v3.7.17), langfuse 차트 2.2.3(Langfuse 4.75.0)과 [helm/values.yaml](helm/values.yaml): `langfuse.gateway.enabled: true`, `replicas: 2`, `gateway.127.0.0.1.nip.io`에 TLS Ingress. Langfuse 페이지는 ingress-nginx 어노테이션을 예로 들지만 ingress-nginx는 퇴역했으므로(저장소가 2026-03-23 archive됨) Traefik을 썼습니다. Traefik은 응답을 버퍼링하지 않고, 긴 타임아웃(`620s`)은 entrypoint에 둡니다. 2026-11-05, 지운 클러스터에서 처음부터 측정:
+지원하는 셀프호스팅 경로를 로컬 kind 클러스터에서 돌렸습니다. kind 0.33.0(노드 하나), cert-manager v1.20.2와 clickhouse-operator 0.0.8(차트의 ClickHouse는 operator 위에서 돌아감), TLS 앞단 Traefik 42.3.0(v3.7.17), langfuse 차트 2.2.3(Langfuse 4.75.0)과 [helm/values.yaml](helm/values.yaml): `langfuse.gateway.enabled: true`, `replicas: 2`, `gateway.127.0.0.1.nip.io`에 TLS Ingress. Langfuse 페이지는 ingress-nginx 어노테이션을 예로 들지만 ingress-nginx는 2026년 3월에 퇴역했으므로(Kubernetes 공지, 저장소는 archive 상태이고 마지막 push 2026-03-23) Traefik을 썼습니다. Traefik은 응답을 버퍼링하지 않고, 긴 타임아웃(`620s`)은 entrypoint에 둡니다. 2026-11-05, 지운 클러스터에서 처음부터 측정:
 
 | 검사 | 결과 |
 |---|---|

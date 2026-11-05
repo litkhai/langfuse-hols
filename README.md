@@ -20,7 +20,7 @@ runs. **v4 is the current track**; Langfuse v3 gets security patches only until 
 | langfuse-k8s | [labs/v4/langfuse-k8s](labs/v4/langfuse-k8s/) | — | Helm values for AKS, EKS and GKE with room to spare (chart 2.2.1, ClickHouse 1 shard × 3 replicas), and the install from a private, authenticated registry (AKS + ACR pattern), verified on kind |
 | kong-gateway-otel | [labs/v4/kong-gateway-otel](labs/v4/kong-gateway-otel/) | — | Kong Gateway (OSS 3.9.4) → Langfuse over OTLP: a model gateway and an agent gateway feeding one trace, generations from `ai-proxy` via a Lua bridge, header → user/session mapping |
 | langfuse-ops-checks | [labs/v4/langfuse-ops-checks](labs/v4/langfuse-ops-checks/) | — | Operations checks: what sets the blob-storage call rate, a reusable OTLP load generator and sizing ratios, collection loss when a component dies (and re-processing from blob storage), one ClickHouse database per instance, the audit log on the latest v4 |
-| ai-gateway | [labs/v4/ai-gateway](labs/v4/ai-gateway/) | — | Langfuse AI Gateway (beta, 4.75.0) next to self-hosted Langfuse, real Anthropic calls: per-person and service account keys, cost per user, key and model, allowlist, expiry, revocation, audit log (EE), Claude Code |
+| ai-gateway | [labs/v4/ai-gateway](labs/v4/ai-gateway/) | — | Langfuse AI Gateway (beta, 4.75.0) next to self-hosted Langfuse, real Anthropic calls: per-person and service account keys, cost per user, key and model, allowlist, expiry, revocation, audit log (EE), Claude Code; compared with LiteLLM Proxy 1.108.0 on the same scenarios (spend cap, rate limit, fallback, trace shape) |
 
 All of them run on the shared stack in [`_base/`](_base/). The track is the first argument of
 its scripts (`_base/bin/up.sh v4`), and its pins are in `_base/<track>/versions.env`.
@@ -96,7 +96,7 @@ ClickHouse 위에서 Langfuse를 자체 호스팅(OSS·Enterprise 트랙)하고 
 | langfuse-k8s | [labs/v4/langfuse-k8s](labs/v4/langfuse-k8s/) | — | 여유 있게 잡은 AKS·EKS·GKE용 Helm values(차트 2.2.1, ClickHouse 1 shard × 3 replica)와 인증이 필요한 사설 레지스트리에서의 설치(AKS + ACR 방식), kind에서 검증 |
 | kong-gateway-otel | [labs/v4/kong-gateway-otel](labs/v4/kong-gateway-otel/) | — | Kong Gateway(OSS 3.9.4) → OTLP로 Langfuse: 모델 게이트웨이와 에이전트 게이트웨이가 trace 하나로, Lua bridge로 `ai-proxy`의 generation, 헤더 → user/session 매핑 |
 | langfuse-ops-checks | [labs/v4/langfuse-ops-checks](labs/v4/langfuse-ops-checks/) | — | 운영 점검: blob storage 호출 빈도를 정하는 것, 재사용 가능한 OTLP 부하 생성기와 사이징 비율, 구성 요소 장애 시 수집 손실(과 blob storage에서 재처리), 인스턴스마다 ClickHouse DB 하나, 최신 v4의 감사 로그 |
-| ai-gateway | [labs/v4/ai-gateway](labs/v4/ai-gateway/) | — | 셀프호스팅 Langfuse 옆의 Langfuse AI Gateway(베타, 4.75.0), 실제 Anthropic 호출: 개인별·서비스 계정 키, 사용자·키·모델별 비용, 허용 목록, 만료, 폐기, 감사 로그(EE), Claude Code |
+| ai-gateway | [labs/v4/ai-gateway](labs/v4/ai-gateway/) | — | 셀프호스팅 Langfuse 옆의 Langfuse AI Gateway(베타, 4.75.0), 실제 Anthropic 호출: 개인별·서비스 계정 키, 사용자·키·모델별 비용, 허용 목록, 만료, 폐기, 감사 로그(EE), Claude Code. 같은 시나리오로 LiteLLM Proxy 1.108.0과 비교(예산 상한, rate limit, fallback, trace 모양) |
 
 모든 실습이 [`_base/`](_base/)의 공유 스택 위에서 실행됩니다. 트랙은 스크립트의 첫 번째
 인자(`_base/bin/up.sh v4`)이고, 트랙별 버전 고정은 `_base/<track>/versions.env`에 있습니다.

@@ -1,0 +1,58 @@
+# LiteLLM Proxy next to the Langfuse AI Gateway, for the comparison steps 07–10 (#89).
+# Part of the same compose project (lf-gateway-lab), behind the profile "litellm", so 01–06 never start it.
+# 07-litellm-up.sh starts it with `--profile litellm`. Host port 127.0.0.1:18440 → LiteLLM :4000.
+#
+# LiteLLM keeps its own Postgres (keys, users, spend). It holds the provider key itself (ANTHROPIC_API_KEY
+# in its environment, referenced from litellm-config.yaml), unlike the Langfuse gateway, which gets it
+# from web per request. Traces go to the same Langfuse project through LiteLLM's `langfuse_otel` callback.
+
+services:
+  litellm-db:
+    profiles: [litellm]
+    image: docker.io/postgres:${POSTGRES_VERSION:-17.11}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${LITELLM_DB_USER:-litellm}
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD:-litellm}   # lab-only database on the compose network, no host port
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  litellm:
+    profiles: [litellm]
+    # Latest release on 2026-11-05 (v1.108.0, 2026-11-04), after the patched versions of every 2026
+    # GitHub security advisory of BerriAI/litellm. Digest recorded in lab-output.md.
+    image: ghcr.io/berriai/litellm:${LITELLM_VERSION:-v1.108.0}
+    restart: unless-stopped
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+      langfuse-web:
+        condition: service_started
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      # Relative paths resolve against _base/ (the first -f file), hence the path back to this lab.
+      - ../labs/v4/ai-gateway/litellm-config.yaml:/app/config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-unset-run-07}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-unset-run-07}
+      DATABASE_URL: postgresql://${LITELLM_DB_USER:-litellm}:${LITELLM_DB_PASSWORD:-litellm}@litellm-db:5432/litellm
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # langfuse_otel preset (LiteLLM docs, OpenTelemetry v2): model calls only, with message content.
+      LITELLM_OTEL_V2: "true"
+      LITELLM_OTEL_LANGFUSE_SPAN_SCOPE: llm_only
+      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: span_only
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+      LANGFUSE_HOST: http://langfuse-web:3000
+    ports:
+      - 127.0.0.1:18440:4000
+
+volumes:
+  litellm_postgres_data:
+    driver: local

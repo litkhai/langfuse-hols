@@ -30,6 +30,7 @@ STATE = RUN_DIR / "state.json"
 WEB = "http://localhost:13000"
 GATEWAY = "http://localhost:18480"
 CLICKHOUSE = "http://localhost:18423"
+LITELLM = "http://localhost:18440"
 PROJECT = "lf-gateway-lab"
 CONNECTION = "anthropic-lab"  # the credential name becomes the model-ID prefix: anthropic-lab:<model>
 MODEL = "claude-haiku-4-5"  # cheapest current Anthropic model; the provider returns the dated ID
@@ -144,6 +145,12 @@ def psql(sql: str) -> str:
     return subprocess.run(["docker", "exec", f"{PROJECT}-postgres-1", "psql", "-U", e.get("POSTGRES_USER", "postgres"),
                            "-d", e.get("POSTGRES_DB", "postgres"), "-At", "-c", sql],
                           capture_output=True, text=True, check=True).stdout.strip()
+
+
+def litellm_admin(method: str, path: str, **kw) -> httpx.Response:
+    """LiteLLM admin API with the master key from .run/ (07-litellm-up.sh made it)."""
+    key = (RUN_DIR / "litellm-master-key").read_text().strip()
+    return httpx.request(method, LITELLM + path, headers={"Authorization": f"Bearer {key}"}, timeout=60, **kw)
 
 
 def now() -> datetime:

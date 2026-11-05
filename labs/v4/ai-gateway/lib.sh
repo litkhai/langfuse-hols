@@ -21,7 +21,9 @@ export LANGFUSE_VERSION="${GATEWAY_LANGFUSE_VERSION:-4.75.0}"
 lab_compose() {
   local envfiles=(--env-file "$TRACK_DIR/versions.env")
   [[ -f "$LF_ENV_FILE" ]] && envfiles+=(--env-file "$LF_ENV_FILE")
-  local files=(-f "$BASE_DIR/docker-compose.yml" -f "$LAB_DIR/docker-compose.yml")
+  # docker-compose.litellm.yml is always part of the project; its services sit behind the profile
+  # "litellm", so they start only with `--profile litellm` (07-litellm-up.sh) and `down` sees them.
+  local files=(-f "$BASE_DIR/docker-compose.yml" -f "$LAB_DIR/docker-compose.yml" -f "$LAB_DIR/docker-compose.litellm.yml")
   # EE=1 adds the shared enterprise overlay (LANGFUSE_EE_LICENSE_KEY on web and worker).
   [[ "${EE:-0}" == "1" ]] && files+=(-f "$BASE_DIR/docker-compose.ee.yml")
   docker compose -p "$LAB_PROJECT" "${envfiles[@]}" "${files[@]}" "$@"
@@ -34,6 +36,12 @@ wait_web() {
   done
   echo "✗ web not healthy; docker logs $LAB_PROJECT-langfuse-web-1" >&2
   return 1
+}
+
+load_litellm_secrets() {
+  LITELLM_MASTER_KEY="$(cat "$RUN_DIR/litellm-master-key")"
+  LITELLM_SALT_KEY="$(cat "$RUN_DIR/litellm-salt-key")"
+  export LITELLM_MASTER_KEY LITELLM_SALT_KEY
 }
 
 load_gateway_secrets() {

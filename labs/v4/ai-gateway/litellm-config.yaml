@@ -1,0 +1,31 @@
+# LiteLLM Proxy config for steps 07–10 (#89). Mounted read-only at /app/config.yaml.
+# The model names are what clients send. Both the alias and the dated ID of Claude Haiku 4.5 are
+# listed, because Claude Code sends whichever it is configured with and its background calls use the
+# dated ID; a name that is not listed is refused with "Invalid model name".
+model_list:
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+  # Fallback test: the same model with a credential Anthropic rejects. The router falls back to
+  # claude-haiku-4-5 (router_settings below). The proxy strips the mock_testing_* flags since v1.85.0,
+  # so a real failure is the way to exercise a fallback.
+  - model_name: haiku-broken
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: not-a-valid-anthropic-key
+
+router_settings:
+  fallbacks: [{"haiku-broken": ["claude-haiku-4-5"]}]
+  num_retries: 0
+
+litellm_settings:
+  callbacks: ["langfuse_otel"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

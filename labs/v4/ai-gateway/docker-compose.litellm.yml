@@ -43,6 +43,8 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-unset-run-07}
       DATABASE_URL: postgresql://${LITELLM_DB_USER:-litellm}:${LITELLM_DB_PASSWORD:-litellm}@litellm-db:5432/litellm
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Step 11 (#91): a gateway service account key for the model haiku-via-gateway; empty until 11 runs.
+      LITELLM_UPSTREAM_GATEWAY_KEY: ${LITELLM_UPSTREAM_GATEWAY_KEY:-}
       # langfuse_otel preset (LiteLLM docs, OpenTelemetry v2): model calls only, with message content.
       LITELLM_OTEL_V2: "true"
       LITELLM_OTEL_LANGFUSE_SPAN_SCOPE: llm_only

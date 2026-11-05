@@ -1,0 +1,10 @@
+# Steps 13–15 (#91): one kind node for the Langfuse Helm chart with the AI Gateway.
+# ingress-nginx listens on the node's 443, published on the host as 127.0.0.1:18443.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: lf-gateway-helm
+nodes:
+  - role: control-plane
+    labels: { ingress-ready: "true" }
+    extraPortMappings:
+      - { containerPort: 443, hostPort: 18443, listenAddress: 127.0.0.1, protocol: TCP }

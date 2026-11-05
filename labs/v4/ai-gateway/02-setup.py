@@ -33,7 +33,7 @@ people = st.get("people", {})
 for name in ("alice", "bob"):
     if name not in people:
         people[name] = {"email": f"{name}@example.com", "password": secrets.token_hex(12) + "-Lf!"}  # the sign-up policy wants a non-alphanumeric character
-        r = httpx.post(f"{L.WEB}/api/auth/signup", json={
+        r = httpx.post(f"{L.WEB}/api/auth/signup", verify=L.VERIFY, json={
             "name": name.title(), "email": people[name]["email"], "password": people[name]["password"]})
         assert r.status_code == 200, f"signup {name}: HTTP {r.status_code} {r.text[:200]}"
     try:
@@ -80,7 +80,7 @@ for who, key_name, issued_as, meta in plan:
 L.update_state(keys=keys)
 
 # 5. Models the keys can call --------------------------------------------------------------
-r = httpx.get(f"{L.GATEWAY}/anthropic/v1/models", params={"limit": 1000},
+r = httpx.get(f"{L.GATEWAY}/anthropic/v1/models", params={"limit": 1000}, verify=L.VERIFY,
               headers={"x-api-key": keys["alice-laptop"]["secret"], "anthropic-version": "2023-06-01"})
 ids = [m["id"] for m in r.json().get("data", [])]
 print(f"✓ GET /anthropic/v1/models with alice's key: HTTP {r.status_code}, {len(ids)} models, e.g. {ids[:4]}")

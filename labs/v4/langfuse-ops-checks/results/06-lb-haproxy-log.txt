@@ -1,0 +1,12 @@
+[WARNING]  (8) : Server web/web1 is going DOWN for maintenance (DNS NX status). 1 active and 0 backup servers left. 21 sessions active, 0 requeued, 0 remaining in queue.
+Server web/web1 is going DOWN for maintenance (DNS NX status). 1 active and 0 backup servers left. 21 sessions active, 0 requeued, 0 remaining in queue.
+[WARNING]  (8) : web/web1: IP changed from '(none)' to '172.20.0.7' by 'docker/dns'.
+[WARNING]  (8) : Server web/web1 ('langfuse-web') is UP/READY (resolves again).
+[WARNING]  (8) : Server web/web1 administratively READY thanks to valid DNS answer.
+web/web1: IP changed from '(none)' to '172.20.0.7' by 'docker/dns'.
+Server web/web1 ('langfuse-web') is UP/READY (resolves again).
+Server web/web1 administratively READY thanks to valid DNS answer.
+[WARNING]  (8) : Server web/web1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 1 active and 0 backup servers left. 0 sessions active, 0 requeued, 0 remaining in queue.
+Server web/web1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 1 active and 0 backup servers left. 0 sessions active, 0 requeued, 0 remaining in queue.
+Server web/web1 is UP, reason: Layer7 check passed, code: 200, check duration: 2369ms. 2 active and 0 backup servers online. 0 sessions requeued, 0 total in queue.
+[WARNING]  (8) : Server web/web1 is UP, reason: Layer7 check passed, code: 200, check duration: 2369ms. 2 active and 0 backup servers online. 0 sessions requeued, 0 total in queue.

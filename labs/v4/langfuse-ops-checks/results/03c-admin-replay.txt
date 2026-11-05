@@ -1,0 +1,7 @@
+# 2026-11-04 13:05–13:06 UTC, Langfuse 4.56.0 with the EE overlay (ADMIN_API_KEY set), LANGFUSE_S3_EVENT_UPLOAD_PREFIX=events/
+POST /api/admin/ingestion-replay {"keys":["events/otel/llm-observability/2026/11/04/12/34/7481c4bf-….json", "…/fb94f763-….json"]}
+  → {"queued":0,"skipped":2,"errors":["Unsupported replay type: otel","Unsupported replay type: otel"]}
+POST /api/admin/ingestion-replay {"keys":["otel/llm-observability/2026/11/04/12/34/7481c4bf-….json"]}
+  → {"queued":1,"skipped":0,"errors":[]}
+  worker: "Failed to download file from S3 otel/llm-observability/2026/11/04/12/34/7481c4bf-….json The specified key does not exist." (NoSuchKey), job retried and failed
+requeue-otel.js with the full key (events/otel/…) for the same 2 files → {"queued":2}; run f-worker-1793795669: 12000 distinct observations of 12000 accepted

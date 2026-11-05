@@ -1,0 +1,8 @@
+  23 Error: connect ECONNREFUSED 172.20.0.5:8123
+   1 2026-11-04T12:45:34.563Z error 	Queue job dataset-delete-queue errored: Error: Socket timeout. Expecting data, but didn't receive any in 30000ms. Socket timeout. Expecting data, but didn't receive any in 30000ms.
+   1 2026-11-04T12:45:02.818Z error 	Queue job dataset-delete-queue errored: Error: Socket timeout. Expecting data, but didn't receive any in 30000ms. Socket timeout. Expecting data, but didn't receive any in 30000ms.
+   1 2026-11-04T12:44:31.117Z error 	Queue job dataset-delete-queue errored: Error: Socket timeout. Expecting data, but didn't receive any in 30000ms. Socket timeout. Expecting data, but didn't receive any in 30000ms.
+   1 2026-11-04T12:43:59.656Z error 	Queue job dataset-delete-queue errored: Error: Socket timeout. Expecting data, but didn't receive any in 30000ms. Socket timeout. Expecting data, but didn't receive any in 30000ms.
+   1 2026-11-04T12:43:28.085Z error 	Queue job dataset-delete-queue errored: Error: Socket timeout. Expecting data, but didn't receive any in 30000ms. Socket timeout. Expecting data, but didn't receive any in 30000ms.
+   1 2026-11-04T12:43:00.511Z error 	Queue job event-propagation-job with id repeat:event-propagation-job:1793796180000 in event-propagation-queue failed {"error":{"errno":-111,"code":"ECONNREFUSED","syscall":"connect","address":"172.20.0.5","port":8123,"name":"Error","message":"connect ECONNREFUSED 172.
+   1 2026-11-04T12:43:00.333Z error 	[DUAL WRITE] Failed to process event propagation batch connect ECONNREFUSED 172.20.0.5:8123 {"errno":-111,"code":"ECONNREFUSED","syscall":"connect","address":"172.20.0.5","port":8123,"trace_id":"63c38ba8efc832ca0fc6450751461562","span_id":"5ea9876ce93aae14","trace_fla

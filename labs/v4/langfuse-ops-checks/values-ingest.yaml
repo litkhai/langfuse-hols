@@ -1,0 +1,39 @@
+# values-ingest.yaml — the ingestion knobs of test 01 as Helm values for the official chart (langfuse 2.2.1).
+# Layer it after values-base.yaml of labs/v4/langfuse-k8s:
+#
+#   helm upgrade langfuse langfuse/langfuse --version 2.2.1 -f values-base.yaml -f values-<cloud>.yaml -f values-ingest.yaml
+#
+# Chart keys (chart 2.2.1 values.yaml): langfuse.additionalEnv (web + worker), langfuse.web.pod.additionalEnv,
+# langfuse.worker.pod.additionalEnv. There is no langfuse.worker.additionalEnv in this chart version.
+#
+# What test 01 measured on Langfuse 4.56.0 (README, test 01):
+#   * blob-storage calls = 1 PutObject (web) + 1 GetObject (worker) per OTLP POST. No server variable changes that.
+#     Fewer calls come only from fewer, larger POSTs: the SDK's flush_at / flush_interval
+#     (LANGFUSE_FLUSH_AT, LANGFUSE_FLUSH_INTERVAL) or an OpenTelemetry Collector batch processor in front.
+#   * ClickHouse inserts into events_full = one per LANGFUSE_INGESTION_CLICKHOUSE_WRITE_INTERVAL_MS (or per
+#     WRITE_BATCH_SIZE rows, whichever comes first), per worker. 5000 ms cut inserts 5× and adds up to ~5 s
+#     until a row is visible.
+#   * Queue concurrency, LANGFUSE_S3_CONCURRENT_WRITES and LANGFUSE_TRACE_BATCH_* changed neither count.
+#     LANGFUSE_TRACE_BATCH_* only runs when NEXT_PUBLIC_LANGFUSE_CLOUD_REGION is set (Langfuse Cloud) and feeds
+#     the Topics summaries; it is not an ingestion batcher. Leave it out on self-hosted deployments.
+langfuse:
+  worker:
+    pod:
+      additionalEnv:
+        # ClickHouse: fewer, larger inserts (default 1000 ms / 1000 rows).
+        - name: LANGFUSE_INGESTION_CLICKHOUSE_WRITE_INTERVAL_MS
+          value: "5000"
+        - name: LANGFUSE_INGESTION_CLICKHOUSE_WRITE_BATCH_SIZE
+          value: "10000"
+        # OTel jobs per worker in parallel (default 5). Throughput, not call count.
+        - name: LANGFUSE_OTEL_INGESTION_QUEUE_PROCESSING_CONCURRENCY
+          value: "5"
+# Sockets per S3 client: the chart has its own key (it renders LANGFUSE_S3_CONCURRENT_WRITES on web and worker),
+# so do not repeat it in additionalEnv. It caps concurrent uploads; it does not reduce their number.
+s3:
+  concurrency:
+    writes: 50
+# Client side (application pods, not this chart), Langfuse Python SDK 4.17.0:
+#   LANGFUSE_FLUSH_AT=512        spans per OTLP POST (default 512 = OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+#   LANGFUSE_FLUSH_INTERVAL=5    seconds between POSTs (default 5 = OTEL_BSP_SCHEDULE_DELAY)
+#   LANGFUSE_TIMEOUT=30          seconds a POST may be retried on 429/502/503/504 (default 5; test 03b)

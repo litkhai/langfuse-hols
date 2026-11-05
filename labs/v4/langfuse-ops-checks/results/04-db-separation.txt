@@ -1,0 +1,96 @@
+== 04 db separation — 2026-11-04T13:14:26Z, Langfuse 4.56.0, ClickHouse 26.8.22.13
+-- setup: Postgres databases, ClickHouse users (no ClickHouse database yet)
+  user lf_a grants (SHOW GRANTS as lf_a):  GRANT CHECK, SHOW, SELECT, INSERT, ALTER TABLE, ALTER DATABASE, ALTER VIEW, CREATE DATABASE, CREATE TABLE, CREATE VIEW, CREATE DICTIONARY, DROP DATABASE, DROP TABLE, DROP VIEW, DROP DICTIONARY, UNDROP TABLE, TRUNCATE, OPTIMIZE, BACKUP, GRANT READ, WRITE ON lf_a TO lf_a GRANT TABLE ENGINE ON lf_a TO lf_a GRANT SET DEFINER ON lf_a TO lf_a GRANT CREATE USER, ALTER USER, DROP USER, CREATE ROLE, ALTER ROLE, DROP ROLE, IMPERSONATE ON lf_a TO lf_a GRANT NAMED COLLECTION ADMIN ON lf_a TO lf_a 
+  user lf_b grants (SHOW GRANTS as lf_b):  GRANT CHECK, SHOW, SELECT, INSERT, ALTER TABLE, ALTER DATABASE, ALTER VIEW, CREATE DATABASE, CREATE TABLE, CREATE VIEW, CREATE DICTIONARY, DROP DATABASE, DROP TABLE, DROP VIEW, DROP DICTIONARY, UNDROP TABLE, TRUNCATE, OPTIMIZE, BACKUP, GRANT READ, WRITE ON lf_b TO lf_b GRANT TABLE ENGINE ON lf_b TO lf_b GRANT SET DEFINER ON lf_b TO lf_b GRANT CREATE USER, ALTER USER, DROP USER, CREATE ROLE, ALTER ROLE, DROP ROLE, IMPERSONATE ON lf_b TO lf_b GRANT NAMED COLLECTION ADMIN ON lf_b TO lf_b 
+-- (1) start A while database lf_a does not exist
+  web A health: down  database lf_a exists: 0
+  log: No pending migrations to apply.
+  log: error: failed to open database: code: 81, message: Database lf_a does not exist in line 0: SHOW TABLES FROM "lf_a" LIKE 'schema_migrations'
+  log: Applying clickhouse migrations failed. Common causes:
+  log:   1. The database is unavailable or unreachable.
+  log: No pending migrations to apply.
+  log: error: failed to open database: code: 81, message: Database lf_a does not exist in line 0: SHOW TABLES FROM "lf_a" LIKE 'schema_migrations'
+-- (2) admin creates lf_a and lf_b; start both instances
+  web A and web B healthy
+  lf_a: 16 tables; latest migration: 51 0
+  lf_b: 16 tables; latest migration: 51 0
+  default.schema_migrations rows written by lf_a/lf_b: 0
+  migrations shipped in the image: 51
+-- (3) ingest 100 traces into each, read back
+  dbsep-a: sent 400 obs, accepted 400, http {"200":100}
+  dbsep-b: sent 400 obs, accepted 400, http {"200":100}
+  lf_a.events_full rows tagged dbsep-a: 400  — default.events_full rows tagged dbsep-a: 0
+  lf_b.events_full rows tagged dbsep-b: 400  — default.events_full rows tagged dbsep-b: 0
+  A key, A trace  GET :3100/api/public/traces/{id}: 404
+  B key, B trace  GET :3200/api/public/traces/{id}: 404
+  A key, B trace  GET :3100/api/public/traces/{id}: 404
+  A key on B's web GET :3200/api/public/traces/{id}: 404
+  A: v2 observations of A's trace: 4 rows
+-- (4) as ClickHouse user lf_a
+  SELECT count() FROM lf_a.events_full:
+    400
+  SELECT count() FROM lf_b.events_full:
+    Received exception from server (version 26.8.22):
+    Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: lf_a: Not enough privileges. To execute this query, it's necessary to have the grant SELECT ON lf_b.events_full. (ACCESS_DENIED)
+    (query: SELECT count() FROM lf_b.events_full)
+  SELECT count() FROM default.events_full:
+    Received exception from server (version 26.8.22):
+    Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: lf_a: Not enough privileges. To execute this query, it's necessary to have the grant SELECT ON default.events_full. (ACCESS_DENIED)
+    (query: SELECT count() FROM default.events_full)
+  SHOW DATABASES:
+    lf_a 
+  system.tables rows outside lf_a:
+    0
+  SELECT count() FROM system.parts (no grant):
+    Received exception from server (version 26.8.22):
+    Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: lf_a: Not enough privileges. To execute this query, it's necessary to have the grant SELECT ON system.parts. (ACCESS_DENIED)
+    (query: SELECT count() FROM system.parts)
+  SELECT count() FROM system.query_log (no grant):
+    Received exception from server (version 26.8.22):
+    Code: 497. DB::Exception: Received from localhost:9000. DB::Exception: lf_a: Not enough privileges. To execute this query, it's necessary to have the grant SELECT ON system.query_log. (ACCESS_DENIED)
+    (query: SELECT count() FROM system.query_log)
+  lf_probe (ALL ON lf_a.* + SELECT ON system.parts, system.mutations, system.query_log) — parts by database:
+    lf_a	10
+    system	4
+  lf_probe — mutations by database:
+    lf_a	16
+  lf_probe — system.query_log rows by user (other users' queries included?):
+    analyst_a	180
+    clickhouse	61752
+    lab_rp_admin	122
+    lf_a	1432
+    lf_b	1439
+  lf_probe — one query text of user lf_b:
+    SELECT version() AS version  FORMAT JSONEachRow
+-- (5) what Langfuse ran as lf_a / lf_b since 2026-11-04 13:14:26 UTC
+  queries by user and kind:
+    lf_a	Alter	76
+    lf_a	AsyncInsertFlush	111
+    lf_a	Create	30
+    lf_a	Drop	14
+    lf_a	Insert	111
+    lf_a	Select	20
+    lf_a	Show	3
+    lf_b	Alter	76
+    lf_b	AsyncInsertFlush	112
+    lf_b	Create	30
+    lf_b	Drop	14
+    lf_b	Insert	112
+    lf_b	Select	13
+    lf_b	Show	2
+  databases touched (from query_log.databases):
+    lf_a	lf_a	690
+    lf_a	system	6
+    lf_b	lf_b	690
+    lf_b	system	6
+  errors (exception code, first 160 chars):
+    lf_a	497	12	Code: 497. DB::Exception: lf_a: Not enough privileges. To execute this query, it\'s necessary to have the grant SELECT ON system.parts. (ACCESS_DENIED) (version 
+    lf_b	497	8	Code: 497. DB::Exception: lf_b: Not enough privileges. To execute this query, it\'s necessary to have the grant SELECT ON system.parts. (ACCESS_DENIED) (version 
+  worker/web log lines with ACCESS_DENIED or 'Not enough privileges':
+    lf-a-web: 0
+    lf-a-worker: 62
+    lf-b-web: 0
+    lf-b-worker: 62
+  Redis keys in DB 1 / DB 2: 305 / 305
+-- (6) cleanup
+  done: A and B removed, the stack's web + worker are back

@@ -27,9 +27,19 @@ done < <(git ls-files '*.py')
 echo "    $(git ls-files '*.py' | wc -l | tr -d ' ') files"
 find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 
-echo "--- yaml (safe_load)"
+echo "--- yaml (safe_load; Compose merge tags !reset / !override accepted)"
+yaml_check='
+import sys, yaml
+class L(yaml.SafeLoader): pass
+def tag(loader, node):
+    if isinstance(node, yaml.MappingNode): return loader.construct_mapping(node)
+    if isinstance(node, yaml.SequenceNode): return loader.construct_sequence(node)
+    return loader.construct_scalar(node)
+for t in ("!reset", "!override"): L.add_constructor(t, tag)
+list(yaml.load_all(open(sys.argv[1]), Loader=L))
+'
 while IFS= read -r f; do
-    if ! python3 -c "import sys,yaml; list(yaml.safe_load_all(open(sys.argv[1])))" "$f" 2>/tmp/syntax_err; then
+    if ! python3 -c "$yaml_check" "$f" 2>/tmp/syntax_err; then
         echo "  FAIL $f"
         sed 's/^/        /' /tmp/syntax_err
         failed=1

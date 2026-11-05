@@ -1,0 +1,20 @@
+[WARNING]  (8) : Server web/web1 is DOWN, reason: Layer4 timeout, check duration: 1000ms. 1 active and 0 backup servers left. 21 sessions active, 0 requeued, 0 remaining in queue.
+Server web/web1 is DOWN, reason: Layer4 timeout, check duration: 1000ms. 1 active and 0 backup servers left. 21 sessions active, 0 requeued, 0 remaining in queue.
+[WARNING]  (8) : Server web/web1 was DOWN and now enters maintenance (DNS NX status).
+Server web/web1 was DOWN and now enters maintenance (DNS NX status).
+[WARNING]  (8) : web/web1: IP changed from '(none)' to '172.20.0.7' by 'docker/dns'.
+web/web1: IP changed from '(none)' to '172.20.0.7' by 'docker/dns'.
+Server web/web1 ('langfuse-web') is UP/READY (resolves again).
+Server web/web1 administratively READY thanks to valid DNS answer.
+[WARNING]  (8) : Server web/web1 ('langfuse-web') is UP/READY (resolves again).
+[WARNING]  (8) : Server web/web1 administratively READY thanks to valid DNS answer.
+Server web/web1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 1 active and 0 backup servers left. 0 sessions active, 0 requeued, 0 remaining in queue.
+[WARNING]  (8) : Server web/web1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 1 active and 0 backup servers left. 0 sessions active, 0 requeued, 0 remaining in queue.
+Server web/web2 is DOWN, reason: Layer7 timeout, check duration: 3002ms. 0 active and 0 backup servers left. 64 sessions active, 0 requeued, 0 remaining in queue.
+backend web has no server available!
+[WARNING]  (8) : Server web/web2 is DOWN, reason: Layer7 timeout, check duration: 3002ms. 0 active and 0 backup servers left. 64 sessions active, 0 requeued, 0 remaining in queue.
+[ALERT]    (8) : backend 'web' has no server available!
+[WARNING]  (8) : Server web/web1 is UP, reason: Layer7 check passed, code: 200, check duration: 4ms. 1 active and 0 backup servers online. 0 sessions requeued, 0 total in queue.
+Server web/web1 is UP, reason: Layer7 check passed, code: 200, check duration: 4ms. 1 active and 0 backup servers online. 0 sessions requeued, 0 total in queue.
+Server web/web2 is UP, reason: Layer7 check passed, code: 200, check duration: 99ms. 2 active and 0 backup servers online. 0 sessions requeued, 0 total in queue.
+[WARNING]  (8) : Server web/web2 is UP, reason: Layer7 check passed, code: 200, check duration: 99ms. 2 active and 0 backup servers online. 0 sessions requeued, 0 total in queue.

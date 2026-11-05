@@ -1,0 +1,9 @@
+# Overlay: a second worker (test 02). Same image and environment as langfuse-worker, no host port
+# (the first worker keeps 127.0.0.1:3030). Combine with cpu2 to cap it at 2 CPUs too.
+services:
+  langfuse-worker-2:
+    extends:
+      file: docker-compose.yml   # resolved against the project directory, _base/
+      service: langfuse-worker
+    ports: !reset []
+    depends_on: !reset []

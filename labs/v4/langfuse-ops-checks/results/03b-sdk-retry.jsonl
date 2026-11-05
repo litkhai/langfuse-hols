@@ -1,0 +1,7 @@
+{"case": "500 once", "timeout_s": 5, "attempts": 1, "gaps_s": [], "codes": [500], "delivered": false, "flush_s": 0.0, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}
+{"case": "502 twice, then 200", "timeout_s": 5, "attempts": 3, "gaps_s": [1.21, 2.1], "codes": [502, 502, 200], "delivered": true, "flush_s": 3.32, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}
+{"case": "503 twice, then 200", "timeout_s": 5, "attempts": 3, "gaps_s": [1.12, 1.86], "codes": [503, 503, 200], "delivered": true, "flush_s": 2.99, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}
+{"case": "504 twice, then 200", "timeout_s": 5, "attempts": 3, "gaps_s": [1.07, 2.33], "codes": [504, 504, 200], "delivered": true, "flush_s": 3.4, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}
+{"case": "503 always, timeout 5 (default)", "timeout_s": 5, "attempts": 3, "gaps_s": [0.99, 2.11], "codes": [503, 503, 503], "delivered": false, "flush_s": 3.11, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}
+{"case": "503 always, timeout 30", "timeout_s": 30, "attempts": 6, "gaps_s": [1.21, 2.32, 3.76, 7.11, 15.53], "codes": [503, 503, 503, 503, 503, 503], "delivered": false, "flush_s": 29.93, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}
+{"case": "401", "timeout_s": 5, "attempts": 1, "gaps_s": [], "codes": [401], "delivered": false, "flush_s": 0.02, "sdk": "4.17.0", "otlp_exporter": "1.45.0"}

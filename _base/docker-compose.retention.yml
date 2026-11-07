@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lab 20 overlay — the batch data-retention cleaner, on a short interval
+#
+#  Langfuse deletes data past a project's retention period in two ways (worker, v4.56.0):
+#    • a daily job at 03:15 (packages/shared/src/server/redis/dataRetentionQueue.ts, "15 3 * * *")
+#    • the batch cleaner, off by default (worker/src/env.ts LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED),
+#      every LANGFUSE_BATCH_DATA_RETENTION_CLEANER_INTERVAL_MS (default 3600000). It deletes ClickHouse
+#      rows by start_time / timestamp (worker/src/features/batch-data-retention-cleaner/index.ts).
+#  Lab 20 turns the batch cleaner on with a one-minute interval so a retention deletion can be watched
+#  within a run. Only the worker reads these. Layer on top of base + EE:
+#    . _base/lib/env.sh v4 && lf_compose ee retention -- up -d langfuse-worker
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  langfuse-worker:
+    environment:
+      LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED: "true"
+      LANGFUSE_BATCH_DATA_RETENTION_CLEANER_INTERVAL_MS: ${LANGFUSE_BATCH_DATA_RETENTION_CLEANER_INTERVAL_MS:-60000}

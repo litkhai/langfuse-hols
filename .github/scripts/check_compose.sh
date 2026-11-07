@@ -31,6 +31,7 @@ cd "$(git rev-parse --show-toplevel)"
 #   ee governance           lab 10  (10-ee-instance-governance.sh)
 #   ee sso                  lab 16  (16-ee-sso.sh)
 #   ee encryption           lab 17  (17-ee-encryption.sh)
+#   ee retention            lab 20  (20-ee-retention-after-export.sh)
 #   ee masking governance sso encryption   lab 99 cleanup  (99-cleanup.sh -> _base/bin/down.sh tears down all of them)
 SETS=(
     "base"
@@ -39,6 +40,7 @@ SETS=(
     "ee governance"
     "ee sso"
     "ee encryption"
+    "ee retention"
     "ee masking governance sso encryption"
 )
 
@@ -158,6 +160,14 @@ if "governance" in overlays:
         "LANGFUSE_UI_DOCUMENTATION_HREF",
         "LANGFUSE_UI_SUPPORT_HREF",
         "LANGFUSE_ALLOWED_ORGANIZATION_CREATORS",
+    ])
+
+# ── retention (lab 20) ───────────────────────────────────────────────────────
+if "retention" in overlays:
+    # lab 20: the batch data-retention cleaner runs in the worker; web never reads these.
+    has_env("langfuse-worker", [
+        "LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED",
+        "LANGFUSE_BATCH_DATA_RETENTION_CLEANER_INTERVAL_MS",
     ])
 
 # ── sso (lab 16) ─────────────────────────────────────────────────────────────

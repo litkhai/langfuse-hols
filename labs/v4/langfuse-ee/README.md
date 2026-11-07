@@ -78,6 +78,8 @@ langfuse-ee/
 ├── 17-ee-encryption.sh          # TLS to ClickHouse, ClickHouse encrypted disk, MinIO SSE-S3, what Postgres holds
 ├── 18-ee-protected-labels.sh    # Protected `production` label: MEMBER vs ADMIN vs project API key, audit rows, license off
 ├── 19-ee-scheduled-parquet-export.sh # The worker's scheduled Parquet export, read back from its manifests; lag buffer, late spans
+├── 20-ee-retention-after-export.sh # Archive-then-delete for real: the batch retention cleaner deletes, the Parquet archive stays
+├── 21-ee-export-object-lock.sh  # The export into a WORM bucket (MinIO object lock, GOVERNANCE retention)
 └── 99-cleanup.sh                # Wrapper → _base/bin/down.sh v4: tear the stack down (--purge to wipe volumes)
 ```
 
@@ -93,6 +95,7 @@ _base/
 ├── docker-compose.governance.yml# Lab 10 overlay: UI customization + org-creators allowlist
 ├── docker-compose.sso.yml       # Lab 16 overlay: Keycloak (realms in sso/) + AUTH_KEYCLOAK_* and the SSO switches
 ├── docker-compose.encryption.yml# Lab 17 overlay: ClickHouse TLS + encrypted disk (own volume), MinIO KMS key, LANGFUSE_S3_*_SSE
+├── docker-compose.retention.yml # Lab 20 overlay: the batch data-retention cleaner on, 1-minute interval (worker)
 ├── sso/ · encryption/           # Lab 16 realm files · lab 17 ClickHouse config (keys and certificates are generated, gitignored)
 ├── masking/masking_service.py   # Labs 08, 12: tiny stdlib masking-callback sidecar (+ /mask-slow, /mask-500, per-project rule)
 └── bin/                         # up.sh · check.sh · down.sh (first argument: the track, v3 or v4)
@@ -155,6 +158,8 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./17-ee-encryption.sh        # TLS to ClickHouse + encrypted disk + MinIO SSE-S3 (~2 min, own ClickHouse volume)
 ./18-ee-protected-labels.sh --license-off  # who can still move a protected label; restarts web + worker twice (a few minutes)
 ./19-ee-scheduled-parquet-export.sh        # scheduled Parquet export read back (~20 min: waits out the 20-min lag buffer)
+./20-ee-retention-after-export.sh          # archive-then-delete with the batch retention cleaner (retention overlay, a few minutes)
+./21-ee-export-object-lock.sh              # export into a WORM bucket; a written version cannot be deleted
 ```
 
 ### 🧩 EE feature coverage
@@ -427,7 +432,24 @@ Step 11 configures the integration and proves the ClickHouse primitive by hand; 
 | MEMBER `runNow` / `get` | 403 / 403 (`integrations:CRUD` is OWNER / ADMIN) |
 | Integration with a wrong secret | `PUT` → **200** (not checked on save); after "Run now" `last_error` = signature mismatch, 0 manifests |
 
-One manifest (03:36:04 → 03:40:00 UTC) came from the scheduler's own `*/20` tick at 04:00 UTC, between the two manual runs; the script does not assert it. The scheduled export is not license-gated on self-hosted (`scheduled-blob-exports` is in every self-hosted plan); it was only run with the license on.
+One manifest (03:36:04 → 03:40:00 UTC) came from the scheduler's own `*/20` tick at 04:00 UTC, between the two manual runs; the script does not assert it. The scheduled export is not license-gated on self-hosted (`scheduled-blob-exports` is in every self-hosted plan): `--license-off` restarts web and worker without the key after the setup and runs every export check unlicensed (14 PASS on 2026-11-07, `--phase1-only`).
+
+#### 20 — Retention after export ([20-ee-retention-after-export.sh](20-ee-retention-after-export.sh))
+
+Archive-then-delete, run for real. A project with a 3-day retention gets five spans 4 days old and one 1 hour old; a weekly `FULL_HISTORY` Parquet export archives all six. Then a **late** span, also 4 days old, arrives after the export has passed its `start_time`. The worker restarts with the [retention overlay](../../../_base/docker-compose.retention.yml) (the batch retention cleaner, off by default, on a 1-minute interval):
+
+| Check | Result (2026-11-07) |
+|---|---|
+| The cleaner's statement (`system.query_log`) | lightweight `DELETE FROM events_full / events_core WHERE project_id = … AND start_time < now − 3 days`, about 10 s after the restart |
+| Rows older than 3 days | 0; the 1-hour span **kept** (control) |
+| The five archived old spans | **still readable from Parquet** |
+| The late span | **in neither ClickHouse nor the archive: lost** |
+
+The default path is a daily job at 03:15 (`dataRetentionQueue.ts`), which also deletes by `start_time`; it was not waited for. The script restores the worker without the overlay.
+
+#### 21 — Export into a WORM bucket ([21-ee-export-object-lock.sh](21-ee-export-object-lock.sh))
+
+A MinIO bucket with object lock and a default GOVERNANCE retention of 1 day as the export target. The run succeeds (`last_error` empty, manifest written, 3 = 3 rows read back), every written object carries GOVERNANCE retention, and `mc rm --version-id` on a written Parquet is refused ("is WORM protected"), while the same command deletes on a bucket without object lock (control). The bucket is left in place (governance bypass needed to remove it). COMPLIANCE mode and AWS S3 are not run (#95).
 
 ### 🔑 Gotchas worth remembering
 
@@ -446,7 +468,7 @@ One manifest (03:36:04 → 03:40:00 UTC) came from the scheduler's own `*/20` ti
 | **The event bucket keeps the raw payload** | Masking runs after the worker downloads from S3, and the raw object stays there. Protect and expire the bucket like the source data (step 12). |
 | **v1 read endpoints are off in `events_only`** | `GET /api/public/traces`, `/observations`, `/scores` and `/sessions` return 404. Use `/api/public/v2/observations`. Legacy ingestion takes only `score-create`, with HTTP 207 (steps 12–15). |
 | **Project API keys move protected labels** | Protection applies to users (UI / tRPC). A project API key can still create, move and delete `production` through the public API, by design (step 18). Treat the key as the deployment credential and watch `audit_logs` for `type = API_KEY`. |
-| **Late spans are never exported** | The scheduled export picks rows by `start_time` from `last_sync_at` onward, 20 min behind now. A span that arrives with an older `start_time` stays in ClickHouse and in no export (step 19); reconcile the archive with ClickHouse before retention deletes. |
+| **Late spans are never exported** | The scheduled export picks rows by `start_time` from `last_sync_at` onward, 20 min behind now. A span that arrives with an older `start_time` stays in ClickHouse and in no export (step 19); and retention later deletes it with no archived copy (step 20). Reconcile the archive with ClickHouse before retention deletes. |
 
 ### 📝 Verification status
 
@@ -496,16 +518,19 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `16` SSO | 21 checks PASS: OIDC and SAML-brokered sign-in, first-login roles, `OAuthAccountNotLinked` → linked with `ALLOW_ACCOUNT_LINKING`, domain enforcement, password sign-in disabled, admin password sign-in restored |
 | `17` encryption | 22 checks PASS, 3 INFO: TLS only to ClickHouse (CA checked), encrypted disk with plain-disk control, MinIO SSE-S3 with unencrypted control, secrets absent from `pg_dump`, original volume restored |
 
-**Steps 18–19** ([#93](https://github.com/litkhai/langfuse-hols/issues/93)) were verified **end-to-end on 2026-11-07** against **Langfuse v4.56.0 / ClickHouse 26.8.22.13**:
+**Steps 18–21** ([#93](https://github.com/litkhai/langfuse-hols/issues/93)) were verified **end-to-end on 2026-11-07** against **Langfuse v4.56.0 / ClickHouse 26.8.22.13**:
 - **Stack:** the same pins and enterprise licence key, on volumes created fresh on 2026-11-07 (01 + 05 first), `events_only` mode, MinIO as the export target.
-- **Run:** Docker 29.9.2, Compose v5.6.1, no model calls. Step 18 with `--license-off` (web and worker restarted without the key, then restored); step 19 in full (both phases).
+- **Run:** Docker 29.9.2, Compose v5.6.1, no model calls. Step 18 with `--license-off` (web and worker restarted without the key, then restored); step 19 in full (both phases) and again with `--license-off --phase1-only`; steps 20 and 21 once each (MinIO `RELEASE.2026-09-22T19-25-18Z`).
 - **Positive controls:** each script exits 1 when an expected result is not observed, and every denial has a control in the same run (the MEMBER's move before protection, the unlabelled version, the admin API with and without the key, the spans present in ClickHouse). No separate fault-injection run was made; during development the checks fired on real mismatches (HTTP 201 vs 200, a key list swallowed by `docker compose exec`).
-- **Source** read at tag `v4.56.0` and compared with `v4.76.0` (2026-11-05) for the files the steps rely on: no change in behaviour. Not run on 4.76.0.
+- **Source** read at tag `v4.56.0` and compared with `v4.76.0` (2026-11-05) for the files the steps rely on: no change in behaviour.
+- **Also on v4.76.0** (the latest release on 2026-11-07): steps 18–19 in a separate compose project with its own fresh volumes (`COMPOSE_PROJECT_NAME=langfuse-hols-v4-latest LANGFUSE_VERSION=4.76.0`; the pin stays 4.56.0): 36 and 17 PASS.
 
 | Step | Result |
 |---|---|
 | `18` protected labels | 36 checks PASS (23 licensed + 13 `--license-off`): MEMBER denied on every change to `production` after protection, ADMIN allowed, **project API key allowed by design**, audit rows by actor; license off → protection still enforced, nobody can change it, no audit rows |
-| `19` scheduled Parquet export | 17 checks PASS: 6 → 8 manifests, 24 = 24 then 25 of 26 (the late span), lag-buffer span absent then present, no `*_price` columns, wrong secret → saved, `last_error`, 0 manifests, MEMBER 403 |
+| `19` scheduled Parquet export | 17 checks PASS: 6 → 8 manifests, 24 = 24 then 25 of 26 (the late span), lag-buffer span absent then present, no `*_price` columns, wrong secret → saved, `last_error`, 0 manifests, MEMBER 403. `--license-off --phase1-only`: 14 PASS, same results unlicensed |
+| `20` retention after export | 12 checks PASS: the batch cleaner's `DELETE … start_time <` in `query_log`, old rows 0, recent row kept, archived spans still in Parquet, the late span lost |
+| `21` WORM bucket | 8 checks PASS: export succeeds into an object-lock bucket, objects carry GOVERNANCE retention, version delete refused, control delete on an unlocked bucket succeeds |
 
 Confirmed at runtime and built into the labs:
 
@@ -619,6 +644,8 @@ langfuse-ee/
 ├── 17-ee-encryption.sh          # ClickHouse TLS, ClickHouse 암호화 디스크, MinIO SSE-S3, Postgres에 남는 것
 ├── 18-ee-protected-labels.sh    # 보호된 `production` 라벨: MEMBER·ADMIN·프로젝트 API 키, 감사 로그 행, 라이선스 해제
 ├── 19-ee-scheduled-parquet-export.sh # worker가 쓴 스케줄 Parquet 반출을 manifest로 읽어 확인; lag buffer, 늦게 온 span
+├── 20-ee-retention-after-export.sh # 실제 archive-then-delete: batch 보존 정리기가 지우고 Parquet 보관본은 남음
+├── 21-ee-export-object-lock.sh  # WORM 버킷으로 반출(MinIO object lock, GOVERNANCE 보존)
 └── 99-cleanup.sh                # 래퍼 → _base/bin/down.sh v4: 스택 종료 (--purge 로 볼륨까지 삭제)
 ```
 
@@ -634,6 +661,7 @@ _base/
 ├── docker-compose.governance.yml# 랩 10 오버레이: UI 커스터마이징 + 조직 생성 허용목록
 ├── docker-compose.sso.yml       # 랩 16 오버레이: Keycloak(realm은 sso/) + AUTH_KEYCLOAK_*와 SSO 스위치
 ├── docker-compose.encryption.yml# 랩 17 오버레이: ClickHouse TLS + 암호화 디스크(별도 볼륨), MinIO KMS 키, LANGFUSE_S3_*_SSE
+├── docker-compose.retention.yml # 랩 20 오버레이: batch 데이터 보존 정리기 켜기, 1분 간격(worker)
 ├── sso/ · encryption/           # 랩 16 realm 파일 · 랩 17 ClickHouse 설정 (키와 인증서는 실행 시 생성, gitignore)
 ├── masking/masking_service.py   # 랩 08: stdlib 전용 초경량 마스킹 콜백 사이드카
 └── bin/                         # up.sh · check.sh · down.sh (첫 번째 인자: 트랙, v3 또는 v4)
@@ -696,6 +724,8 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./17-ee-encryption.sh        # ClickHouse TLS + 암호화 디스크 + MinIO SSE-S3 (~2분, 별도 ClickHouse 볼륨)
 ./18-ee-protected-labels.sh --license-off  # 보호된 라벨을 누가 아직 옮길 수 있는지; web·worker를 두 번 재시작 (몇 분)
 ./19-ee-scheduled-parquet-export.sh        # 스케줄 Parquet 반출을 다시 읽기 (~20분: 20분 lag buffer를 기다림)
+./20-ee-retention-after-export.sh          # batch 보존 정리기로 archive-then-delete (retention 오버레이, 몇 분)
+./21-ee-export-object-lock.sh              # WORM 버킷으로 반출; 쓴 버전은 지울 수 없음
 ```
 
 ### 🧩 EE 기능 커버리지
@@ -968,7 +998,24 @@ Langfuse용 ClickHouse 계정은 `access_management=0`이라, 스크립트가 `u
 | MEMBER `runNow` / `get` | 403 / 403(`integrations:CRUD`는 OWNER·ADMIN) |
 | secret이 틀린 통합 | `PUT` → **200**(저장 시 확인 안 함). "Run now" 뒤 `last_error` = 서명 불일치, manifest 0개 |
 
-manifest 하나(03:36:04 → 03:40:00 UTC)는 두 수동 실행 사이 04:00 UTC에 스케줄러의 `*/20` tick이 쓴 것입니다. 스크립트는 이것을 검사하지 않습니다. self-hosted에서 스케줄 반출은 라이선스와 무관합니다(`scheduled-blob-exports`가 모든 self-hosted 플랜에 있음). 라이선스를 켠 상태로만 실행했습니다.
+manifest 하나(03:36:04 → 03:40:00 UTC)는 두 수동 실행 사이 04:00 UTC에 스케줄러의 `*/20` tick이 쓴 것입니다. 스크립트는 이것을 검사하지 않습니다. self-hosted에서 스케줄 반출은 라이선스와 무관합니다(`scheduled-blob-exports`가 모든 self-hosted 플랜에 있음). `--license-off`는 준비 뒤 web과 worker를 키 없이 다시 띄우고 모든 반출 검사를 라이선스 없이 돌립니다(2026-11-07, `--phase1-only`로 14 PASS).
+
+#### 20 — 반출 뒤 데이터 보존 ([20-ee-retention-after-export.sh](20-ee-retention-after-export.sh))
+
+archive-then-delete를 실제로 돌립니다. 보존 3일인 프로젝트에 4일 전 span 5건과 1시간 전 span 1건을 넣고, 주간 `FULL_HISTORY` Parquet 반출이 여섯 건을 모두 보관합니다. 그다음 역시 4일 전인 **늦은** span이 반출이 그 `start_time`을 지나간 뒤에 도착합니다. worker는 [retention 오버레이](../../../_base/docker-compose.retention.yml)(기본으로 꺼진 batch 보존 정리기를 1분 간격으로)로 다시 뜹니다.
+
+| 확인 | 결과(2026-11-07) |
+|---|---|
+| 정리기가 낸 문장(`system.query_log`) | 경량 `DELETE FROM events_full / events_core WHERE project_id = … AND start_time < now − 3 days`, 재시작 약 10초 뒤 |
+| 3일보다 오래된 행 | 0. 1시간 전 span은 **남음**(대조) |
+| 보관된 오래된 span 5건 | **Parquet에서 그대로 읽힘** |
+| 늦은 span | **ClickHouse에도 보관본에도 없음: 사라짐** |
+
+기본 경로는 매일 03:15의 작업(`dataRetentionQueue.ts`)이고 역시 `start_time`으로 지웁니다. 이것은 기다리지 않았습니다. 스크립트는 끝나면 worker를 오버레이 없이 되돌립니다.
+
+#### 21 — WORM 버킷으로 반출 ([21-ee-export-object-lock.sh](21-ee-export-object-lock.sh))
+
+object lock과 기본 GOVERNANCE 보존 1일을 건 MinIO 버킷을 반출 대상으로 씁니다. 실행은 성공하고(`last_error` 없음, manifest 씀, 다시 읽은 행 3 = 3), 쓴 객체마다 GOVERNANCE 보존이 걸리며, 쓴 Parquet에 대한 `mc rm --version-id`는 거부됩니다("is WORM protected"). 같은 명령은 object lock이 없는 버킷에서는 지웁니다(대조). 버킷은 남겨 둡니다(지우려면 governance bypass 필요). COMPLIANCE 모드와 AWS S3는 실행하지 않았습니다(#95).
 
 ### 🔑 기억할 함정들
 
@@ -987,7 +1034,7 @@ manifest 하나(03:36:04 → 03:40:00 UTC)는 두 수동 실행 사이 04:00 UTC
 | **이벤트 버킷에 원본이 남음** | 마스킹은 worker가 S3에서 내려받은 뒤 실행되고 원본 객체는 그대로 남음. 버킷을 원천 데이터처럼 보호하고 만료시킬 것(단계 12). |
 | **`events_only`에서 v1 조회 API는 꺼져 있음** | `GET /api/public/traces`·`/observations`·`/scores`·`/sessions`는 404. `/api/public/v2/observations`를 쓸 것. 레거시 수집은 HTTP 207과 함께 `score-create`만 받음(단계 12–15). |
 | **프로젝트 API 키는 보호된 라벨을 옮긴다** | 보호는 사용자(화면·tRPC)에 걸립니다. 프로젝트 API 키는 public API로 `production`을 여전히 만들고 옮기고 지울 수 있고, 의도된 동작입니다(18단계). 키를 배포 자격 증명으로 다루고 `audit_logs`의 `type = API_KEY`를 지켜보세요. |
-| **늦게 온 span은 반출되지 않는다** | 스케줄 반출은 `last_sync_at`부터, 지금보다 20분 늦게, `start_time`으로 행을 고릅니다. 더 오래된 `start_time`으로 도착한 span은 ClickHouse에만 남고 어떤 반출에도 없습니다(19단계). 보존 삭제 전에 보관본을 ClickHouse와 맞춰 보세요. |
+| **늦게 온 span은 반출되지 않는다** | 스케줄 반출은 `last_sync_at`부터, 지금보다 20분 늦게, `start_time`으로 행을 고릅니다. 더 오래된 `start_time`으로 도착한 span은 ClickHouse에만 남고 어떤 반출에도 없습니다(19단계). 데이터 보존은 나중에 보관본 없이 그것을 지웁니다(20단계). 보존 삭제 전에 보관본을 ClickHouse와 맞춰 보세요. |
 
 ### 📝 검증 상태
 
@@ -1037,16 +1084,19 @@ manifest 하나(03:36:04 → 03:40:00 UTC)는 두 수동 실행 사이 04:00 UTC
 | `16` SSO | 검사 21개 PASS: OIDC와 SAML 중개 로그인, 첫 로그인 역할, `OAuthAccountNotLinked` → `ALLOW_ACCOUNT_LINKING`으로 연결, 도메인 강제, 비밀번호 로그인 끄기, 관리자 비밀번호 로그인 복구 |
 | `17` 암호화 | 검사 22개 PASS, INFO 3개: ClickHouse는 TLS만(CA 검증), plain 디스크 대조가 있는 암호화 디스크, 암호화하지 않은 대조가 있는 MinIO SSE-S3, `pg_dump`에 비밀값 없음, 원래 볼륨 복구 |
 
-**18–19단계**([#93](https://github.com/litkhai/langfuse-hols/issues/93))는 **2026-11-07**에 **Langfuse v4.56.0 / ClickHouse 26.8.22.13**으로 **처음부터 끝까지 검증**했습니다.
+**18–21단계**([#93](https://github.com/litkhai/langfuse-hols/issues/93))는 **2026-11-07**에 **Langfuse v4.56.0 / ClickHouse 26.8.22.13**으로 **처음부터 끝까지 검증**했습니다.
 - **스택:** 같은 버전 고정과 엔터프라이즈 라이선스 키, 2026-11-07에 새로 만든 볼륨(01 + 05 먼저), `events_only` 모드, 반출 대상은 MinIO.
-- **실행 환경:** Docker 29.9.2, Compose v5.6.1, 모델 호출 없음. 18단계는 `--license-off`로(web과 worker를 키 없이 다시 띄운 뒤 복구), 19단계는 두 단계 모두.
+- **실행 환경:** Docker 29.9.2, Compose v5.6.1, 모델 호출 없음. 18단계는 `--license-off`로(web과 worker를 키 없이 다시 띄운 뒤 복구), 19단계는 두 단계 모두와 `--license-off --phase1-only`로 한 번 더, 20·21단계는 한 번씩(MinIO `RELEASE.2026-09-22T19-25-18Z`).
 - **양성 대조:** 기대한 결과가 나오지 않으면 각 스크립트가 1로 끝나고, 모든 거부에 같은 실행 안의 대조가 있습니다(보호 전 MEMBER의 이동, 라벨 없는 버전, 키가 있을 때와 없을 때의 admin API, ClickHouse에 있는 span). 별도의 결함 주입 실행은 하지 않았습니다. 개발 중 실제 불일치(HTTP 201 대 200, `docker compose exec`가 삼킨 키 목록)에서 검사가 실패하는 것은 봤습니다.
-- **소스**는 태그 `v4.56.0`에서 읽고, 단계가 기대는 파일을 `v4.76.0`(2026-11-05)과 비교했습니다. 동작 변화 없음. 4.76.0에서는 실행하지 않았습니다.
+- **소스**는 태그 `v4.56.0`에서 읽고, 단계가 기대는 파일을 `v4.76.0`(2026-11-05)과 비교했습니다. 동작 변화 없음.
+- **v4.76.0에서도**(2026-11-07 최신 릴리스): 18–19단계를 별도 compose 프로젝트와 새 볼륨에서(`COMPOSE_PROJECT_NAME=langfuse-hols-v4-latest LANGFUSE_VERSION=4.76.0`, 고정 버전은 4.56.0 그대로) 돌려 36·17 PASS.
 
 | 단계 | 결과 |
 |---|---|
 | `18` 보호된 라벨 | 검사 36개 PASS(라이선스 23 + `--license-off` 13): 보호 뒤 MEMBER의 `production` 변경은 모두 거부, ADMIN은 허용, **프로젝트 API 키는 의도적으로 허용**, 주체별 감사 행. 라이선스 해제 → 보호는 계속 강제, 누구도 변경 불가, 감사 행 없음 |
-| `19` 스케줄 Parquet 반출 | 검사 17개 PASS: manifest 6 → 8개, 24 = 24 다음 26개 중 25개(빠진 것은 늦게 온 span), 지연 버퍼 span 없음 → 있음, `*_price` 열 없음, 틀린 secret → 저장됨·`last_error`·manifest 0개, MEMBER 403 |
+| `19` 스케줄 Parquet 반출 | 검사 17개 PASS: manifest 6 → 8개, 24 = 24 다음 26개 중 25개(빠진 것은 늦게 온 span), 지연 버퍼 span 없음 → 있음, `*_price` 열 없음, 틀린 secret → 저장됨·`last_error`·manifest 0개, MEMBER 403. `--license-off --phase1-only`: 14 PASS, 라이선스 없이 같은 결과 |
+| `20` 반출 뒤 보존 | 검사 12개 PASS: `query_log`에 batch 정리기의 `DELETE … start_time <`, 오래된 행 0, 최근 행 남음, 보관된 span은 Parquet에 그대로, 늦은 span은 사라짐 |
+| `21` WORM 버킷 | 검사 8개 PASS: object lock 버킷으로 반출 성공, 객체에 GOVERNANCE 보존, 버전 삭제 거부, object lock 없는 버킷의 대조 삭제는 성공 |
 
 런타임에서 확인해 랩에 반영한 두 가지:
 

@@ -1287,6 +1287,232 @@ exports/lab19-20261107125557/cmw5vfaik003ts23r33ldb11q/scores/2026-11-07T03-52-4
 
 ---
 
+## Lab 19b — The same export without the license (2026-11-07)
+
+Same stack (4.56.0). Command: `19-ee-scheduled-parquet-export.sh --license-off --phase1-only` (exit 0). The setup needs the admin API, so it runs licensed; web and worker are then restarted without `LANGFUSE_EE_LICENSE_KEY` (admin API → 403 as the control) and every export check runs unlicensed. The EE overlay is restored on exit.
+
+```text
+════ 1. Organization, two projects (good / wrong-secret), keys, two users ════
+  project good = cmw5xc05d000amu3riif86b59
+  project bad = cmw5xc0b0000hmu3rzi90cokj
+  prefix = exports/lab19-20261107134922/
+════ 2. Spans: 24 old (start 35–127 min ago), 1 inside the 20-min lag buffer (5 min ago) ════
+  ClickHouse rows: good=25  bad=1
+════ 3. Integrations (org API): PARQUET, every_20_minutes, FULL_HISTORY, OBSERVATIONS_V2 ════
+  PASS  good | PUT integration | expected: HTTP 200 | observed: HTTP 200 {"fileType":"PARQUET","exportFrequency":"every_20_minutes","exportMode":"FULL_HISTORY","exportSource":"OBSERVATIONS_V2"}
+  PASS  bad | PUT integration with a wrong secret | expected: HTTP 200 (not checked on save) | observed: HTTP 200
+════ 3b. License off: restart web + worker without the EE overlay ════
+  PASS  stack | license key in langfuse-worker after restart | expected: absent | observed: absent
+  PASS  stack | admin API without the license (control: EE is off) | expected: not 200 | observed: HTTP 403
+════ 4. Who may run it: MEMBER denied, ADMIN runs it ════
+  PASS  member | Run now (blobStorageIntegration.runNow) | expected: HTTP 403 FORBIDDEN | observed: HTTP 403 FORBIDDEN
+  PASS  member | read the integration (blobStorageIntegration.get) | expected: HTTP 403 FORBIDDEN | observed: HTTP 403 FORBIDDEN
+  PASS  expadmin | Run now (good project) | expected: HTTP 200 | observed: HTTP 200
+  Run now (bad project) → HTTP 200
+════ 5. Phase 1: wait for the catch-up, then read the manifests and the Parquet ════
+  caught up: 2026-11-07T04:29:44.286Z|false|null
+  manifests: 6
+    2026-11-07T02:42:25.000Z → 2026-11-07T03:02:25.000Z  files=2  scores/2026-11-07T03-02-25.parquet,observations_v2/2026-11-07T03-02-25.parquet
+    2026-11-07T03:02:25.000Z → 2026-11-07T03:22:25.000Z  files=2  scores/2026-11-07T03-22-25.parquet,observations_v2/2026-11-07T03-22-25.parquet
+    2026-11-07T03:22:25.000Z → 2026-11-07T03:42:25.000Z  files=2  scores/2026-11-07T03-42-25.parquet,observations_v2/2026-11-07T03-42-25.parquet
+    2026-11-07T03:42:25.000Z → 2026-11-07T04:02:25.000Z  files=2  scores/2026-11-07T04-02-25.parquet,observations_v2/2026-11-07T04-02-25.parquet
+    2026-11-07T04:02:25.000Z → 2026-11-07T04:22:25.000Z  files=2  scores/2026-11-07T04-22-25.parquet,observations_v2/2026-11-07T04-22-25.parquet
+    2026-11-07T04:22:25.000Z → 2026-11-07T04:29:44.286Z  files=2  scores/2026-11-07T04-29-44.parquet,observations_v2/2026-11-07T04-29-44.parquet
+  PASS  good | one manifest per 20-min window (FULL_HISTORY catch-up) | expected: >= 2 manifests | observed: 6
+  PASS  good | distinct ids in Parquet = ClickHouse rows with start_time < last_sync_at | expected: 24 = 24 | observed: 24 (rows 24) = 24
+  PASS  good | lag-buffer span is in ClickHouse (control) | expected: present | observed: f75d7ab3d4067753
+  PASS  good | lag-buffer span (start now−5 min) in phase-1 export | expected: absent | observed: absent
+  Parquet columns: 42 (id trace_id project_id environment type parent_observation_id is_root_observation name …)
+  PASS  good | Parquet columns: no *_price, has total_cost (docs claim) | expected: 0 price columns, total_cost | observed: 0 price columns, total_cost=1
+  file format (magic bytes of the first file): PAR1
+════ 6. The wrong-secret integration ════
+  null|true|The request signature we calculated does not match the signature you provided. Check your key and signing method.
+  PASS  bad | last_error recorded | expected: an error | observed: The request signature we calculated does not match the signature you provided. Check your key and signing method.
+  PASS  bad | manifests written | expected: 0 | observed: 0
+════ Objects under the prefix (MinIO) ════
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/manifests/2026-11-07T03-02-25.json	1044
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/manifests/2026-11-07T03-22-25.json	1044
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/manifests/2026-11-07T03-42-25.json	1044
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/manifests/2026-11-07T04-02-25.json	1044
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/manifests/2026-11-07T04-22-25.json	1044
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/manifests/2026-11-07T04-29-44.json	1043
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/observations_v2/2026-11-07T03-02-25.parquet	15348
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/observations_v2/2026-11-07T03-22-25.parquet	15356
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/observations_v2/2026-11-07T03-42-25.parquet	15337
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/observations_v2/2026-11-07T04-02-25.parquet	15324
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/observations_v2/2026-11-07T04-22-25.parquet	15280
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/observations_v2/2026-11-07T04-29-44.parquet	1579
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/scores/2026-11-07T03-02-25.parquet	519
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/scores/2026-11-07T03-22-25.parquet	519
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/scores/2026-11-07T03-42-25.parquet	519
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/scores/2026-11-07T04-02-25.parquet	519
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/scores/2026-11-07T04-22-25.parquet	519
+exports/lab19-20261107134922/cmw5xc05d000amu3riif86b59/scores/2026-11-07T04-29-44.parquet	519
+════ Result ════
+  PASS 14  FAIL 0
+════ License back on (EE overlay) ════
+  admin API → HTTP 200
+```
+
+**Reading it.** Same results as the licensed run: `scheduled-blob-exports` is in every self-hosted plan, so the export, "Run now" and the role check (`integrations:CRUD`) need no license.
+
+---
+
+## Lab 20 — Retention after export: the archive outlives the deletion, the late span is lost (2026-11-07)
+
+Langfuse v4.56.0 / CH 26.8.22.13, EE overlay, then `ee retention` for the worker. Command: `20-ee-retention-after-export.sh` (exit 0).
+
+```text
+════ 1. Organization, project with retention = 3 days, key, one ADMIN user ════
+  PASS  project | retention_days in Postgres | expected: 3 | observed: 3
+════ 2. Spans: 5 old (start 4 days ago), 1 recent (start 1 hour ago) ════
+  ClickHouse rows: 6
+════ 3. Export: PARQUET, weekly, FULL_HISTORY, OBSERVATIONS_V2; Run now; wait for the catch-up ════
+  PASS  export | Run now | expected: HTTP 200 | observed: HTTP 200
+  last_sync_at = 2026-11-07 04:51:14.633
+  PASS  export | old spans in the archive | expected: 5 | observed: 5
+  PASS  export | recent span in the archive | expected: present | observed: present
+════ 4. A late span, also 4 days old, arrives after the export ════
+  PASS  clickhouse | late span stored (control) | expected: present | observed: bd2dbd981fb930ab
+════ 5. Worker with the batch retention cleaner on a 1-minute interval ════
+  PASS  worker | batch retention cleaner enabled | expected: true | observed: true
+  old rows gone after 11 s
+  PASS  clickhouse | rows older than 3 days after the cleaner ran | expected: 0 | observed: 0
+    2026-11-07 05:11:25	DELETE FROM events_full WHERE ((project_id = \'cmw5y3zo9000umw3shzbuo2p8\') AND (start_time < _CAST(\'1793769085.36\', \'DateTime64(3)\')))
+    2026-11-07 05:11:25	DELETE FROM events_core WHERE ((project_id = \'cmw5y3zo9000umw3shzbuo2p8\') AND (start_time < _CAST(\'1793769085.361\', \'DateTime64(3)\')))
+  PASS  clickhouse | the cleaner's DELETE on events_full by start_time (system.query_log) | expected: >= 1 | observed: 1
+  PASS  clickhouse | recent span kept (control: no over-deletion) | expected: present | observed: present
+════ 6. What survives ════
+  PASS  archive | old spans still readable from Parquet after deletion | expected: 5 | observed: 5
+  PASS  clickhouse | late span after the cleaner ran | expected: absent (deleted) | observed: absent
+  PASS  archive | late span in the archive | expected: absent: lost | observed: absent
+════ Result ════
+  PASS 12  FAIL 0
+════ Worker back without the retention overlay ════
+  LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED in worker: (empty = default false)
+```
+
+**Reading it.** The batch cleaner (`LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED`, off by default) issued lightweight `DELETE … WHERE project_id = … AND start_time < now − 3 days` on `events_full` and `events_core` about 10 s after the worker started. The five archived old spans are still readable from Parquet; the late span, stored after the export had passed its `start_time`, is now in neither ClickHouse nor the archive. The 1-hour-old span stays (control). The daily job ("15 3 * * *") was not waited for.
+
+## Lab 21 — Export into a WORM bucket (2026-11-07)
+
+Same stack. Command: `21-ee-export-object-lock.sh` (exit 0). MinIO `RELEASE.2026-09-22T19-25-18Z`, bucket created with `mc mb --with-lock` and `mc retention set --default GOVERNANCE 1d`.
+
+```text
+════ 1. A MinIO bucket with object lock and a default GOVERNANCE retention of 1 day ════
+  PASS  bucket | default retention of lab21-worm-20261107141217 | expected: GOVERNANCE | observed: GOVERNANCE
+════ 2. Organization, project, key, ADMIN user; 3 spans 1–2 hours old ════
+  ClickHouse rows: 3
+════ 3. Export into the WORM bucket (PARQUET, hourly, FULL_HISTORY), Run now ════
+  PASS  export | Run now | expected: HTTP 200 | observed: HTTP 200
+  PASS  export | last_error after the run | expected: empty | observed: empty
+════ 4. What the run wrote, and whether it can be deleted ════
+  [2026-11-07 05:12:22 UTC]  1002B STANDARD manifests/2026-11-07T04-42-18.json
+  [2026-11-07 05:12:22 UTC]  1001B STANDARD manifests/2026-11-07T04-52-22.json
+  [2026-11-07 05:12:22 UTC]  15KiB STANDARD observations_v2/2026-11-07T04-42-18.parquet
+  [2026-11-07 05:12:22 UTC] 1.5KiB STANDARD observations_v2/2026-11-07T04-52-22.parquet
+  [2026-11-07 05:12:22 UTC]   519B STANDARD scores/2026-11-07T04-42-18.parquet
+  [2026-11-07 05:12:22 UTC]   519B STANDARD scores/2026-11-07T04-52-22.parquet
+  PASS  export | manifest written | expected: present | observed: 2026-11-07T04-42-18.json
+  PASS  export | rows in the Parquet (read with ClickHouse s3()) | expected: 3 | observed: 3
+  PASS  worm | retention on the written Parquet | expected: GOVERNANCE | observed: GOVERNANCE
+  PASS  worm | delete that version (mc rm --version-id) | expected: refused, version kept | observed: is WORM protected and cannot be overwritten ; kept=yes
+  PASS  control | delete on a bucket without object lock | expected: deleted | observed: deleted
+════ Result ════
+  PASS 8  FAIL 0
+  the WORM bucket lab21-worm-20261107141217 stays (GOVERNANCE, 1 day); remove it with: mc rm --recursive --force --bypass --versions lab/lab21-worm-20261107141217 && mc rb lab/lab21-worm-20261107141217
+```
+
+**Reading it.** The worker's uploads into an object-lock bucket succeed with no change to the integration, and every object it writes carries the bucket's default GOVERNANCE retention, so a written version cannot be deleted without a governance bypass. The same `mc rm --version-id` on a bucket without object lock deletes (control). COMPLIANCE mode, AWS S3 and the retry-overwrite case are not run (#95).
+
+## Labs 18–19 on Langfuse v4.76.0 (2026-11-07)
+
+The latest release on 2026-11-07, run in a separate compose project (`COMPOSE_PROJECT_NAME=langfuse-hols-v4-latest LANGFUSE_VERSION=4.76.0`, its own fresh volumes; the pin stays 4.56.0). Commands: `01-up.sh`, `05-ee-activate.sh` (health → `4.76.0`, EE active), `18-ee-protected-labels.sh --license-off`, `19-ee-scheduled-parquet-export.sh` (all exit 0). Result lines only:
+
+```text
+════ 1. Organization, project, project API key (admin + org API) ════
+════ 2. Two local users: an org ADMIN (release admin) and an org MEMBER ════
+  PASS  reladmin | org role in session | expected: ADMIN | observed: ADMIN
+  PASS  member | org role in session | expected: MEMBER | observed: MEMBER
+════ 3. Before protection: v1 from the API key, v2 from the MEMBER, MEMBER moves production (control) ════
+  PASS  apikey | create v1 with production (public API) | expected: HTTP 201 | observed: HTTP 201
+  PASS  member | create v2, no label (tRPC prompts.create) | expected: HTTP 200 | observed: HTTP 200
+  PASS  member | move production v1→v2, label not protected (tRPC setLabels) | expected: HTTP 200, production=v2 | observed: HTTP 200, production=v2
+════ 4. Protect production ════
+  PASS  member | protect production (addProtectedLabel) | expected: HTTP 403 FORBIDDEN | observed: HTTP 403 FORBIDDEN
+  PASS  reladmin | protect latest (addProtectedLabel) | expected: HTTP 400 BAD_REQUEST | observed: HTTP 400 BAD_REQUEST
+  PASS  reladmin | protect production (addProtectedLabel) | expected: HTTP 200 | observed: HTTP 200
+  PASS  postgres | prompt_protected_labels for the project | expected: production | observed: production
+════ 5. MEMBER after protection ════
+  PASS  member | move production v2→v1 (setLabels) | expected: HTTP 403 FORBIDDEN, production=v2 | observed: HTTP 403 FORBIDDEN, production=v2
+  PASS  member | remove production from v2 (setLabels) | expected: HTTP 403 FORBIDDEN, production=v2 | observed: HTTP 403 FORBIDDEN, production=v2
+  PASS  member | create a version carrying production (prompts.create) | expected: HTTP 403 FORBIDDEN, no new version | observed: HTTP 403 FORBIDDEN, versions 2→2, production=v2
+  PASS  member | create an unlabelled version (prompts.create, control) | expected: HTTP 200, one new version | observed: HTTP 200, versions 2→3
+  PASS  member | delete the production version (deleteVersion) | expected: HTTP 403 FORBIDDEN, version kept | observed: HTTP 403 FORBIDDEN
+  PASS  member | delete the prompt (prompts.delete) | expected: HTTP 403 FORBIDDEN, prompt kept | observed: HTTP 403 FORBIDDEN, versions=3
+════ 6. ADMIN moves production back to v1 ════
+  PASS  reladmin | move production v2→v1 (setLabels) | expected: HTTP 200, production=v1 | observed: HTTP 200, production=v1
+════ 7. The project API key (what a CI pipeline holds) ════
+  PASS  apikey | create a version carrying production (POST /api/public/v2/prompts) | expected: HTTP 201, production moves (by design) | observed: HTTP 201, production=v4
+  PASS  apikey | move production to v1 (PATCH …/versions/1) | expected: HTTP 200, production=v1 (by design) | observed: HTTP 200, production=v1
+  PASS  apikey | delete the production version (DELETE …?version=1) | expected: HTTP 2xx (by design) | observed: HTTP 204, production=vnone
+════ 8. What Postgres holds now ════
+════ 9. Audit log (Postgres audit_logs) for this project ════
+  PASS  audit | protection recorded (promptProtectedLabel.create by reladmin) | expected: 1 | observed: 1
+  PASS  audit | API-key prompt changes recorded with the key id | expected: >= 3 | observed: 4
+  PASS  audit | denied MEMBER attempts after protection leave no record | expected: 0 | observed: 0
+  PASS  audit | MEMBER's move before protection recorded (control) | expected: 1 | observed: 1
+════ 10. License off: restart web + worker without the EE overlay ════
+  PASS  stack | license key in langfuse-web after restart | expected: absent | observed: absent
+  PASS  stack | admin API without the license (positive control that EE is off) | expected: not 200 | observed: HTTP 403
+  PASS  reladmin | move production to v2 (setLabels) [license off] | expected: HTTP 200, production=v2 | observed: HTTP 200, production=v2
+  PASS  member | move production v2→v3 (setLabels) [license off] | expected: HTTP 403 FORBIDDEN, production=v2 | observed: HTTP 403 FORBIDDEN, production=v2
+  PASS  member | remove production from v2 (setLabels) [license off] | expected: HTTP 403 FORBIDDEN, production=v2 | observed: HTTP 403 FORBIDDEN, production=v2
+  PASS  member | create a version carrying production (prompts.create) [license off] | expected: HTTP 403 FORBIDDEN, no new version | observed: HTTP 403 FORBIDDEN, versions 3→3, production=v2
+  PASS  member | create an unlabelled version (prompts.create, control) [license off] | expected: HTTP 200, one new version | observed: HTTP 200, versions 3→4
+  PASS  member | delete the production version (deleteVersion) [license off] | expected: HTTP 403 FORBIDDEN, version kept | observed: HTTP 403 FORBIDDEN
+  PASS  member | delete the prompt (prompts.delete) [license off] | expected: HTTP 403 FORBIDDEN, prompt kept | observed: HTTP 403 FORBIDDEN, versions=4
+  PASS  reladmin | protect staging (addProtectedLabel) [license off] | expected: HTTP 403 FORBIDDEN (entitlement) | observed: HTTP 403 FORBIDDEN
+  PASS  reladmin | unprotect production (removeProtectedLabel) [license off] | expected: HTTP 403 FORBIDDEN, still protected | observed: HTTP 403 FORBIDDEN, rows=1
+  PASS  audit | reladmin's label move [license off] recorded | expected: 0 (audit logs are EE) | observed: 0
+════ 11. License back on ════
+  PASS  stack | admin API with the license again | expected: HTTP 200 | observed: HTTP 200
+  PASS 36  FAIL 0
+```
+
+```text
+════ 1. Organization, two projects (good / wrong-secret), keys, two users ════
+════ 2. Spans: 24 old (start 35–127 min ago), 1 inside the 20-min lag buffer (5 min ago) ════
+════ 3. Integrations (org API): PARQUET, every_20_minutes, FULL_HISTORY, OBSERVATIONS_V2 ════
+  PASS  good | PUT integration | expected: HTTP 200 | observed: HTTP 200 {"fileType":"PARQUET","exportFrequency":"every_20_minutes","exportMode":"FULL_HISTORY","exportSource":"OBSERVATIONS_V2"}
+  PASS  bad | PUT integration with a wrong secret | expected: HTTP 200 (not checked on save) | observed: HTTP 200
+════ 4. Who may run it: MEMBER denied, ADMIN runs it ════
+  PASS  member | Run now (blobStorageIntegration.runNow) | expected: HTTP 403 FORBIDDEN | observed: HTTP 403 FORBIDDEN
+  PASS  member | read the integration (blobStorageIntegration.get) | expected: HTTP 403 FORBIDDEN | observed: HTTP 403 FORBIDDEN
+  PASS  expadmin | Run now (good project) | expected: HTTP 200 | observed: HTTP 200
+════ 5. Phase 1: wait for the catch-up, then read the manifests and the Parquet ════
+  PASS  good | one manifest per 20-min window (FULL_HISTORY catch-up) | expected: >= 2 manifests | observed: 6
+  PASS  good | distinct ids in Parquet = ClickHouse rows with start_time < last_sync_at | expected: 24 = 24 | observed: 24 (rows 24) = 24
+  PASS  good | lag-buffer span is in ClickHouse (control) | expected: present | observed: 11cfdea3a257af19
+  PASS  good | lag-buffer span (start now−5 min) in phase-1 export | expected: absent | observed: absent
+  PASS  good | Parquet columns: no *_price, has total_cost (docs claim) | expected: 0 price columns, total_cost | observed: 0 price columns, total_cost=1
+════ 6. The wrong-secret integration ════
+  PASS  bad | last_error recorded | expected: an error | observed: The request signature we calculated does not match the signature you provided. Check your key and signing method.
+  PASS  bad | manifests written | expected: 0 | observed: 0
+════ 7. Phase 2: a late span (start before last_sync_at), then wait out the lag buffer ════
+  PASS  good | late span (start now−60 min, sent after phase 1) in ClickHouse (control) | expected: present | observed: ce5df8f65658c62d
+  PASS  expadmin | Run now (phase 2) | expected: HTTP 200 | observed: HTTP 200
+  PASS  good | lag-buffer span in a later export | expected: present | observed: present
+  PASS  good | late span in any export | expected: absent (window filter is start_time) | observed: absent
+  PASS  good | distinct exported ids vs ClickHouse rows | expected: ClickHouse − 1 (the late span) | observed: 25 vs 26
+════ Objects under the prefix (MinIO) ════
+  PASS 17  FAIL 0
+```
+
+**Reading it.** Same results as on 4.56.0: 36 and 17 PASS, including the project API key moving the protected label and the late span missing from every export.
+
+---
+
 ## Findings & gotchas (blog-worthy)
 
 1. **v4 writes somewhere else.** Observations land in `events_full` / `events_core`; the v3 `traces` / `observations` tables still exist and get **0 rows**. Any v3-era query returns empty results instead of an error. That is why lab 03 prints the v3 row counts next to the v4 ones.

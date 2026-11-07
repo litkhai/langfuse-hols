@@ -49,6 +49,7 @@ _base/
 ├── docker-compose.governance.yml  # overlay: UI customization + org-creators allowlist (needs ee)
 ├── docker-compose.sso.yml         # overlay: Keycloak + AUTH_KEYCLOAK_* and the SSO switches (lab 16)
 ├── docker-compose.encryption.yml  # overlay: ClickHouse TLS + encrypted disk on its own volume, MinIO KMS, S3 SSE (lab 17)
+├── docker-compose.retention.yml   # overlay: the batch data-retention cleaner on a 1-minute interval (lab 20)
 ├── sso/realm-*.json               # Keycloak realms for lab 16: `langfuse` (OIDC, brokers `corp`) and `corp` (SAML IdP)
 ├── encryption/clickhouse/*.xml    # lab 17 ClickHouse config; encryption/{certs,secrets}/ are generated and gitignored
 ├── masking/masking_service.py     # the masking sidecar (mounted by the masking overlay)
@@ -70,6 +71,7 @@ The same in both tracks:
 | `+ docker-compose.governance.yml` | lab 10 | UI customization and the org-creators allowlist on web |
 | `+ docker-compose.sso.yml` | lab 16 | adds `keycloak` (127.0.0.1:8088, realms from `sso/`), the Keycloak provider and the first-login roles on web; the SSO switches come from the shell |
 | `+ docker-compose.encryption.yml` | lab 17 | ClickHouse on the separate volume `langfuse_clickhouse_encrypted_data` with an encrypted default storage policy and TLS only (8443 / 9440); MinIO KMS key; web and worker on HTTPS with the lab CA and S3 SSE. Its two keys are `:?`-guarded: `17-ee-encryption.sh` exports them |
+| `+ docker-compose.retention.yml` | lab 20 | worker only: `LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED=true` and a 60 s interval (default off / 1 h), so a retention deletion happens within the run |
 | all six | lab 99 / `bin/down.sh <track>` | so the sidecars and every overlay's config are torn down together |
 
 Lab scripts do not spell the compose flags. They source [`lib/env.sh`](lib/env.sh) with their track and call `lf_compose`:
@@ -222,6 +224,7 @@ _base/
 ├── docker-compose.governance.yml  # 오버레이: UI 커스터마이징 + 조직 생성 허용목록 (ee 필요)
 ├── docker-compose.sso.yml         # 오버레이: Keycloak + AUTH_KEYCLOAK_*와 SSO 스위치 (랩 16)
 ├── docker-compose.encryption.yml  # 오버레이: ClickHouse TLS + 별도 볼륨의 암호화 디스크, MinIO KMS, S3 SSE (랩 17)
+├── docker-compose.retention.yml   # 오버레이: batch 데이터 보존 정리기를 1분 간격으로 (랩 20)
 ├── sso/realm-*.json               # 랩 16 Keycloak realm: `langfuse`(OIDC, `corp` 중개), `corp`(SAML IdP)
 ├── encryption/clickhouse/*.xml    # 랩 17 ClickHouse 설정; encryption/{certs,secrets}/는 실행 시 생성, gitignore
 ├── masking/masking_service.py     # 마스킹 사이드카 (마스킹 오버레이가 마운트)
@@ -243,6 +246,7 @@ _base/
 | `+ docker-compose.governance.yml` | 랩 10 | web에 UI 커스터마이징과 조직 생성 허용목록 |
 | `+ docker-compose.sso.yml` | 랩 16 | `keycloak`(127.0.0.1:8088, realm은 `sso/`)을 추가하고, web에 Keycloak 공급자와 첫 로그인 역할을 넣음. SSO 스위치는 셸에서 |
 | `+ docker-compose.encryption.yml` | 랩 17 | ClickHouse를 별도 볼륨 `langfuse_clickhouse_encrypted_data`에 암호화 기본 저장 정책과 TLS 전용(8443 / 9440)으로, MinIO에 KMS 키, web과 worker는 실습 CA로 HTTPS와 S3 SSE. 두 키는 `:?`로 막혀 있고 `17-ee-encryption.sh`가 export함 |
+| `+ docker-compose.retention.yml` | 랩 20 | worker만: `LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED=true`와 60초 간격(기본은 꺼짐 / 1시간). 실행 안에서 보존 삭제가 일어나게 함 |
 | 6개 전부 | 랩 99 / `bin/down.sh <track>` | 사이드카와 모든 오버레이 설정을 함께 정리 |
 
 랩 스크립트는 compose 플래그를 직접 쓰지 않습니다. 자기 트랙을 넘겨 [`lib/env.sh`](lib/env.sh)를 source 하고 `lf_compose`를 호출합니다.

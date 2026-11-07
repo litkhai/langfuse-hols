@@ -21,14 +21,23 @@
 # for the */20 scheduler tick. Phase 2 waits until the lag-buffer span is older than 20 minutes
 # (about 16 minutes after phase 1); --phase1-only skips it.
 #
+# --license-off: after the setup (which needs the admin API, so the license), restart web + worker
+# without the license key and run every export check from section 4 on without it. The entitlement
+# `scheduled-blob-exports` is in every self-hosted plan (web/src/features/entitlements/constants/
+# entitlements.ts), so the export is expected to work. The EE overlay is restored on exit.
+#
 # Requires: stack up + EE (05) for the admin API, jq, openssl, ADMIN_API_KEY in _base/.env.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../../../_base/lib/env.sh" v4; load_env "$BASE_DIR/.env"
 cd "$(dirname "$0")"
 
-PHASE2=1
+PHASE2=1; LICENSE_OFF=0
 for a in "$@"; do
-  case "$a" in --phase1-only) PHASE2=0 ;; *) echo "usage: $0 [--phase1-only]"; exit 2 ;; esac
+  case "$a" in
+    --phase1-only) PHASE2=0 ;;
+    --license-off) LICENSE_OFF=1 ;;
+    *) echo "usage: $0 [--phase1-only] [--license-off]"; exit 2 ;;
+  esac
 done
 for c in jq openssl curl; do command -v "$c" >/dev/null || { echo "✗ please install $c"; exit 1; }; done
 HOST="${NEXTAUTH_URL:-http://localhost:3000}"
@@ -37,7 +46,22 @@ BUCKET="${LANGFUSE_S3_BATCH_EXPORT_BUCKET:-langfuse}"
 MK_USER="${MINIO_ROOT_USER:-minio}"; MK_PASS="${MINIO_ROOT_PASSWORD:-miniosecret}"
 TS=$(date +%Y%m%d%H%M%S)
 PREFIX="exports/lab19-$TS/"
-WORK=$(mktemp -d); chmod 700 "$WORK"; trap 'rm -rf "$WORK"' EXIT
+WORK=$(mktemp -d); chmod 700 "$WORK"
+RESTORE_EE=0
+cleanup() {
+  rm -rf "$WORK"
+  if [ $RESTORE_EE = 1 ]; then
+    echo "════ License back on (EE overlay) ════"
+    lf_compose ee -- up -d langfuse-web langfuse-worker >/dev/null 2>&1 || true
+    wait_web || true
+    echo "  admin API → HTTP $(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "$HOST/api/admin/organizations")"
+  fi
+}
+trap cleanup EXIT
+wait_web() {
+  for _ in $(seq 1 80); do curl -fsS -m 5 "$HOST/api/public/health" >/dev/null 2>&1 && return 0; sleep 3; done
+  echo "✗ langfuse-web did not become healthy"; return 1
+}
 
 ROWS="$WORK/rows.tsv"; : > "$ROWS"; FAILS=0
 row() {  # row <subject> <check> <expected> <observed> <ok:0|1>
@@ -149,6 +173,18 @@ BAD_PUT=${r%% *}
 # Saving does not test the credentials (the UI's separate "Validate" button does); the run fails later.
 [ "$BAD_PUT" = 200 ] && ok=1 || ok=0
 row bad "PUT integration with a wrong secret" "HTTP 200 (not checked on save)" "HTTP $BAD_PUT" $ok
+
+if [ $LICENSE_OFF = 1 ]; then
+  echo "════ 3b. License off: restart web + worker without the EE overlay ════"
+  RESTORE_EE=1
+  lf_compose -- up -d langfuse-web langfuse-worker >/dev/null 2>&1
+  wait_web
+  k=$( { lf_compose -- exec -T langfuse-worker printenv LANGFUSE_EE_LICENSE_KEY 2>/dev/null || true; } | wc -c | tr -d ' ')
+  [ "$k" -le 1 ] && ok=1 || ok=0; row stack "license key in langfuse-worker after restart" "absent" "$([ "$k" -le 1 ] && echo absent || echo present)" $ok
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "$HOST/api/admin/organizations")
+  [ "$code" != 200 ] && ok=1 || ok=0; row stack "admin API without the license (control: EE is off)" "not 200" "HTTP $code" $ok
+  for u in "${USERS[@]}"; do login "$u" >/dev/null; done
+fi
 
 echo "════ 4. Who may run it: MEMBER denied, ADMIN runs it ════"
 r=$(trpc_post member blobStorageIntegration.runNow "{\"projectId\":\"$PID_good\"}")

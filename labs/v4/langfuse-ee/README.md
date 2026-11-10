@@ -462,7 +462,7 @@ Moves both buckets from MinIO to AWS S3 in one region, encrypted with a customer
 | Path | What happened |
 |---|---|
 | Python SDK `LangfuseMedia` (presigned PUT), `LANGFUSE_S3_MEDIA_UPLOAD_SSE` **unset** | upload 200, object `aws:kms` with the lab key; ClickHouse holds a `@@@langfuseMedia:…@@@` reference; no image bytes in the raw event object |
-| Raw OTLP with a base64 data URI, Langfuse defaults | **the base64 stays inline in ClickHouse**: the worker's extraction is off by default |
+| Raw OTLP with a base64 data URI (a 27.8 KB PNG, 37 KB of base64), Langfuse defaults | **the base64 stays inline in ClickHouse**: the worker's extraction variables default to `false` |
 | Same, with `LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_PROJECT_IDS=*` | reference in ClickHouse, object `aws:kms` with the lab key; **the raw event object still holds the base64** |
 | `LANGFUSE_S3_MEDIA_UPLOAD_SSE=aws:kms` + key id set | the presigned PUT URL signs `x-amz-server-side-encryption` and `…-aws-kms-key-id`, which the SDKs do not send: **403 `SignatureDoesNotMatch`, the image is not stored**, and the trace shows an empty Media box. The same PUT with the two headers → 200. Worker uploads are not affected |
 
@@ -472,7 +472,7 @@ Reading back: the public media API returns a presigned GET on the bucket's own S
 ![Raw OTLP trace with extraction off: the data URI stays in the input](captures/22-otlp-base64-inline.jpg)
 ![Media SSE variable set: the SDK upload got 403 and the Media box is empty](captures/22-media-sse-upload-missing.jpg)
 
-Not run: a KMS key policy limited to one IAM role, cross-region replication, instance-role or IRSA credentials, SDK 5.x and the JS SDK (their upload code sends the same three headers as SDK 4.17.0, read on 2026-11-10).
+Not run: the server-side fallback for *large* base64 that the multi-modality docs describe (no size threshold tested), a KMS key policy limited to one IAM role, cross-region replication, instance-role or IRSA credentials, SDK 5.x and the JS SDK (their upload code sends the same three headers as SDK 4.17.0, read on 2026-11-10).
 
 ### 🔑 Gotchas worth remembering
 
@@ -1062,7 +1062,7 @@ object lock과 기본 GOVERNANCE 보존 1일을 건 MinIO 버킷을 반출 대�
 | 경로 | 결과 |
 |---|---|
 | Python SDK `LangfuseMedia`(presigned PUT), `LANGFUSE_S3_MEDIA_UPLOAD_SSE` **미설정** | 업로드 200, 객체는 실습 키로 `aws:kms`; ClickHouse에는 `@@@langfuseMedia:…@@@` 참조; 원본 이벤트 객체에 이미지 바이트 없음 |
-| base64 data URI를 담은 OTLP, Langfuse 기본값 | **base64가 ClickHouse에 그대로 남음**: worker 추출이 기본으로 꺼져 있음 |
+| base64 data URI를 담은 OTLP(27.8 KB PNG, base64 37 KB), Langfuse 기본값 | **base64가 ClickHouse에 그대로 남음**: worker 추출 변수의 기본값이 `false` |
 | 같은 요청, `LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_PROJECT_IDS=*` | ClickHouse에는 참조, 객체는 실습 키로 `aws:kms`; **원본 이벤트 객체에는 base64가 그대로 있음** |
 | `LANGFUSE_S3_MEDIA_UPLOAD_SSE=aws:kms` + 키 ID 설정 | presigned PUT URL이 `x-amz-server-side-encryption`과 `…-aws-kms-key-id`를 서명에 넣는데 SDK는 이 헤더를 보내지 않음: **403 `SignatureDoesNotMatch`, 이미지가 저장되지 않음**. trace의 Media 칸이 비어 보임. 같은 PUT에 두 헤더를 더하면 200. worker 업로드는 영향 없음 |
 
@@ -1072,7 +1072,7 @@ object lock과 기본 GOVERNANCE 보존 1일을 건 MinIO 버킷을 반출 대�
 ![추출이 꺼진 OTLP trace: data URI가 input에 그대로](captures/22-otlp-base64-inline.jpg)
 ![미디어 SSE 변수 설정: SDK 업로드 403, Media 칸이 비어 있음](captures/22-media-sse-upload-missing.jpg)
 
-실행하지 않은 것: IAM 역할 하나로 제한한 KMS 키 정책, 리전 간 복제, 인스턴스 역할·IRSA 자격 증명, SDK 5.x와 JS SDK(두 SDK의 업로드 코드는 SDK 4.17.0과 같은 헤더 셋만 보냄, 2026-11-10 소스 확인).
+실행하지 않은 것: multi-modality 문서가 말하는 *큰* base64의 서버 측 처리(크기 기준은 시험하지 않음), IAM 역할 하나로 제한한 KMS 키 정책, 리전 간 복제, 인스턴스 역할·IRSA 자격 증명, SDK 5.x와 JS SDK(두 SDK의 업로드 코드는 SDK 4.17.0과 같은 헤더 셋만 보냄, 2026-11-10 소스 확인).
 
 ### 🔑 기억할 함정들
 

@@ -17,7 +17,7 @@ Langfuse stores all of its OLTP state (users, orgs, projects, prompts, the audit
 The workshop has two tracks:
 
 - **OSS track (labs 01–04)** — deploy the full stack with Docker Compose, push realistic traces with the Python SDK, then query the ClickHouse backend directly with SQL.
-- **Enterprise track (labs 05–11)** — activate an **enterprise license key** and exercise the EE-only features: **Instance Management / Org API**, project-level **RBAC**, **SCIM** provisioning, **Audit Logs**, **Data Retention**, **Server-Side Data Masking** (proven against ClickHouse), **Protected Prompt Labels**, **UI Customization**, **Organization-Creators allowlist**, and a **Parquet export ↔ ClickHouse** round-trip.
+- **Enterprise track (labs 05–22)** — activate an **enterprise license key** and exercise the EE-only features: **Instance Management / Org API**, project-level **RBAC**, **SCIM** provisioning, **Audit Logs**, **Data Retention**, **Server-Side Data Masking** (proven against ClickHouse), **Protected Prompt Labels**, **UI Customization**, **Organization-Creators allowlist**, and a **Parquet export ↔ ClickHouse** round-trip.
 
 > This directory is the **`-ee` (Enterprise Edition) edition** of the workshop — the OSS track still runs standalone, but the focus is the enterprise feature surface and how each one lands in (or is proven against) ClickHouse.
 
@@ -99,6 +99,7 @@ _base/
 ├── docker-compose.sso.yml       # Lab 16 overlay: Keycloak (realms in sso/) + AUTH_KEYCLOAK_* and the SSO switches
 ├── docker-compose.encryption.yml# Lab 17 overlay: ClickHouse TLS + encrypted disk (own volume), MinIO KMS key, LANGFUSE_S3_*_SSE
 ├── docker-compose.retention.yml # Lab 20 overlay: the batch data-retention cleaner on, 1-minute interval (worker)
+├── docker-compose.aws-s3*.yml   # Lab 22 overlays: event + media buckets on AWS S3 (aws-s3), SSE-KMS on events (aws-s3-sse) and media (aws-s3-media-sse)
 ├── sso/ · encryption/           # Lab 16 realm files · lab 17 ClickHouse config (keys and certificates are generated, gitignored)
 ├── masking/masking_service.py   # Labs 08, 12: tiny stdlib masking-callback sidecar (+ /mask-slow, /mask-500, per-project rule)
 └── bin/                         # up.sh · check.sh · down.sh (first argument: the track, v3 or v4)
@@ -109,8 +110,8 @@ _base/
 - **Docker + Docker Compose** (Docker Desktop on Mac/Windows). Give it ≥ 4 CPU / 16 GiB.
 - **Python 3.10+** for lab 02 and the SDK scripts (Langfuse Python SDK v4 requires it; on macOS the system `python3` is older — use e.g. `python3.12`). Install the pinned packages with `pip install -r _base/v4/requirements.txt`.
 - *(optional)* an **Anthropic API key** (`ANTHROPIC_API_KEY` in `_base/.env`) to make lab 02 and the eval lab call a real model (`claude-haiku-4-5`) instead of the offline simulation.
-- **`jq`** and **`curl`** for the enterprise scripts (05–07).
-- An **enterprise license key** for labs 05–07 (the OSS track needs nothing extra).
+- **`jq`** and **`curl`** for the enterprise scripts (05 onward).
+- An **enterprise license key** for the enterprise labs, 05 onward (the OSS track needs nothing extra; 14 and 15 are not license-gated, and 18 and 19 also run with `--license-off`).
 
 ### 🚀 Quick Start (OSS track)
 
@@ -617,7 +618,7 @@ Langfuse는 OLTP 상태(사용자·조직·프로젝트·프롬프트·감사 �
 실습은 두 트랙으로 구성됩니다.
 
 - **OSS 트랙 (랩 01–04)** — Docker Compose로 전체 스택 배포 → Python SDK로 현실적인 trace 적재 → ClickHouse 백엔드를 SQL로 직접 조회.
-- **Enterprise 트랙 (랩 05–11)** — **엔터프라이즈 라이선스 키**를 활성화하고 EE 전용 기능을 실습: **Instance Management / Org API**, 프로젝트 단위 **RBAC**, **SCIM** 프로비저닝, **감사 로그(Audit Logs)**, **데이터 보존(Data Retention)**, **서버측 데이터 마스킹(ClickHouse로 검증)**, **보호된 프롬프트 라벨(Protected Prompt Labels)**, **UI 커스터마이징**, **조직 생성 허용목록(Organization Creators)**, 그리고 **Parquet 반출 ↔ ClickHouse 라운드트립**.
+- **Enterprise 트랙 (랩 05–22)** — **엔터프라이즈 라이선스 키**를 활성화하고 EE 전용 기능을 실습: **Instance Management / Org API**, 프로젝트 단위 **RBAC**, **SCIM** 프로비저닝, **감사 로그(Audit Logs)**, **데이터 보존(Data Retention)**, **서버측 데이터 마스킹(ClickHouse로 검증)**, **보호된 프롬프트 라벨(Protected Prompt Labels)**, **UI 커스터마이징**, **조직 생성 허용목록(Organization Creators)**, 그리고 **Parquet 반출 ↔ ClickHouse 라운드트립**.
 
 > 이 디렉토리는 워크숍의 **`-ee`(Enterprise Edition) 에디션**입니다 — OSS 트랙은 여전히 단독 실행되지만, 초점은 엔터프라이즈 기능 전반과 각 기능이 ClickHouse에 어떻게 안착(또는 ClickHouse로 검증)되는지에 있습니다.
 
@@ -699,6 +700,7 @@ _base/
 ├── docker-compose.sso.yml       # 랩 16 오버레이: Keycloak(realm은 sso/) + AUTH_KEYCLOAK_*와 SSO 스위치
 ├── docker-compose.encryption.yml# 랩 17 오버레이: ClickHouse TLS + 암호화 디스크(별도 볼륨), MinIO KMS 키, LANGFUSE_S3_*_SSE
 ├── docker-compose.retention.yml # 랩 20 오버레이: batch 데이터 보존 정리기 켜기, 1분 간격(worker)
+├── docker-compose.aws-s3*.yml   # 랩 22 오버레이: 이벤트·미디어 버킷을 AWS S3로(aws-s3), 이벤트(aws-s3-sse)·미디어(aws-s3-media-sse)에 SSE-KMS
 ├── sso/ · encryption/           # 랩 16 realm 파일 · 랩 17 ClickHouse 설정 (키와 인증서는 실행 시 생성, gitignore)
 ├── masking/masking_service.py   # 랩 08: stdlib 전용 초경량 마스킹 콜백 사이드카
 └── bin/                         # up.sh · check.sh · down.sh (첫 번째 인자: 트랙, v3 또는 v4)
@@ -709,8 +711,8 @@ _base/
 - **Docker + Docker Compose** (Mac/Windows는 Docker Desktop). CPU 4코어 / 16 GiB 이상 권장.
 - 랩 02와 SDK 스크립트용 **Python 3.10+** (Langfuse Python SDK v4 요구사항. macOS 기본 `python3`는 더 낮으므로 `python3.12` 등을 사용). 고정된 패키지는 `pip install -r _base/v4/requirements.txt`로 설치.
 - *(선택)* **Anthropic API 키**(`_base/.env`의 `ANTHROPIC_API_KEY`) — 랩 02와 eval 랩이 오프라인 시뮬레이션 대신 실제 모델(`claude-haiku-4-5`)을 호출합니다.
-- 엔터프라이즈 스크립트(05–07)용 **`jq`** 와 **`curl`**.
-- 랩 05–07용 **엔터프라이즈 라이선스 키** (OSS 트랙은 추가 준비물 없음).
+- 엔터프라이즈 스크립트(05번 이후)용 **`jq`** 와 **`curl`**.
+- 엔터프라이즈 랩(05번 이후)용 **엔터프라이즈 라이선스 키** (OSS 트랙은 추가 준비물 없음. 14·15는 라이선스 게이트가 아니고, 18·19는 `--license-off`로도 실행됨).
 
 ### 🚀 빠른 시작 (OSS 트랙)
 

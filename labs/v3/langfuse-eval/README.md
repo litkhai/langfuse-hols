@@ -14,7 +14,7 @@ A hands-on tour of Langfuse's **product features for LLM quality** — prompt
 management, datasets, experiments, LLM-as-a-judge, and human annotation — then a
 look at how every quality signal lands in the **ClickHouse** backend.
 
-This is the sibling of [`labs/langfuse-ee/`](../langfuse-ee/README.md). Where that
+This is the sibling of [`labs/v3/langfuse-ee/`](../langfuse-ee/README.md). Where that
 lab covers *self-hosting + the ClickHouse backend + Enterprise governance*, this one
 answers a different question: **once Langfuse is running, how do you actually use it
 to measure and improve LLM quality?**
@@ -43,6 +43,7 @@ lets you run cross-cutting quality analytics the UI doesn't offer.
 ```
 langfuse-eval/
 ├── README.md                   # this file
+├── DESIGN.md                   # design rationale (the README holds the authoritative results)
 ├── _common.py                  # shared: _base/.env loader, client, REST helper, the Q&A KB
 ├── 01-seed-traces.py           # seed traces to evaluate with the shared generator (_base/v3/seed_traces.py)
 ├── 02-prompt-management.py     # versions, labels (production/latest), compile, prompt→trace link
@@ -181,7 +182,7 @@ Created: 2026-07-26
 
 ---
 
-**Happy Evaluating! 🎯** — for the deployment/governance side, see [`labs/langfuse-ee/`](../langfuse-ee/README.md).
+**Happy Evaluating! 🎯** — for the deployment/governance side, see [`labs/v3/langfuse-ee/`](../langfuse-ee/README.md).
 
 ---
 
@@ -195,7 +196,7 @@ Langfuse의 **LLM 품질 관리 제품 기능** — 프롬프트 관리, 데이�
 LLM-as-a-judge, 휴먼 어노테이션 — 을 직접 돌려보고, 그 모든 품질 신호가 **ClickHouse**
 백엔드에 어떻게 쌓이는지까지 보는 실습입니다.
 
-이 랩은 [`labs/langfuse-ee/`](../langfuse-ee/README.md)의 자매 랩입니다. 그 랩이
+이 랩은 [`labs/v3/langfuse-ee/`](../langfuse-ee/README.md)의 자매 랩입니다. 그 랩이
 *self-hosting + ClickHouse 백엔드 + Enterprise governance* 를 다뤘다면, 이 랩은 다른
 질문에 답합니다: **Langfuse를 띄운 뒤, 실제로 LLM 품질을 측정하고 개선하려면 어떻게
 쓰는가?**
@@ -224,6 +225,7 @@ SQL로 할 수 있습니다.
 ```
 langfuse-eval/
 ├── README.md                   # 이 문서
+├── DESIGN.md                   # 설계 근거 기록(검증 결과는 README가 권위 있음)
 ├── _common.py                  # 공통: _base/.env 로더, 클라이언트, REST 헬퍼, Q&A 지식베이스
 ├── 01-seed-traces.py           # 공유 생성기(_base/v3/seed_traces.py)로 평가 대상 trace 확보
 ├── 02-prompt-management.py     # 버전·라벨(production/latest)·compile·프롬프트→trace 링크
@@ -358,4 +360,4 @@ Ken Lee (ClickHouse Solution Architect) — ken.lee@clickhouse.com
 
 ---
 
-**Happy Evaluating! 🎯** — 배포/거버넌스 측면은 [`labs/langfuse-ee/`](../langfuse-ee/README.md) 참고.
+**Happy Evaluating! 🎯** — 배포/거버넌스 측면은 [`labs/v3/langfuse-ee/`](../langfuse-ee/README.md) 참고.

@@ -50,6 +50,9 @@ _base/
 ├── docker-compose.sso.yml         # overlay: Keycloak + AUTH_KEYCLOAK_* and the SSO switches (lab 16)
 ├── docker-compose.encryption.yml  # overlay: ClickHouse TLS + encrypted disk on its own volume, MinIO KMS, S3 SSE (lab 17)
 ├── docker-compose.retention.yml   # overlay: the batch data-retention cleaner on a 1-minute interval (lab 20)
+├── docker-compose.aws-s3.yml      # overlay: event + media buckets on AWS S3, AWS SDK credential chain, OTLP media switches (lab 22)
+├── docker-compose.aws-s3-sse.yml  # overlay: SSE-KMS on the server's event writes (lab 22)
+├── docker-compose.aws-s3-media-sse.yml # overlay: SSE-KMS on media too — breaks SDK uploads, shown by lab 22
 ├── sso/realm-*.json               # Keycloak realms for lab 16: `langfuse` (OIDC, brokers `corp`) and `corp` (SAML IdP)
 ├── encryption/clickhouse/*.xml    # lab 17 ClickHouse config; encryption/{certs,secrets}/ are generated and gitignored
 ├── masking/masking_service.py     # the masking sidecar (mounted by the masking overlay)
@@ -72,6 +75,7 @@ The same in both tracks:
 | `+ docker-compose.sso.yml` | lab 16 | adds `keycloak` (127.0.0.1:8088, realms from `sso/`), the Keycloak provider and the first-login roles on web; the SSO switches come from the shell |
 | `+ docker-compose.encryption.yml` | lab 17 | ClickHouse on the separate volume `langfuse_clickhouse_encrypted_data` with an encrypted default storage policy and TLS only (8443 / 9440); MinIO KMS key; web and worker on HTTPS with the lab CA and S3 SSE. Its two keys are `:?`-guarded: `17-ee-encryption.sh` exports them |
 | `+ docker-compose.retention.yml` | lab 20 | worker only: `LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED=true` and a 60 s interval (default off / 1 h), so a retention deletion happens within the run |
+| `+ docker-compose.aws-s3.yml` (+ `aws-s3-sse`, `aws-s3-media-sse`) | lab 22 | web and worker only: event and media buckets on AWS S3 (`LAB22_*` from `22-ee-aws-s3-sse-kms.sh`), emptied `LANGFUSE_S3_*_ACCESS_KEY_ID` so the AWS SDK chain with `AWS_SESSION_TOKEN` is used, the OTLP media switches (`LAB22_OTEL_MEDIA`). `aws-s3-sse` sets SSE-KMS on event writes, `aws-s3-media-sse` on media too. Not in the down set: their `:?` guards need the step's variables |
 | all six | lab 99 / `bin/down.sh <track>` | so the sidecars and every overlay's config are torn down together |
 
 Lab scripts do not spell the compose flags. They source [`lib/env.sh`](lib/env.sh) with their track and call `lf_compose`:
@@ -225,6 +229,9 @@ _base/
 ├── docker-compose.sso.yml         # 오버레이: Keycloak + AUTH_KEYCLOAK_*와 SSO 스위치 (랩 16)
 ├── docker-compose.encryption.yml  # 오버레이: ClickHouse TLS + 별도 볼륨의 암호화 디스크, MinIO KMS, S3 SSE (랩 17)
 ├── docker-compose.retention.yml   # 오버레이: batch 데이터 보존 정리기를 1분 간격으로 (랩 20)
+├── docker-compose.aws-s3.yml      # 오버레이: 이벤트·미디어 버킷을 AWS S3로, AWS SDK 자격 증명 체인, OTLP 미디어 스위치 (랩 22)
+├── docker-compose.aws-s3-sse.yml  # 오버레이: 서버의 이벤트 쓰기에 SSE-KMS (랩 22)
+├── docker-compose.aws-s3-media-sse.yml # 오버레이: 미디어에도 SSE-KMS — SDK 업로드가 깨짐, 랩 22에서 확인
 ├── sso/realm-*.json               # 랩 16 Keycloak realm: `langfuse`(OIDC, `corp` 중개), `corp`(SAML IdP)
 ├── encryption/clickhouse/*.xml    # 랩 17 ClickHouse 설정; encryption/{certs,secrets}/는 실행 시 생성, gitignore
 ├── masking/masking_service.py     # 마스킹 사이드카 (마스킹 오버레이가 마운트)
@@ -247,6 +254,7 @@ _base/
 | `+ docker-compose.sso.yml` | 랩 16 | `keycloak`(127.0.0.1:8088, realm은 `sso/`)을 추가하고, web에 Keycloak 공급자와 첫 로그인 역할을 넣음. SSO 스위치는 셸에서 |
 | `+ docker-compose.encryption.yml` | 랩 17 | ClickHouse를 별도 볼륨 `langfuse_clickhouse_encrypted_data`에 암호화 기본 저장 정책과 TLS 전용(8443 / 9440)으로, MinIO에 KMS 키, web과 worker는 실습 CA로 HTTPS와 S3 SSE. 두 키는 `:?`로 막혀 있고 `17-ee-encryption.sh`가 export함 |
 | `+ docker-compose.retention.yml` | 랩 20 | worker만: `LANGFUSE_BATCH_DATA_RETENTION_CLEANER_ENABLED=true`와 60초 간격(기본은 꺼짐 / 1시간). 실행 안에서 보존 삭제가 일어나게 함 |
+| `+ docker-compose.aws-s3.yml` (+ `aws-s3-sse`, `aws-s3-media-sse`) | 랩 22 | web과 worker만: 이벤트·미디어 버킷을 AWS S3로(`22-ee-aws-s3-sse-kms.sh`가 주는 `LAB22_*`), `LANGFUSE_S3_*_ACCESS_KEY_ID`를 비워 `AWS_SESSION_TOKEN`을 포함한 AWS SDK 체인을 쓰게 함, OTLP 미디어 스위치(`LAB22_OTEL_MEDIA`). `aws-s3-sse`는 이벤트 쓰기에, `aws-s3-media-sse`는 미디어에도 SSE-KMS. 내리기 묶음에는 없음: `:?` 가드가 단계의 변수를 요구 |
 | 6개 전부 | 랩 99 / `bin/down.sh <track>` | 사이드카와 모든 오버레이 설정을 함께 정리 |
 
 랩 스크립트는 compose 플래그를 직접 쓰지 않습니다. 자기 트랙을 넘겨 [`lib/env.sh`](lib/env.sh)를 source 하고 `lf_compose`를 호출합니다.

@@ -1,0 +1,14 @@
+# Lab 22 overlay — Langfuse asks for SSE-KMS with the lab's customer-managed key on the raw event
+# objects it writes itself (use together with the aws-s3 overlay). Optional: the event bucket's
+# default encryption already uses the same key; this makes the request say so explicitly.
+#   LANGFUSE_S3_*_SSE accepts AES256 or aws:kms; an empty string fails env validation,
+#   so leaving SSE off means leaving the overlay out.
+x-langfuse-aws-s3-sse-env: &langfuse-aws-s3-sse-env
+  LANGFUSE_S3_EVENT_UPLOAD_SSE: aws:kms
+  LANGFUSE_S3_EVENT_UPLOAD_SSE_KMS_KEY_ID: ${LAB22_KMS_KEY_ARN:?run 22-ee-aws-s3-sse-kms.sh, it creates the key}
+
+services:
+  langfuse-worker:
+    environment: *langfuse-aws-s3-sse-env
+  langfuse-web:
+    environment: *langfuse-aws-s3-sse-env

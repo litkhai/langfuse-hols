@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lab 22 overlay — the event and media buckets on AWS S3 instead of MinIO
+#
+#    Both buckets live in one AWS region and are created by 22-ee-aws-s3-sse-kms.sh
+#    (default SSE-KMS with a customer-managed key, S3 Bucket Key, public access blocked,
+#    and a bucket policy that refuses writes without that key). Batch exports stay on MinIO.
+#
+#    Credentials: the LANGFUSE_S3_*_ACCESS_KEY_ID / _SECRET_ACCESS_KEY values are emptied so
+#    Langfuse falls back to the AWS SDK default chain, which reads AWS_ACCESS_KEY_ID,
+#    AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN from the shell (temporary SSO credentials
+#    work; a static key pair has no way to pass a session token through the LANGFUSE_* names).
+#
+#    SSE is NOT set here: the buckets encrypt by default with the lab key. The aws-s3-sse overlay
+#    adds the header to the server's own event writes; aws-s3-media-sse adds it to media uploads,
+#    which breaks SDK uploads over presigned URLs (step 22, section 6).
+#    LAB22_OTEL_MEDIA=true turns on the worker's server-side extraction of base64 media from OTLP
+#    spans (off by default in Langfuse; in events_only mode it needs all three variables below).
+#      . _base/lib/env.sh v4 && lf_compose ee aws-s3 aws-s3-sse -- up -d
+#  Docs: https://langfuse.com/self-hosting/deployment/infrastructure/blobstorage
+#        https://langfuse.com/docs/observability/features/multi-modality
+# ─────────────────────────────────────────────────────────────────────────────
+x-langfuse-aws-s3-env: &langfuse-aws-s3-env
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?export AWS credentials in the shell}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?export AWS credentials in the shell}
+  AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: ${LAB22_EVENT_BUCKET:?run 22-ee-aws-s3-sse-kms.sh, it creates the buckets}
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: ${LAB22_REGION:-ap-northeast-2}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: https://s3.${LAB22_REGION:-ap-northeast-2}.amazonaws.com
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ""
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ""
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "false"
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: ${LAB22_MEDIA_BUCKET:?run 22-ee-aws-s3-sse-kms.sh, it creates the buckets}
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: ${LAB22_REGION:-ap-northeast-2}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: https://s3.${LAB22_REGION:-ap-northeast-2}.amazonaws.com
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ""
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ""
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "false"
+  LANGFUSE_S3_MEDIA_DOWNLOAD_URL_EXPIRY_SECONDS: ${LAB22_MEDIA_URL_EXPIRY:-60}
+  LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED: ${LAB22_OTEL_MEDIA:-false}
+  LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED: ${LAB22_OTEL_MEDIA:-false}
+  LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_PROJECT_IDS: "*"
+
+services:
+  langfuse-worker:
+    environment: *langfuse-aws-s3-env
+  langfuse-web:
+    environment: *langfuse-aws-s3-env

@@ -1,0 +1,14 @@
+# Lab 22 overlay — SSE-KMS requested on media objects too (LANGFUSE_S3_MEDIA_UPLOAD_SSE).
+# Langfuse then signs x-amz-server-side-encryption and x-amz-server-side-encryption-aws-kms-key-id
+# into the presigned PUT URLs it hands to SDKs, and the Python / JS SDKs do not send those headers:
+# S3 answers 403 and the image is not stored. Server-side uploads (worker OTLP extraction) still work.
+# Kept as an overlay so step 22 can show the failure; the recommended setup leaves it out.
+x-langfuse-aws-s3-media-sse-env: &langfuse-aws-s3-media-sse-env
+  LANGFUSE_S3_MEDIA_UPLOAD_SSE: aws:kms
+  LANGFUSE_S3_MEDIA_UPLOAD_SSE_KMS_KEY_ID: ${LAB22_KMS_KEY_ARN:?run 22-ee-aws-s3-sse-kms.sh, it creates the key}
+
+services:
+  langfuse-worker:
+    environment: *langfuse-aws-s3-media-sse-env
+  langfuse-web:
+    environment: *langfuse-aws-s3-media-sse-env

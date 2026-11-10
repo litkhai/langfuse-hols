@@ -42,6 +42,7 @@ SETS=(
     "ee encryption"
     "ee retention"
     "ee masking governance sso encryption"
+    "ee aws-s3 aws-s3-sse aws-s3-media-sse"
 )
 
 # Reset the compose input to a known state. The grep picks up every ${VAR the compose files
@@ -51,6 +52,9 @@ for v in COMPOSE_FILE COMPOSE_PROFILES COMPOSE_PROJECT_NAME COMPOSE_ENV_FILES \
     unset "$v"
 done
 export LANGFUSE_EE_LICENSE_KEY=ci-dummy CLICKHOUSE_ENCRYPTION_KEY=ci-dummy MINIO_KMS_SECRET_KEY=ci-dummy
+# lab 22 guards: AWS credentials from the shell, the buckets and key the step creates
+export AWS_ACCESS_KEY_ID=ci-dummy AWS_SECRET_ACCESS_KEY=ci-dummy LAB22_EVENT_BUCKET=ci-events \
+       LAB22_MEDIA_BUCKET=ci-media LAB22_KMS_KEY_ARN=arn:aws:kms:ap-northeast-2:000000000000:key/ci
 
 # The tracks: every _base/<track>/versions.env.
 tracks=()
@@ -214,6 +218,22 @@ if "encryption" in overlays:
         hit = [s for s in sources if s.replace(os.sep, "/").endswith("_base/encryption/clickhouse/" + f)]
         check(bool(hit) and os.path.isfile(hit[0]), "clickhouse bind-mounts encryption/clickhouse/" + f,
               "bind sources: %s" % (sources or "none"))
+
+# ── AWS S3 + SSE-KMS (lab 22) ────────────────────────────────────────────────
+if "aws-s3" in overlays:
+    for svc in ("langfuse-web", "langfuse-worker"):
+        e = env_of(svc)
+        has_env(svc, ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED",
+                      "LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED"])
+        check(e.get("LANGFUSE_S3_MEDIA_UPLOAD_BUCKET") == "ci-media" and e.get("LANGFUSE_S3_EVENT_UPLOAD_BUCKET") == "ci-events",
+              "%s buckets come from LAB22_*" % svc, "got: %r / %r" % (e.get("LANGFUSE_S3_EVENT_UPLOAD_BUCKET"), e.get("LANGFUSE_S3_MEDIA_UPLOAD_BUCKET")))
+        # empty LANGFUSE_* keys: Langfuse falls back to the AWS SDK chain, which carries the session token
+        check(e.get("LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID") == "" and e.get("LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID") == "",
+              "%s LANGFUSE_S3_*_ACCESS_KEY_ID emptied" % svc, "got: %r" % e.get("LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID"))
+        if "aws-s3-sse" in overlays:
+            check(e.get("LANGFUSE_S3_EVENT_UPLOAD_SSE") == "aws:kms", "%s event SSE aws:kms" % svc, "got: %r" % e.get("LANGFUSE_S3_EVENT_UPLOAD_SSE"))
+        if "aws-s3-media-sse" in overlays:
+            check(e.get("LANGFUSE_S3_MEDIA_UPLOAD_SSE") == "aws:kms", "%s media SSE aws:kms" % svc, "got: %r" % e.get("LANGFUSE_S3_MEDIA_UPLOAD_SSE"))
 
 sys.exit(1 if fails else 0)
 PYEOF

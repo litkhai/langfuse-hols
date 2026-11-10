@@ -80,6 +80,9 @@ langfuse-ee/
 ├── 19-ee-scheduled-parquet-export.sh # The worker's scheduled Parquet export, read back from its manifests; lag buffer, late spans
 ├── 20-ee-retention-after-export.sh # Archive-then-delete for real: the batch retention cleaner deletes, the Parquet archive stays
 ├── 21-ee-export-object-lock.sh  # The export into a WORM bucket (MinIO object lock, GOVERNANCE retention)
+├── 22-ee-aws-s3-sse-kms.sh      # Event + media buckets on AWS S3 with a customer-managed KMS key; SDK vs OTLP media, presigned URLs
+│   └── 22-send-media.py         #   ↳ one trace with a synthetic PNG: SDK LangfuseMedia or raw OTLP data URI
+├── captures/22-*.jpg            # Langfuse UI captures of step 22
 └── 99-cleanup.sh                # Wrapper → _base/bin/down.sh v4: tear the stack down (--purge to wipe volumes)
 ```
 
@@ -160,6 +163,7 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./19-ee-scheduled-parquet-export.sh        # scheduled Parquet export read back (~20 min: waits out the 20-min lag buffer)
 ./20-ee-retention-after-export.sh          # archive-then-delete with the batch retention cleaner (retention overlay, a few minutes)
 ./21-ee-export-object-lock.sh              # export into a WORM bucket; a written version cannot be deleted
+./22-ee-aws-s3-sse-kms.sh                  # AWS S3 + SSE-KMS for events and media (needs AWS credentials, ~5 min); --cleanup after
 ```
 
 ### 🧩 EE feature coverage
@@ -451,6 +455,25 @@ The default path is a daily job at 03:15 (`dataRetentionQueue.ts`), which also d
 
 A MinIO bucket with object lock and a default GOVERNANCE retention of 1 day as the export target. The run succeeds (`last_error` empty, manifest written, 3 = 3 rows read back), every written object carries GOVERNANCE retention, and `mc rm --version-id` on a written Parquet is refused ("is WORM protected"), while the same command deletes on a bucket without object lock (control). The bucket is left in place (governance bypass needed to remove it). COMPLIANCE mode and AWS S3 are not run (#95).
 
+#### 22 — Event and media buckets on AWS S3 with SSE-KMS ([22-ee-aws-s3-sse-kms.sh](22-ee-aws-s3-sse-kms.sh))
+
+Moves both buckets from MinIO to AWS S3 in one region, encrypted with a customer-managed KMS key (overlays [`aws-s3`](../../../_base/docker-compose.aws-s3.yml), [`aws-s3-sse`](../../../_base/docker-compose.aws-s3-sse.yml), [`aws-s3-media-sse`](../../../_base/docker-compose.aws-s3-media-sse.yml)). The step creates the key and two buckets: default SSE-KMS with that key and S3 Bucket Key, public access blocked, a 30-day expiry on `events/`, and a bucket policy that refuses non-TLS requests and any PUT that names another algorithm or key. A PUT without an encryption header is allowed and gets the bucket default. Then [22-send-media.py](22-send-media.py) sends a synthetic PNG two ways:
+
+| Path | What happened |
+|---|---|
+| Python SDK `LangfuseMedia` (presigned PUT), `LANGFUSE_S3_MEDIA_UPLOAD_SSE` **unset** | upload 200, object `aws:kms` with the lab key; ClickHouse holds a `@@@langfuseMedia:…@@@` reference; no image bytes in the raw event object |
+| Raw OTLP with a base64 data URI (a 27.8 KB PNG, 37 KB of base64), Langfuse defaults | **the base64 stays inline in ClickHouse**: the worker's extraction variables default to `false` |
+| Same, with `LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_PROJECT_IDS=*` | reference in ClickHouse, object `aws:kms` with the lab key; **the raw event object still holds the base64** |
+| `LANGFUSE_S3_MEDIA_UPLOAD_SSE=aws:kms` + key id set | the presigned PUT URL signs `x-amz-server-side-encryption` and `…-aws-kms-key-id`, which the SDKs do not send: **403 `SignatureDoesNotMatch`, the image is not stored**, and the trace shows an empty Media box. The same PUT with the two headers → 200. Worker uploads are not affected |
+
+Reading back: the public media API returns a presigned GET on the bucket's own S3 host, with `X-Amz-Expires` = `LANGFUSE_S3_MEDIA_DOWNLOAD_URL_EXPIRY_SECONDS` (60 in the run, default 3600). Anyone holding the URL gets the image without a Langfuse login until it expires (403 after). So the SDK hosts and the browsers that open Langfuse both need a route to the S3 endpoint. `--cleanup` deletes the buckets and schedules the key for deletion (7 days).
+
+![SDK trace, image served from the SSE-KMS media bucket](captures/22-sdk-media-from-s3.jpg)
+![Raw OTLP trace with extraction off: the data URI stays in the input](captures/22-otlp-base64-inline.jpg)
+![Media SSE variable set: the SDK upload got 403 and the Media box is empty](captures/22-media-sse-upload-missing.jpg)
+
+Not run: the server-side fallback for *large* base64 that the multi-modality docs describe (no size threshold tested), a KMS key policy limited to one IAM role, cross-region replication, instance-role or IRSA credentials, SDK 5.x and the JS SDK (their upload code sends the same three headers as SDK 4.17.0, read on 2026-11-10).
+
 ### 🔑 Gotchas worth remembering
 
 | | Note |
@@ -469,6 +492,8 @@ A MinIO bucket with object lock and a default GOVERNANCE retention of 1 day as t
 | **v1 read endpoints are off in `events_only`** | `GET /api/public/traces`, `/observations`, `/scores` and `/sessions` return 404. Use `/api/public/v2/observations`. Legacy ingestion takes only `score-create`, with HTTP 207 (steps 12–15). |
 | **Project API keys move protected labels** | Protection applies to users (UI / tRPC). A project API key can still create, move and delete `production` through the public API, by design (step 18). Treat the key as the deployment credential and watch `audit_logs` for `type = API_KEY`. |
 | **Late spans are never exported** | The scheduled export picks rows by `start_time` from `last_sync_at` onward, 20 min behind now. A span that arrives with an older `start_time` stays in ClickHouse and in no export (step 19); and retention later deletes it with no archived copy (step 20). Reconcile the archive with ClickHouse before retention deletes. |
+| **Media SSE breaks SDK uploads** | `LANGFUSE_S3_MEDIA_UPLOAD_SSE` puts the SSE headers into the signature of the presigned PUT URL, and the SDKs do not send them: S3 answers 403 and the image is lost. Encrypt the media bucket by its default SSE-KMS instead and leave that variable unset (step 22). |
+| **OTLP base64 is not extracted by default** | Data URIs from raw OTel producers stay inline in ClickHouse unless the worker's three OTel media variables are on; the raw event object keeps them either way, so encrypt and expire the event bucket too (step 22). |
 
 ### 📝 Verification status
 
@@ -531,6 +556,15 @@ The full captured console output of the 01 → 11 run is in **[lab-output.md](la
 | `19` scheduled Parquet export | 17 checks PASS: 6 → 8 manifests, 24 = 24 then 25 of 26 (the late span), lag-buffer span absent then present, no `*_price` columns, wrong secret → saved, `last_error`, 0 manifests, MEMBER 403. `--license-off --phase1-only`: 14 PASS, same results unlicensed |
 | `20` retention after export | 12 checks PASS: the batch cleaner's `DELETE … start_time <` in `query_log`, old rows 0, recent row kept, archived spans still in Parquet, the late span lost |
 | `21` WORM bucket | 8 checks PASS: export succeeds into an object-lock bucket, objects carry GOVERNANCE retention, version delete refused, control delete on an unlocked bucket succeeds |
+
+**Step 22** ([#98](https://github.com/litkhai/langfuse-hols/issues/98)) was verified **end-to-end on 2026-11-10** against **Langfuse v4.77.0 / SDK 4.17.0 / ClickHouse 26.8.22.13**:
+- **Stack:** a separate compose project with fresh volumes (`COMPOSE_PROJECT_NAME=langfuse-hols-v4-s3 LANGFUSE_VERSION=4.77.0`, enterprise key; the pin stays 4.56.0), `events_only`. AWS S3 and KMS in `ap-northeast-2` with temporary SSO credentials. Docker 29.9.3, Compose v5.7.0, aws-cli 2.37.6, no model calls.
+- **Runs:** the first run hit the SDK 403 (media SSE set) and the inline base64 (extraction off), which became sections 3–6. The second showed that `StringNotEqualsIfExists` also denies PUTs without the header. The third, after the policy fix, failed one row whose expectation was wrong (a PUT naming `aws:kms` without a key id is refused, not written; the deny statement that matched is not identified); the fourth gave 30 PASS. The buckets were deleted with `--cleanup` the same day and the key scheduled for deletion.
+- **Source** read on 2026-11-10: `StorageService.ts` (presigned PUT with the SSE parameters), worker `otelIngestionQueue.ts` (the three OTel media variables, default off), Python SDK `media_manager.py` at v5.2.0 and JS `mediaUpload.ts` at main (no SSE headers sent).
+
+| Step | Result |
+|---|---|
+| `22` AWS S3 + SSE-KMS | 30 checks PASS: bucket defaults and policy (header-less PUT → lab key, AES256 / AWS managed key / no key id refused, non-TLS 403), SDK media uploaded and encrypted, OTLP base64 inline with extraction off and a reference with it on, raw events encrypted and holding the OTLP base64, presigned GET 200 then 403 after 60 s, media SSE → SDK upload 403 `SignatureDoesNotMatch` and 200 with the two headers |
 
 Confirmed at runtime and built into the labs:
 
@@ -646,6 +680,9 @@ langfuse-ee/
 ├── 19-ee-scheduled-parquet-export.sh # worker가 쓴 스케줄 Parquet 반출을 manifest로 읽어 확인; lag buffer, 늦게 온 span
 ├── 20-ee-retention-after-export.sh # 실제 archive-then-delete: batch 보존 정리기가 지우고 Parquet 보관본은 남음
 ├── 21-ee-export-object-lock.sh  # WORM 버킷으로 반출(MinIO object lock, GOVERNANCE 보존)
+├── 22-ee-aws-s3-sse-kms.sh      # 이벤트·미디어 버킷을 고객 관리 KMS 키로 암호화한 AWS S3로; SDK와 OTLP 미디어, presigned URL
+│   └── 22-send-media.py         #   ↳ 합성 PNG를 담은 trace 하나: SDK LangfuseMedia 또는 OTLP data URI
+├── captures/22-*.jpg            # 22단계 Langfuse 화면 캡처
 └── 99-cleanup.sh                # 래퍼 → _base/bin/down.sh v4: 스택 종료 (--purge 로 볼륨까지 삭제)
 ```
 
@@ -726,6 +763,7 @@ docker exec -i langfuse-hols-v4-clickhouse-1 clickhouse-client -u clickhouse --p
 ./19-ee-scheduled-parquet-export.sh        # 스케줄 Parquet 반출을 다시 읽기 (~20분: 20분 lag buffer를 기다림)
 ./20-ee-retention-after-export.sh          # batch 보존 정리기로 archive-then-delete (retention 오버레이, 몇 분)
 ./21-ee-export-object-lock.sh              # WORM 버킷으로 반출; 쓴 버전은 지울 수 없음
+./22-ee-aws-s3-sse-kms.sh                  # 이벤트·미디어를 AWS S3 + SSE-KMS로(AWS 자격 증명 필요, 약 5분); 끝나면 --cleanup
 ```
 
 ### 🧩 EE 기능 커버리지
@@ -1017,6 +1055,25 @@ archive-then-delete를 실제로 돌립니다. 보존 3일인 프로젝트에 4�
 
 object lock과 기본 GOVERNANCE 보존 1일을 건 MinIO 버킷을 반출 대상으로 씁니다. 실행은 성공하고(`last_error` 없음, manifest 씀, 다시 읽은 행 3 = 3), 쓴 객체마다 GOVERNANCE 보존이 걸리며, 쓴 Parquet에 대한 `mc rm --version-id`는 거부됩니다("is WORM protected"). 같은 명령은 object lock이 없는 버킷에서는 지웁니다(대조). 버킷은 남겨 둡니다(지우려면 governance bypass 필요). COMPLIANCE 모드와 AWS S3는 실행하지 않았습니다(#95).
 
+#### 22 — 이벤트·미디어 버킷을 AWS S3 + SSE-KMS로 ([22-ee-aws-s3-sse-kms.sh](22-ee-aws-s3-sse-kms.sh))
+
+두 버킷을 MinIO에서 한 리전의 AWS S3로 옮기고 고객 관리 KMS 키로 암호화합니다(오버레이 [`aws-s3`](../../../_base/docker-compose.aws-s3.yml), [`aws-s3-sse`](../../../_base/docker-compose.aws-s3-sse.yml), [`aws-s3-media-sse`](../../../_base/docker-compose.aws-s3-media-sse.yml)). 스크립트가 키와 버킷 둘을 만듭니다. 그 키로 기본 SSE-KMS와 S3 Bucket Key, 퍼블릭 액세스 차단, `events/` 30일 만료, 그리고 TLS가 아닌 요청과 다른 알고리즘·다른 키를 지정한 PUT을 거부하는 버킷 정책입니다. 암호화 헤더가 없는 PUT은 허용되고 버킷 기본값으로 암호화됩니다. 그다음 [22-send-media.py](22-send-media.py)가 합성 PNG를 두 가지 방식으로 보냅니다.
+
+| 경로 | 결과 |
+|---|---|
+| Python SDK `LangfuseMedia`(presigned PUT), `LANGFUSE_S3_MEDIA_UPLOAD_SSE` **미설정** | 업로드 200, 객체는 실습 키로 `aws:kms`; ClickHouse에는 `@@@langfuseMedia:…@@@` 참조; 원본 이벤트 객체에 이미지 바이트 없음 |
+| base64 data URI를 담은 OTLP(27.8 KB PNG, base64 37 KB), Langfuse 기본값 | **base64가 ClickHouse에 그대로 남음**: worker 추출 변수의 기본값이 `false` |
+| 같은 요청, `LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED=true`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_PROJECT_IDS=*` | ClickHouse에는 참조, 객체는 실습 키로 `aws:kms`; **원본 이벤트 객체에는 base64가 그대로 있음** |
+| `LANGFUSE_S3_MEDIA_UPLOAD_SSE=aws:kms` + 키 ID 설정 | presigned PUT URL이 `x-amz-server-side-encryption`과 `…-aws-kms-key-id`를 서명에 넣는데 SDK는 이 헤더를 보내지 않음: **403 `SignatureDoesNotMatch`, 이미지가 저장되지 않음**. trace의 Media 칸이 비어 보임. 같은 PUT에 두 헤더를 더하면 200. worker 업로드는 영향 없음 |
+
+다시 읽기: public media API는 버킷 자체 S3 호스트의 presigned GET을 돌려주고, `X-Amz-Expires`는 `LANGFUSE_S3_MEDIA_DOWNLOAD_URL_EXPIRY_SECONDS`입니다(실행에서는 60, 기본 3600). URL을 가진 사람은 만료 전까지 Langfuse 로그인 없이 이미지를 받습니다(만료 뒤 403). 그래서 SDK가 도는 호스트와 Langfuse를 여는 브라우저 모두 S3 엔드포인트로 가는 경로가 필요합니다. `--cleanup`은 버킷을 지우고 키 삭제를 예약합니다(7일).
+
+![SDK trace, SSE-KMS 미디어 버킷에서 읽은 이미지](captures/22-sdk-media-from-s3.jpg)
+![추출이 꺼진 OTLP trace: data URI가 input에 그대로](captures/22-otlp-base64-inline.jpg)
+![미디어 SSE 변수 설정: SDK 업로드 403, Media 칸이 비어 있음](captures/22-media-sse-upload-missing.jpg)
+
+실행하지 않은 것: multi-modality 문서가 말하는 *큰* base64의 서버 측 처리(크기 기준은 시험하지 않음), IAM 역할 하나로 제한한 KMS 키 정책, 리전 간 복제, 인스턴스 역할·IRSA 자격 증명, SDK 5.x와 JS SDK(두 SDK의 업로드 코드는 SDK 4.17.0과 같은 헤더 셋만 보냄, 2026-11-10 소스 확인).
+
 ### 🔑 기억할 함정들
 
 | | 노트 |
@@ -1035,6 +1092,8 @@ object lock과 기본 GOVERNANCE 보존 1일을 건 MinIO 버킷을 반출 대�
 | **`events_only`에서 v1 조회 API는 꺼져 있음** | `GET /api/public/traces`·`/observations`·`/scores`·`/sessions`는 404. `/api/public/v2/observations`를 쓸 것. 레거시 수집은 HTTP 207과 함께 `score-create`만 받음(단계 12–15). |
 | **프로젝트 API 키는 보호된 라벨을 옮긴다** | 보호는 사용자(화면·tRPC)에 걸립니다. 프로젝트 API 키는 public API로 `production`을 여전히 만들고 옮기고 지울 수 있고, 의도된 동작입니다(18단계). 키를 배포 자격 증명으로 다루고 `audit_logs`의 `type = API_KEY`를 지켜보세요. |
 | **늦게 온 span은 반출되지 않는다** | 스케줄 반출은 `last_sync_at`부터, 지금보다 20분 늦게, `start_time`으로 행을 고릅니다. 더 오래된 `start_time`으로 도착한 span은 ClickHouse에만 남고 어떤 반출에도 없습니다(19단계). 데이터 보존은 나중에 보관본 없이 그것을 지웁니다(20단계). 보존 삭제 전에 보관본을 ClickHouse와 맞춰 보세요. |
+| **미디어 SSE는 SDK 업로드를 깹니다** | `LANGFUSE_S3_MEDIA_UPLOAD_SSE`는 presigned PUT URL 서명에 SSE 헤더를 넣는데 SDK는 이 헤더를 보내지 않습니다. S3가 403을 돌려주고 이미지는 저장되지 않습니다. 이 변수는 비워 두고 미디어 버킷의 기본 SSE-KMS로 암호화하세요(22단계). |
+| **OTLP base64는 기본으로 추출되지 않습니다** | SDK를 거치지 않은 OTel 데이터의 data URI는 worker의 OTel 미디어 변수 셋을 켜지 않으면 ClickHouse에 그대로 남습니다. 원본 이벤트 객체에는 어느 쪽이든 남으니 이벤트 버킷도 암호화하고 만료를 거세요(22단계). |
 
 ### 📝 검증 상태
 
@@ -1097,6 +1156,16 @@ object lock과 기본 GOVERNANCE 보존 1일을 건 MinIO 버킷을 반출 대�
 | `19` 스케줄 Parquet 반출 | 검사 17개 PASS: manifest 6 → 8개, 24 = 24 다음 26개 중 25개(빠진 것은 늦게 온 span), 지연 버퍼 span 없음 → 있음, `*_price` 열 없음, 틀린 secret → 저장됨·`last_error`·manifest 0개, MEMBER 403. `--license-off --phase1-only`: 14 PASS, 라이선스 없이 같은 결과 |
 | `20` 반출 뒤 보존 | 검사 12개 PASS: `query_log`에 batch 정리기의 `DELETE … start_time <`, 오래된 행 0, 최근 행 남음, 보관된 span은 Parquet에 그대로, 늦은 span은 사라짐 |
 | `21` WORM 버킷 | 검사 8개 PASS: object lock 버킷으로 반출 성공, 객체에 GOVERNANCE 보존, 버전 삭제 거부, object lock 없는 버킷의 대조 삭제는 성공 |
+
+**22단계**([#98](https://github.com/litkhai/langfuse-hols/issues/98))는 **2026-11-10**에 **Langfuse v4.77.0 / SDK 4.17.0 / ClickHouse 26.8.22.13**으로 **처음부터 끝까지 검증**했습니다.
+- **스택:** 새 볼륨을 쓰는 별도 compose 프로젝트(`COMPOSE_PROJECT_NAME=langfuse-hols-v4-s3 LANGFUSE_VERSION=4.77.0`, enterprise 키; 고정 버전은 4.56.0 그대로), `events_only`. AWS S3와 KMS는 `ap-northeast-2`, 임시 SSO 자격 증명. Docker 29.9.3, Compose v5.7.0, aws-cli 2.37.6, 모델 호출 없음.
+- **실행:** 첫 실행에서 SDK 403(미디어 SSE 설정)과 base64 잔존(추출 꺼짐)을 만나 3–6절이 됐습니다. 두 번째 실행에서 `StringNotEqualsIfExists`가 헤더 없는 PUT까지 거부하는 것을 확인했습니다. 정책을 고친 세 번째 실행은 기대값이 틀린 한 줄에서 FAIL했습니다(키 ID 없이 `aws:kms`만 지정한 PUT은 써지지 않고 거부됨; 어느 deny 문장에 걸렸는지는 확인하지 않음). 네 번째 실행에서 30개 PASS. 같은 날 `--cleanup`으로 버킷을 지우고 키 삭제를 예약했습니다.
+- **소스**(2026-11-10 확인): `StorageService.ts`(SSE 파라미터를 넣은 presigned PUT), worker `otelIngestionQueue.ts`(OTel 미디어 변수 셋, 기본 꺼짐), Python SDK v5.2.0 `media_manager.py`와 JS main `mediaUpload.ts`(SSE 헤더를 보내지 않음).
+
+| 단계 | 결과 |
+|---|---|
+| `22` AWS S3 + SSE-KMS | 검사 30개 PASS: 버킷 기본값과 정책(헤더 없는 PUT → 실습 키, AES256·AWS 관리 키·키 ID 없음은 거부, TLS 아닌 요청 403), SDK 미디어 업로드와 암호화, 추출 꺼짐이면 OTLP base64 잔존·켜면 참조, 원본 이벤트 암호화와 OTLP base64 잔존, presigned GET 200 뒤 60초 후 403, 미디어 SSE → SDK 업로드 403 `SignatureDoesNotMatch`, 두 헤더를 더하면 200 |
+
 
 런타임에서 확인해 랩에 반영한 두 가지:
 

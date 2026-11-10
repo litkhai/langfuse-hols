@@ -1425,6 +1425,67 @@ Same stack. Command: `21-ee-export-object-lock.sh` (exit 0). MinIO `RELEASE.2026
 
 **Reading it.** The worker's uploads into an object-lock bucket succeed with no change to the integration, and every object it writes carries the bucket's default GOVERNANCE retention, so a written version cannot be deleted without a governance bypass. The same `mc rm --version-id` on a bucket without object lock deletes (control). COMPLIANCE mode, AWS S3 and the retry-overwrite case are not run (#95).
 
+## Lab 22 — Event and media buckets on AWS S3 with SSE-KMS (2026-11-10)
+
+Separate compose project with fresh volumes (`COMPOSE_PROJECT_NAME=langfuse-hols-v4-s3 LANGFUSE_VERSION=4.77.0`, enterprise key, `events_only`), Python SDK 4.17.0, ClickHouse 26.8.22.13. AWS S3 and KMS in `ap-northeast-2`, temporary SSO credentials, aws-cli 2.37.6. Command: `22-ee-aws-s3-sse-kms.sh` (exit 0), the fourth run of the day, reusing the key and buckets the first run created; then `--cleanup` (both buckets deleted, key deletion scheduled for 2026-11-17).
+
+```text
+════ 1. KMS key and two buckets in ap-northeast-2 ════
+  reusing lfhols22-events-20261110181319-9bf61c, lfhols22-media-20261110181319-9bf61c and alias/lfhols22-20261110181319
+  PASS  bucket | default encryption, lfhols22-events | expected: aws:kms, lab key, bucket key | observed: aws:kms True True
+  PASS  bucket | public access block, lfhols22-events | expected: all four on | observed: True True True True
+  PASS  bucket | default encryption, lfhols22-media | expected: aws:kms, lab key, bucket key | observed: aws:kms True True
+  PASS  bucket | public access block, lfhols22-media | expected: all four on | observed: True True True True
+  PASS  bucket | event bucket lifecycle | expected: events/ expire after 30 days | observed: 30 days
+════ 2. The bucket policy on its own (aws CLI as the writer) ════
+  PASS  policy | PUT without an encryption header | expected: written, bucket default (lab key) | observed: written (aws:kms lab-key True)
+  PASS  policy | PUT asking for SSE-S3 (AES256) | expected: AccessDenied | observed: AccessDenied
+  PASS  policy | PUT asking for SSE-KMS with the AWS managed key | expected: AccessDenied | observed: AccessDenied
+  PASS  policy | PUT asking for SSE-KMS without a key id | expected: AccessDenied or the lab key, never another key | observed: AccessDenied
+  PASS  policy | PUT asking for SSE-KMS with the lab key | expected: written (lab key) | observed: written (aws:kms lab-key True)
+  PASS  policy | unsigned GET of an object | expected: 403 | observed: 403
+  PASS  policy | signed GET over plain HTTP | expected: 403 (DenyNonTLS) | observed: 403
+════ 3. Recommended setup: overlays ee aws-s3 aws-s3-sse, OTLP media extraction off ════
+  PASS  langfuse | SSE variables (event, media) | expected: aws:kms unset | observed: aws:kms unset
+── 3a. Python SDK, LangfuseMedia (upload over the presigned PUT URL)
+  PASS  sdk | ClickHouse input | expected: media reference | observed: media reference
+  PASS  sdk | media upload status (Postgres) | expected: 200 | observed: 200
+  PASS  sdk | media object encryption | expected: aws:kms, lab key, bucket key | observed: aws:kms lab-key True
+── 3b. Raw OTLP, base64 data URI, extraction off (Langfuse default)
+  PASS  otlp-off | ClickHouse input (HTTP 200) | expected: base64 inline (nothing extracts it) | observed: base64 inline
+════ 4. OTLP media extraction on (LAB22_OTEL_MEDIA=true) ════
+  PASS  otlp-on | ClickHouse input (HTTP 200) | expected: media reference | observed: media reference
+  PASS  otlp-on | media object encryption (worker upload) | expected: aws:kms, lab key, bucket key | observed: aws:kms lab-key True
+── raw event objects written since 2026-11-10T09:22:39Z
+  PASS  events | raw event objects encrypted | expected: all aws:kms with the lab key | observed: 3 of 3
+  PASS  events | SDK image bytes in raw events | expected: none (the SDK sent a reference) | observed: 0 object(s)
+  PASS  events | OTLP image bytes in raw events | expected: present for both OTLP traces (raw payload kept as sent) | observed: off: 1, on: 1 object(s)
+════ 5. Reading the image back (presigned GET, expiry 60 s) ════
+  PASS  read | presigned GET URL (public API) | expected: media bucket S3 host, X-Amz-Expires=60 | observed: <media bucket>.s3.ap-northeast-2.amazonaws.com, X-Amz-Expires=60
+  PASS  read | GET with the URL, no Langfuse login | expected: 200, same SHA-256 as sent | observed: 200, sha match: yes
+  waiting 65 s for the URL to expire…
+  PASS  read | same URL after expiry | expected: 403 | observed: 403
+════ 6. LANGFUSE_S3_MEDIA_UPLOAD_SSE set too (overlay aws-s3-media-sse) ════
+  PASS  media-sse | SDK media upload status | expected: 403 (upload refused, image not stored) | observed: 403
+  PASS  media-sse | signed headers of the presigned PUT URL | expected: include x-amz-server-side-encryption(-aws-kms-key-id) | observed: content-length;content-type;host;x-amz-checksum-sha256;x-amz-server-side-encryption;x-amz-server-side-encryption-aws-kms-key-id
+  PASS  media-sse | PUT with the SDKs' headers | expected: 403 | observed: 403 SignatureDoesNotMatch
+  PASS  media-sse | same PUT plus the two SSE headers | expected: 200 | observed: 200 
+  PASS  media-sse | OTLP extraction (worker upload, no presigned URL) | expected: media reference, object aws:kms lab key | observed: media reference, aws:kms lab-key True
+════ 7. Back to the recommended setup ════
+  web + worker on ee aws-s3 aws-s3-sse (LAB22_OTEL_MEDIA=true); --cleanup removes the AWS resources and returns to MinIO
+PASS 30 · FAIL 0
+```
+
+**Reading it.**
+- With the media SSE variable unset, the SDK's presigned PUT carries no encryption header, so the bucket default encrypts the image with the lab key.
+- Set `LANGFUSE_S3_MEDIA_UPLOAD_SSE` and the URL's signature includes `x-amz-server-side-encryption` and `x-amz-server-side-encryption-aws-kms-key-id`. The SDK leaves them out, and S3 answers `SignatureDoesNotMatch`. The trace keeps its media reference, Postgres records `upload_http_status = 403`, and there is no object.
+- Raw OTLP data URIs stay inline in ClickHouse until the worker's OTel media variables are on. In both cases the raw event object keeps the base64, encrypted with the lab key.
+
+Earlier runs the same day:
+- **Run 1**, with a policy that required the header: the SDK upload failed with the media SSE variable set, and OTLP base64 stayed inline. These two results led to sections 3–6.
+- **Run 2**, policy with `StringNotEqualsIfExists`: header-less PUTs from the aws CLI, the SDK and the worker were all denied. An `…IfExists` condition is true when the key is absent.
+- **Run 3**, policy with `StringNotEquals` + `Null: false`: 29 PASS. The one FAIL was a row whose expectation was wrong: a PUT with `aws:kms` and no key id is refused. Which deny statement matched it was not identified.
+
 ## Labs 18–19 on Langfuse v4.76.0 (2026-11-07)
 
 The latest release on 2026-11-07, run in a separate compose project (`COMPOSE_PROJECT_NAME=langfuse-hols-v4-latest LANGFUSE_VERSION=4.76.0`, its own fresh volumes; the pin stays 4.56.0). Commands: `01-up.sh`, `05-ee-activate.sh` (health → `4.76.0`, EE active), `18-ee-protected-labels.sh --license-off`, `19-ee-scheduled-parquet-export.sh` (all exit 0). Result lines only:
@@ -1538,6 +1599,10 @@ The latest release on 2026-11-07, run in a separate compose project (`COMPOSE_PR
 8. **Deployment labels move.** Creating prompt v2 with `production` cleared the label from v1 (`labels = {}`). That is why protected labels exist.
 
 9. **Overlays are independent; expect orphan warnings.** Bringing one overlay up recreates `web` / `worker` with that overlay's env only.
+
+10. **Encrypt the media bucket by its default, not by the media SSE variable.** `LANGFUSE_S3_MEDIA_UPLOAD_SSE` signs two SSE headers into every presigned PUT. The Python and JS SDKs don't send them, so with that variable set every SDK image upload fails with 403 and the image is gone. Measured on 4.77.0 on 2026-11-10 (lab 22). Bucket default SSE-KMS gives the same customer-managed key with no change on the client.
+
+11. **Base64 from raw OTel producers is not extracted by default.** In `events_only`, the worker moves data URIs into the media bucket only with `LANGFUSE_OTEL_MEDIA_UPLOAD_ENABLED`, `LANGFUSE_OTEL_EARLY_MEDIA_EXTRACTION_ENABLED` and `…_PROJECT_IDS` set. The raw event object keeps the base64 either way (lab 22).
 
 ## Reproduce it
 

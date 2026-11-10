@@ -45,6 +45,7 @@ lets you run cross-cutting quality analytics the UI doesn't offer.
 ```
 langfuse-eval/
 ├── README.md                   # this file
+├── DESIGN.md                   # design rationale (the README holds the authoritative results)
 ├── _common.py                  # shared: _base/.env loader, client, REST helper, the Q&A KB
 ├── 01-seed-traces.py           # seed traces to evaluate with the shared generator (_base/v4/seed_traces.py)
 ├── 02-prompt-management.py     # versions, labels (production/latest), compile, prompt→trace link
@@ -239,6 +240,7 @@ SQL로 할 수 있습니다.
 ```
 langfuse-eval/
 ├── README.md                   # 이 문서
+├── DESIGN.md                   # 설계 근거 기록(검증 결과는 README가 권위 있음)
 ├── _common.py                  # 공통: _base/.env 로더, 클라이언트, REST 헬퍼, Q&A 지식베이스
 ├── 01-seed-traces.py           # 공유 생성기(_base/v4/seed_traces.py)로 평가 대상 trace 확보
 ├── 02-prompt-management.py     # 버전·라벨(production/latest)·compile·프롬프트→trace 링크

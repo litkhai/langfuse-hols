@@ -1,8 +1,8 @@
 # Publishing keys (tools/lab.schema.md) — published 2026-11-13 (owner's choice, #104)
 web: true
-title_ko: "Claude Code 세션을 셀프호스팅 Langfuse로: Stop hook, 저장소 허용 목록, 클라이언트 마스킹"
+title_ko: "Claude Code 세션을 Langfuse로"
 summary_ko: "Langfuse가 공개한 Claude Code Stop hook에 저장소 허용 목록과 SDK mask를 더해 실제 claude -p 실행으로 확인합니다. 비밀값 모양의 값과 홈 경로가 ClickHouse에도 S3 원본에도 남지 않는지, 저장소별 토큰과 비용을 SQL로."
-title_en: "Claude Code sessions in self-hosted Langfuse: Stop hook, repository allowlist, client-side masking"
-summary_en: "Langfuse's published Claude Code Stop hook with a repository allowlist and the SDK mask, checked with real claude -p runs: no secret-shaped value or home path in ClickHouse or the raw S3 event files, tokens and cost per repository in SQL."
+title_en: "Claude Code traces in Langfuse"
+summary_en: "Langfuse's Claude Code Stop hook with a repo allowlist and the SDK mask, run with real claude -p: no secret or home path in ClickHouse or S3, cost in SQL."
 category: langfuse
 tags: [langfuse, llm, ai-agents]

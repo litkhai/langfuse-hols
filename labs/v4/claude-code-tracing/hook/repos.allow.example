@@ -1,0 +1,3 @@
+# One git origin per line as owner/name. Worktrees and second clones count as their origin.
+# Lines that are not an exact owner/name (comments, blanks) never match.
+your-org/your-lab-repo

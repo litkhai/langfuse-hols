@@ -1,6 +1,6 @@
 {
   "repo": "langfuse-hols",
-  "generated": "2026-11-05T04:18:31Z",
+  "generated": "2026-11-13T14:49:32Z",
   "labs": [
     {
       "path": "labs/v3/langfuse-ee",
@@ -46,6 +46,21 @@
       ],
       "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/ai-gateway/README.md#한국어",
       "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/ai-gateway/README.md#english"
+    },
+    {
+      "path": "labs/v4/claude-code-tracing",
+      "title_ko": "Claude Code 세션을 셀프호스팅 Langfuse로: Stop hook, 저장소 허용 목록, 클라이언트 마스킹",
+      "summary_ko": "Langfuse가 공개한 Claude Code Stop hook에 저장소 허용 목록과 SDK mask를 더해 실제 claude -p 실행으로 확인합니다. 비밀값 모양의 값과 홈 경로가 ClickHouse에도 S3 원본에도 남지 않는지, 저장소별 토큰과 비용을 SQL로.",
+      "title_en": "Claude Code sessions in self-hosted Langfuse: Stop hook, repository allowlist, client-side masking",
+      "summary_en": "Langfuse's published Claude Code Stop hook with a repository allowlist and the SDK mask, checked with real claude -p runs: no secret-shaped value or home path in ClickHouse or the raw S3 event files, tokens and cost per repository in SQL.",
+      "category": "langfuse",
+      "tags": [
+        "langfuse",
+        "llm",
+        "ai-agents"
+      ],
+      "readme_ko": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/claude-code-tracing/README.md#한국어",
+      "readme_en": "https://github.com/litkhai/langfuse-hols/blob/main/labs/v4/claude-code-tracing/README.md#english"
     },
     {
       "path": "labs/v4/langfuse-ee",

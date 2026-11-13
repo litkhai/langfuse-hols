@@ -1,0 +1,24 @@
+# Overlay on _base/docker-compose.yml for this lab (compose project lf-cc-lab, see lib.sh).
+# Only web (13000) and ClickHouse HTTP (18423) are published, on 127.0.0.1; the other backends publish nothing.
+services:
+  langfuse-web:
+    ports: !override
+      - 127.0.0.1:13000:3000
+    environment:
+      NEXTAUTH_URL: http://localhost:13000
+
+  langfuse-worker:
+    ports: !reset []
+
+  clickhouse:
+    ports: !override
+      - 127.0.0.1:18423:8123
+
+  minio:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  postgres:
+    ports: !reset []

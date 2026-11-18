@@ -1,0 +1,47 @@
+# Release lf-v4: chart 2.2.5, Langfuse v4.82.0 (image tag on the command line, lib.sh v4_install),
+# next to lf-v3 on the same data layer:
+#   ClickHouse  same cluster, database langfuse_v4 (v3 keeps `default`)
+#   Postgres    from the ConfigMap lf-v4-env (DATABASE_URL), so 06/07 can move it between options
+#   Redis       same instance and db index, REDIS_KEY_PREFIX from lf-v4-env (07 shows why)
+#   S3          same bucket, own prefixes for new event files and media; old media rows keep
+#               their bucket and path, so they are served as they are (06)
+# Salt, encryption key and NextAuth secret come from the same Secret as lf-v3.
+langfuse:
+  salt: {secretKeyRef: {name: langfuse, key: salt}}
+  encryptionKey: {secretKeyRef: {name: langfuse, key: encryption-key}}
+  nextauth:
+    secret: {secretKeyRef: {name: langfuse, key: nextauth-secret}}
+  additionalEnv:
+    - name: DATABASE_URL
+      valueFrom: {configMapKeyRef: {name: lf-v4-env, key: DATABASE_URL}}
+    - {name: REDIS_CONNECTION_STRING, value: "redis://default:redis-lab@valkey:6379/0"}
+    - {name: LANGFUSE_LLM_CONNECTION_WHITELISTED_HOST, value: "mock-llm"}
+  # Everything else 06-08 change (key prefix, backfill gate) is read from this ConfigMap.
+  additionalEnvFrom:
+    - configMapRef: {name: lf-v4-env}
+  web:
+    resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {memory: 2Gi}}
+  worker:
+    resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {memory: 2Gi}}
+
+postgresql:
+  deploy: false
+redis:
+  deploy: false
+clickhouse:
+  deploy: false
+  host: clickhouse
+  database: langfuse_v4
+  cluster: {enabled: true}
+  auth: {username: default, password: clickhouse-lab}
+s3:
+  deploy: false
+  bucket: langfuse
+  region: us-east-1
+  endpoint: http://minio:9000
+  forcePathStyle: true
+  accessKeyId: {value: langfuse}
+  secretAccessKey: {value: minio-lab-password}
+  eventUpload: {prefix: "v4/events/"}
+  batchExport: {prefix: "v4/exports/"}
+  mediaUpload: {prefix: "v4/media/"}

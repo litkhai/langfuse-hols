@@ -1,0 +1,65 @@
+# Lab helpers: the client Service, a mock OpenAI-compatible model that logs the API key it
+# receives (06 checks that v4 decrypts the LLM key v3 stored), and a curl pod for in-cluster calls.
+apiVersion: v1
+kind: Service
+metadata: {name: langfuse-app}   # what clients use; 08 moves it from v3 to v4 (the cutover)
+spec:
+  selector: {app.kubernetes.io/instance: lf-v3, app: web}
+  ports: [{port: 3000, targetPort: 3000}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: mock-llm}
+data:
+  server.py: |
+    import json, time
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self._reply({"object": "list", "data": [{"id": "mock-model", "object": "model"}]})
+        def do_POST(self):
+            n = int(self.headers.get("content-length") or 0); self.rfile.read(n)
+            print("AUTH", self.headers.get("authorization"), self.path, flush=True)
+            self._reply({"id": "cmpl-mock", "object": "chat.completion", "created": int(time.time()),
+                         "model": "mock-model", "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+                         "choices": [{"index": 0, "finish_reason": "stop",
+                                      "message": {"role": "assistant", "content": "mock answer"}}]})
+        def _reply(self, obj):
+            b = json.dumps(obj).encode(); self.send_response(200)
+            self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(b)))
+            self.end_headers(); self.wfile.write(b)
+        def log_message(self, *a): pass
+    HTTPServer(("", 8080), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mock-llm}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mock-llm}}
+  template:
+    metadata: {labels: {app: mock-llm}}
+    spec:
+      containers:
+        - name: mock
+          image: python:3.12.15-slim
+          command: [python, -u, /app/server.py]
+          ports: [{containerPort: 8080}]
+          volumeMounts: [{name: app, mountPath: /app}]
+      volumes: [{name: app, configMap: {name: mock-llm}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mock-llm}
+spec:
+  selector: {app: mock-llm}
+  ports: [{port: 8080}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: lab-curl}
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl:8.11.1
+      command: [sleep, "864000"]

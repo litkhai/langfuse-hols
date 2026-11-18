@@ -1,0 +1,46 @@
+# Release lf-v3: chart 1.5.41, Langfuse v3 (image tag on the command line, lib.sh v3_install).
+# Every store is external (*.deploy: false) and lives in data-layer.yaml.
+langfuse:
+  salt: {secretKeyRef: {name: langfuse, key: salt}}
+  encryptionKey: {secretKeyRef: {name: langfuse, key: encryption-key}}
+  nextauth:
+    secret: {secretKeyRef: {name: langfuse, key: nextauth-secret}}
+  additionalEnv:
+    - {name: DATABASE_URL, value: "postgresql://postgres:postgres-lab@pg-main:5432/langfuse"}  # gitleaks:allow lab-only password, local kind cluster
+    - {name: REDIS_CONNECTION_STRING, value: "redis://default:redis-lab@valkey:6379/0"}
+    - {name: LANGFUSE_LLM_CONNECTION_WHITELISTED_HOST, value: "mock-llm"}
+    - {name: LANGFUSE_INIT_ORG_ID, value: sbs-lab-org}
+    - {name: LANGFUSE_INIT_ORG_NAME, value: sbs-lab}
+    - {name: LANGFUSE_INIT_PROJECT_ID, value: sbs-lab}
+    - {name: LANGFUSE_INIT_PROJECT_NAME, value: sbs-lab}
+    - {name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY, value: pk-lf-sbs-lab}
+    - {name: LANGFUSE_INIT_PROJECT_SECRET_KEY, value: sk-lf-sbs-lab}
+    - {name: LANGFUSE_INIT_USER_EMAIL, value: admin@example.com}
+    - {name: LANGFUSE_INIT_USER_NAME, value: admin}
+    - {name: LANGFUSE_INIT_USER_PASSWORD, value: sbs-lab-password}
+  web:
+    resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {memory: 2Gi}}
+  worker:
+    resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {memory: 2Gi}}
+
+postgresql:
+  deploy: false
+redis:
+  deploy: false
+clickhouse:
+  deploy: false
+  host: clickhouse
+  database: default
+  clusterEnabled: true
+  auth: {username: default, password: clickhouse-lab}
+s3:
+  deploy: false
+  bucket: langfuse
+  region: us-east-1
+  endpoint: http://minio:9000
+  forcePathStyle: true
+  accessKeyId: {value: langfuse}
+  secretAccessKey: {value: minio-lab-password}
+  eventUpload: {prefix: "events/"}
+  batchExport: {prefix: "exports/"}
+  mediaUpload: {prefix: "media/"}

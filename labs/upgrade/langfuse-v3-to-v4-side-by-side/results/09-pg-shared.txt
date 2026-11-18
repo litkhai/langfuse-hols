@@ -1,0 +1,94 @@
+
+==> scratch stores: langfuse_c (dump of v3's database), ClickHouse v3c and v4c, Redis db 1 empty
+NOTICE:  database "langfuse_c" does not exist, skipping
+
+==> lf-v3c: Langfuse 3.172.1 on langfuse_c
+PASS  v3c alone: its traces in v3c: 5
+
+==> lf-v4c: Langfuse 4.82.0 on the SAME database, while v3c serves (probe v3c every second)
+v4c install (94 Prisma migrations on v3c's live database): 47.5 s
+v3c health 200: 60
+v3c prompt API 200: 60
+Prisma migrations in langfuse_c: 485
+
+==> (c) v3c on the migrated database: reads and writes through its API
+PASS  v3c GET /api/public/projects: 200
+PASS  v3c GET /api/public/v2/prompts/support-system: 200
+PASS  v3c GET /api/public/v2/datasets/support-golden: 200
+PASS  v3c GET /api/public/llm-connections: 200
+PASS  v3c POST /api/public/v2/prompts (new version): 201
+PASS  v3c POST /api/public/dataset-items: 200
+PASS  v4c sees the prompt version v3c wrote: v3c write after v4 migrated
+
+==> (c) v3c UI (tRPC) on the migrated database
+v3c tRPC prompts.all: {"http":200,"error":"null"}
+v3c tRPC datasets.allDatasetMeta: {"http":200,"error":"null"}
+v3c tRPC evals.allConfigs: {"http":400,"error":"[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"orderBy\"\n    ],\n    \"message\": \"Invalid"}
+v3c tRPC projectApiKeys.byProjectId: {"http":200,"error":"null"}
+v3c tRPC llmApiKey.all: {"http":200,"error":"null"}
+v3c tRPC members.allFromProject: {"http":200,"error":"null"}
+v3c tRPC backgroundMigrations.all: {"http":200,"error":"null"}
+
+==> (c) an API key created on v3c after the v4 migration
+new key: pk-lf-0aa… (public key, shortened in the log)
+PASS  new v3c key on v3c: 200
+PASS  new v3c key on v4c (no role_assignments row): 200
+PASS  new v3c key: OTel ingestion on v4c: 200
+role_assignments for it: 1
+
+==> (c) restarts: v3c web (prisma migrate deploy sees 94 unknown migrations) and v3c worker (v4 rows in background_migrations)
+v3c web restarted: ready
+Found 2 pods, using pod/lf-v3c-langfuse-web-7f55c8b76d-6h5d4
+391 migrations found in prisma/migrations
+No pending migrations to apply.
+2026-11-18T07:04:38.643Z error 	middleware intercepted error with code BAD_REQUEST
+TRPCError: [
+Found 2 pods, using pod/lf-v3c-langfuse-worker-7b8c57cf98-pqhz7
+   1 No background migrations to run
+
+==> Redis shared, no prefix (both on db 1): who processes whose ingestion jobs?
+sent to v3c (30): in v3c 8, in v4c 0
+sent to v4c (20): in v4c 20, in v3c 0
+  45 langfuse:project
+  10 bull:trace-upsert
+  10 bull:posthog-integration-queue
+  10 bull:mixpanel-integration-queue
+  10 bull:data-retention-queue
+  10 bull:blobstorage-integration-queue
+   8 bull:v4-legacy-api-usage-queue
+   8 bull:event-propagation-queue
+   4 bull:otel-ingestion-queue
+   4 bull:ingestion-queue
+   4 bull:entity-change-queue
+   2 prompt:sbs-lab
+   1 error 	Error running background migrations Cannot find module './createRootSpansFromTraces'
+   1 Error: Cannot find module './createRootSpansFromTraces'
+
+==> Redis: v4c with REDIS_KEY_PREFIX=lf-v4c (same instance, same db index)
+PASS  prefixed: sent to v3c, in v3c: 30
+PASS  prefixed: sent to v3c, in v4c: 0
+PASS  prefixed: sent to v4c, in v4c: 20
+PASS  prefixed: sent to v4c, in v3c: 0
+  65 langfuse:project
+  20 lf-v4clangfuse:project
+   9 bull:trace-upsert
+   9 bull:posthog-integration-queue
+   9 bull:mixpanel-integration-queue
+   9 bull:data-retention-queue
+   9 bull:blobstorage-integration-queue
+   8 lf-v4c:v4-legacy-api-usage-queue
+   8 lf-v4c:posthog-integration-queue
+   8 lf-v4c:mixpanel-integration-queue
+   8 lf-v4c:event-propagation-queue
+   8 lf-v4c:data-retention-queue
+
+==> wrong secrets on v4c (a different SALT, ENCRYPTION_KEY and NEXTAUTH_SECRET)
+project API key on v4c, wrong SALT: 401
+fast_hashed_secret_key unchanged
+same key on v3c afterwards: 200
+fast_hashed_secret_key unchanged by v3c
+v3c session cookie on v4c, wrong NEXTAUTH_SECRET: user=null
+LLM key test on v4c, wrong ENCRYPTION_KEY: {"http":200,"result":{"success":false,"error":"Unsupported state or unable to authenticate data"},"error":"null"}
+key mock-llm received: 
+
+==> teardown of the scratch pair; main v4 back

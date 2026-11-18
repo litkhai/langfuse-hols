@@ -1,0 +1,2 @@
+# Old producer: the v3-track SDK pin of this repository (_base/v3/requirements.txt).
+langfuse==3.15.0

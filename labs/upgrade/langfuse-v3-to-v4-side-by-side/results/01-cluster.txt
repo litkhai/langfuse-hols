@@ -1,0 +1,52 @@
+
+==> tools and machine
+v4.3.1+gc0d08d0
+Client Version: v1.36.1
+kind v0.33.0 go1.27.0 darwin/arm64
+jq-1.7.1-apple
+Docker 29.9.3, VM 12 CPUs, 16787353600 bytes
+python 3.12.14
+No kind clusters found.
+
+==> kind cluster lf-sbs
+Creating cluster "lf-sbs" ...
+ • Ensuring node image (kindest/node:v1.37.0) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.37.0) 🖼️
+ • Preparing nodes 📦   ...
+ ✓ Preparing nodes 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Waiting ≤ 2m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 2m0s for control-plane = Ready ⏳
+ • Ready after 18s 💚
+Set kubectl context to "kind-lf-sbs"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-lf-sbs
+
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+NAME                   STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION            CONTAINER-RUNTIME
+lf-sbs-control-plane   Ready    control-plane   22s   v1.37.0   172.23.0.2    <none>        Debian GNU/Linux 13 (trixie)   7.0.14-linuxkit (arm64)   containerd://2.3.4
+
+==> namespace and the app Secret both releases read (salt, encryption key, NextAuth secret)
+namespace/langfuse created
+secret/langfuse created
+encryption-key
+nextauth-secret
+salt
+
+==> SDK virtualenvs
+
+[notice] A new release of pip is available: 26.2.1 -> 26.3
+[notice] To update, run: ./.work/venv-v3/bin/python3.12 -m pip install --upgrade pip
+
+[notice] A new release of pip is available: 26.2.1 -> 26.3
+[notice] To update, run: ./.work/venv-v4/bin/python3.12 -m pip install --upgrade pip
+Version: 3.15.0
+Version: 4.17.0

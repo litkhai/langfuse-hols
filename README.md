@@ -40,6 +40,7 @@ Labs that move a deployment from one version to the next. They run on a local ki
 | Lab | What it covers |
 |---|---|
 | [langfuse-helm-v3-to-v4](labs/upgrade/langfuse-helm-v3-to-v4/) | Helm chart v1 → v2 (bundled stores, sibling release under live traffic), then Langfuse v3 → v4 through `legacy`, `dual`, a rollback rehearsal, the backfill and `events_only` |
+| [langfuse-v3-to-v4-side-by-side](labs/upgrade/langfuse-v3-to-v4-side-by-side/) | Langfuse v3 → v4 without an in-place upgrade: external stores, ClickHouse upgraded in place, a second release (chart v2) on its own ClickHouse database of the same cluster, data copied by scripts, Postgres placement compared, cutover with a delta copy and a rollback rehearsal |
 
 ### 📖 Reading (`reading/`)
 
@@ -117,6 +118,7 @@ ClickHouse 테이블 스냅샷(Langfuse 4.52.0, ClickHouse 26.8.18.2)을 일반 
 | 실습 | 내용 |
 |---|---|
 | [langfuse-helm-v3-to-v4](labs/upgrade/langfuse-helm-v3-to-v4/) | Helm chart v1 → v2(내장 저장소, 트래픽을 받는 중에 sibling release로 이전), 이어서 Langfuse v3 → v4를 `legacy`, `dual`, 롤백 리허설, backfill, `events_only` 순서로 |
+| [langfuse-v3-to-v4-side-by-side](labs/upgrade/langfuse-v3-to-v4-side-by-side/) | in-place 업그레이드 없이 Langfuse v3 → v4: 외부 저장소, ClickHouse는 그 자리에서 업그레이드, 같은 클러스터의 별도 ClickHouse 데이터베이스에 두 번째 release(chart v2), 스크립트로 데이터 복사, Postgres 배치 방식 비교, 델타 복사와 롤백 리허설을 포함한 전환 |
 
 ### 📖 읽기 자료 (`reading/`)
 

@@ -1,0 +1,63 @@
+
+==> helm install lf-v3 chart 1.5.41, Langfuse 3.172.1
+Release "lf-v3" does not exist. Installing it now.
+Pulled: ghcr.io/langfuse/langfuse-k8s/charts/langfuse:1.5.41
+Digest: sha256:99e537350ebc1e3cbe80e1d3e19a41e2317b98f1d9b891c46194db57052ffedc
+NAME: lf-v3
+LAST DEPLOYED: Wed Nov 18 15:52:14 2026
+NAMESPACE: langfuse
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+install: 77.4 s
+deployment.apps/lf-v3-langfuse-worker restarted
+Waiting for deployment "lf-v3-langfuse-worker" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "lf-v3-langfuse-worker" rollout to finish: 1 old replicas are pending termination...
+deployment "lf-v3-langfuse-worker" successfully rolled out
+service/langfuse-app created
+configmap/mock-llm created
+deployment.apps/mock-llm created
+service/mock-llm created
+pod/lab-curl created
+Waiting for deployment "mock-llm" rollout to finish: 0 of 1 updated replicas are available...
+deployment "mock-llm" successfully rolled out
+pod/lab-curl condition met
+NAME                                     READY   STATUS        RESTARTS   AGE     IP            NODE                   NOMINATED NODE   READINESS GATES
+clickhouse-0                             1/1     Running       0          2m29s   10.244.0.10   lf-sbs-control-plane   <none>           <none>
+lab-curl                                 1/1     Running       0          13s     10.244.0.15   lf-sbs-control-plane   <none>           <none>
+lf-v3-langfuse-web-77869c9575-5966w      1/1     Running       0          91s     10.244.0.11   lf-sbs-control-plane   <none>           <none>
+lf-v3-langfuse-worker-6d5b7d946-gkpvq    1/1     Terminating   0          91s     10.244.0.12   lf-sbs-control-plane   <none>           <none>
+lf-v3-langfuse-worker-7444d95965-kjgd7   1/1     Running       0          16s     10.244.0.13   lf-sbs-control-plane   <none>           <none>
+minio-5bd756f9bf-q6lgb                   1/1     Running       0          2m29s   10.244.0.8    lf-sbs-control-plane   <none>           <none>
+mock-llm-6d4f96dbdf-gpl4k                1/1     Running       0          13s     10.244.0.14   lf-sbs-control-plane   <none>           <none>
+pg-main-0                                1/1     Running       0          2m29s   10.244.0.9    lf-sbs-control-plane   <none>           <none>
+valkey-0                                 1/1     Running       0          2m29s   10.244.0.5    lf-sbs-control-plane   <none>           <none>
+
+==> what v3 built
+ClickHouse schema version (default db): 34
+analytics_observations	View
+analytics_scores	View
+analytics_traces	View
+blob_storage_file_log	ReplicatedReplacingMergeTree
+dataset_run_items	ReplacingMergeTree
+dataset_run_items_rmt	ReplicatedReplacingMergeTree
+event_log	MergeTree
+observations	ReplicatedReplacingMergeTree
+project_environments	ReplicatedAggregatingMergeTree
+schema_migrations	ReplicatedMergeTree
+scores	ReplicatedReplacingMergeTree
+traces	ReplicatedReplacingMergeTree
+Prisma migrations applied: 391
+last Prisma migration: 20260423084654_add_datasets_remote_experiment_enabled_col
+20241024_1216_add_generations_cost_backfill|t|f
+20241024_1730_migrate_traces_from_pg_to_ch|t|f
+20241024_1737_migrate_observations_from_pg_to_ch|t|f
+20241024_1738_migrate_scores_from_pg_to_ch|t|f
+20250102_backfill_billing_cycle_anchors|t|f
+20250417_1737_migrate_event_log_to_blob_storage|t|f
+20250711_1347_patch_llm_tool_schema_audit_logs|t|f
+20250814_1001_migrate_dataset_run_items_rmt_pg_to_ch|t|f
+20251216_1001_backfill_dataset_items_valid_to|t|f
+20260106_encrypt_blob_storage_secrets|t|f
+{"status":"OK","version":"3.172.1"}

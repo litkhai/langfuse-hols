@@ -1,0 +1,44 @@
+1794986116.8 traffic on, langfuse-app -> lf-v3
+1794986136.9 delta-1 start
+traces 20 0 0.8
+observations 20 0 0.6
+scores 0 0 0.4
+dataset_run_items_rmt 0 0 0.4
+blob_storage_file_log 20 0 0.4
+watermark 2026-11-18 07:15:37.607
+rebackfill ["202611"]: 143.3 s
+optimize final ["202611"]: 0.8 s
+1794986286.9 delta-1 done (partitions 202611)
+1794986287.0 pg-final start
+1794986288.1 pg dump+restore done
+1794986317.5 pg-final done: v4 on langfuse_v4_cut
+1794986318.8 switch
+1794986319.0 v3 queues drained (wait+active+prioritized = 0)
+traces 175 0 0.4
+observations 175 0 0.3
+scores 0 0 0.3
+dataset_run_items_rmt 0 0 0.3
+blob_storage_file_log 175 0 0.3
+watermark 2026-11-18 07:18:49.287
+rebackfill ["202611"]: 172.7 s
+optimize final ["202611"]: 0.7 s
+1794986506.2 read gap closed (final delta in events_full)
+http 200: 396
+failed requests: 0
+of them served by v3 (in default.traces): 195, by v4 directly: 201
+last trace served by v3: 2026-11-18 07:18:38.000, first served by v4: 2026-11-18 07:18:39.000000 (switch at 2026-11-18 07:18:38)
+1794986530.3 rollback to v3
+1794986560.5 forward to v4
+traces 29 0 0.4
+observations 29 0 0.4
+scores 0 0 0.3
+dataset_run_items_rmt 0 0 0.3
+blob_storage_file_log 29 0 0.3
+watermark 2026-11-18 07:22:51.160
+rebackfill ["202611"]: 202.3 s
+optimize final ["202611"]: 0.7 s
+1794986777.7 rollback window copied
+http 200: 260
+failed requests: 0
+of them served by v3 during the rollback window: 29
+1794986838.7 v3 scaled to 0

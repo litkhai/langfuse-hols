@@ -1,0 +1,4 @@
+./results/v3-traces.png  <- /project/sbs-lab/traces
+./results/v3-v3-trace.png  <- /project/sbs-lab/traces/a0fe0233bb6e25f71b0389a9bfaaae72
+./results/v4-traces.png  <- /project/sbs-lab/traces
+./results/v4-v3-trace.png  <- /project/sbs-lab/traces/a0fe0233bb6e25f71b0389a9bfaaae72

@@ -1,0 +1,10 @@
+# 2026-11-18, after 10-cutover.sh, same cluster
+input_format_read_datetime_number_as_raw_value: 1
+langfuse_v4.events_full rows with start_time/created_at/event_ts after 2200: 0
+langfuse_v4.scores rows after 2200: 0
+events_full written by v4 directly (source not *-backfill): 462
+v3 default.traces: 401  v4 distinct trace_id: 843
+background migrations failed on langfuse_v4_cut: 0
+v4 pods:
+  lf-v4-langfuse-web-89dc86496-x7cck Running restarts=0
+  lf-v4-langfuse-worker-7bdc58dfc-cnkr4 Running restarts=0

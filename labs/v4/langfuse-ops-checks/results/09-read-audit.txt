@@ -1,0 +1,355 @@
+== 09 up — 2026-11-18 00:14:05 UTC, Langfuse 4.82.0 + EE, project langfuse-hols-v4audit, access events 'org (default)', trusted proxies '0 (default)'
+  health: {"status":"OK","version":"4.82.0"}
+  web LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=''
+  web LANGFUSE_AUDIT_LOG_STAGING_ENABLED=''
+  web LANGFUSE_TRUSTED_PROXY_COUNT=''
+  worker relay log: 2026-11-18T00:15:01.180Z info 	Starting AuditLogRelay {"intervalMs":10000,"lockTtlSeconds":60,"leaseCheckIntervalMs":30000,"batchSize":5000}
+== 09 seed — 2026-11-18 00:15:24 UTC
+dataset audit-ds: run audit-run, 3 items
+  traces: 30, trace 5e18d654bcaaebd3d85d5e1a924a6c5c, observation e2f2ef4e4eb5626c, session session-6966
+  dataset items: 3
+== 09 api org-off — 2026-11-18 00:19:34 UTC
+  first MCP answer (last key): {"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"MCP error -32600: Access denied. The \"traces:read\" permission is required to access this resource."}
+  HTTP per key (label: FULL VIEWER DEVELOPER APPLICATION):
+    api.datasets         FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.ds.items         FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.exp.items        FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.experiments      FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.metrics.v2       FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.obs.v1           FULL=404 VIEWER=404 DEVELOPER=404 APPLICATION=404
+    api.obs.v2           FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403 BADKEY=401
+    api.prompts          FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=200
+    api.scores.v3        FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.trace.v1         FULL=404 VIEWER=404 DEVELOPER=404 APPLICATION=404
+    mcp.getObservation   FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listExperiments  FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listObservations FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listScores       FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+  ClickHouse access events since 2026-11-18 00:19:34 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+  change events since 2026-11-18 00:19:34: 0
+  staging backlog (Postgres audit_log_staging rows): 0
+== 09 api org-on — 2026-11-18 00:20:26 UTC
+  first MCP answer (last key): {"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"MCP error -32600: Access denied. The \"traces:read\" permission is required to access this resource."}
+  HTTP per key (label: FULL VIEWER DEVELOPER APPLICATION):
+    api.datasets         FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.ds.items         FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.exp.items        FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.experiments      FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.metrics.v2       FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.obs.v1           FULL=404 VIEWER=404 DEVELOPER=404 APPLICATION=404
+    api.obs.v2           FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403 BADKEY=401
+    api.prompts          FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=200
+    api.scores.v3        FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.trace.v1         FULL=404 VIEWER=404 DEVELOPER=404 APPLICATION=404
+    mcp.getObservation   FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listExperiments  FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listObservations FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listScores       FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+  ClickHouse access events since 2026-11-18 00:20:26 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+    mcp        getObservation                               observation read success              API_KEY Provisioned API Key      1     0
+    mcp        getObservation                               observation read success              API_KEY 09 VIEWER                1     0
+    mcp        getObservation                               observation read success              API_KEY 09 DEVELOPER             1     0
+    mcp        listExperiments                              experiment  list success              API_KEY Provisioned API Key      1     0
+    mcp        listExperiments                              experiment  list success              API_KEY 09 VIEWER                1     0
+    mcp        listExperiments                              experiment  list success              API_KEY 09 DEVELOPER             1     0
+    mcp        listObservations                             observation list success              API_KEY Provisioned API Key      1     4
+    mcp        listObservations                             observation list success              API_KEY 09 VIEWER                1     4
+    mcp        listObservations                             observation list success              API_KEY 09 DEVELOPER             1     4
+    mcp        listScores                                   score       list success              API_KEY Provisioned API Key      1     6
+    mcp        listScores                                   score       list success              API_KEY 09 VIEWER                1     6
+    mcp        listScores                                   score       list success              API_KEY 09 DEVELOPER             1     6
+    public-api GET /api/public/experiment-items             experiment  list success              API_KEY Provisioned API Key      1     0
+    public-api GET /api/public/experiment-items             experiment  list success              API_KEY 09 VIEWER                1     0
+    public-api GET /api/public/experiment-items             experiment  list success              API_KEY 09 DEVELOPER             1     0
+    public-api GET /api/public/experiments                  experiment  list success              API_KEY Provisioned API Key      1     0
+    public-api GET /api/public/experiments                  experiment  list success              API_KEY 09 VIEWER                1     0
+    public-api GET /api/public/experiments                  experiment  list success              API_KEY 09 DEVELOPER             1     0
+    public-api GET /api/public/v2/observations              observation list success              API_KEY Provisioned API Key      1     4
+    public-api GET /api/public/v2/observations              observation list success              API_KEY 09 VIEWER                1     4
+    public-api GET /api/public/v2/observations              observation list success              API_KEY 09 DEVELOPER             1     4
+    public-api GET /api/public/v3/scores                    score       list success              API_KEY Provisioned API Key      1     6
+    public-api GET /api/public/v3/scores                    score       list success              API_KEY 09 VIEWER                1     6
+    public-api GET /api/public/v3/scores                    score       list success              API_KEY 09 DEVELOPER             1     6
+  change events since 2026-11-18 00:20:26: 0
+  staging backlog (Postgres audit_log_staging rows): 0
+== 09 uiapi — 2026-11-18 00:22:36 UTC (UI session of the init user)
+  trace download → 200, 9236 bytes, observations in file: 4
+  observation input stream → 200, 305 bytes
+  batch export create → 200, [{"result":{"data":{"json":null,"meta":{"values":["undefined"]}}}}]
+  ClickHouse access events since 2026-11-18 00:22:36 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+    internal-api GET /api/traces/{traceId}/download           trace       download success              USER    admin@example.com        1     4
+    internal-api GET /api/traces/{traceId}/observations/{observationId}/io/{field} observation download success              USER    admin@example.com        1     1
+    trpc       batchExport.create                           batchExport export success              USER    admin@example.com        1     0
+  change events since 2026-11-18 00:22:36: 1
+  staging backlog (Postgres audit_log_staging rows): 0
+== 09 denied — 2026-11-18 00:23:22 UTC (new user outsider-09@example.com, no org or project membership)
+  sign-up → 422
+  session: none
+  UI trace detail as outsider → 401, [{"error":{"json":{"message":"User is not a member of this project and this trace is not public","code":-32001,"data":{"code":"UNAUTHORIZED","httpStatus":401,"p
+  trace download as outsider → 401
+  ClickHouse access events since 2026-11-18 00:23:22 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+  change events since 2026-11-18 00:23:22: 0
+  staging backlog (Postgres audit_log_staging rows): 0
+== 09 denied — 2026-11-18 00:24:02 UTC (new user outsider-1794961442@example.com, no org or project membership)
+  sign-up → 200
+  session: outsider-1794961442@example.com
+  UI trace detail as outsider → 401, [{"error":{"json":{"message":"User is not a member of this project and this trace is not public","code":-32001,"data":{"code":"UNAUTHORIZED","httpStatus":401,"p
+  trace download as outsider → 401
+  ClickHouse access events since 2026-11-18 00:24:02 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+    trpc       events.byTraceId                             trace       read denied  UNAUTHORIZED USER    outsider-1794961442@example.com   1     0
+  change events since 2026-11-18 00:24:02: 0
+  staging backlog (Postgres audit_log_staging rows): 0
+== 09 failclosed — 2026-11-18 00:24:34 UTC
+  staging table renamed: public API v2 observations → 500, body {"message":"Internal Server Error","error":"InternalServerError"}
+  staging table renamed: UI trace detail (tRPC events.byTraceId) → 500, body [{"error":{"json":{"message":"Internal error. Please check error logs in your self-hosted deployment.","code":-32603,"data":{"code":"INTERNAL_SERVER_ERROR","htt
+  staging table renamed: prompts list (not audited) → 200
+  table back: public API v2 observations → 200
+  web log lines about the failed write (first 3):
+    The table `public.audit_log_staging` does not exist in the current database. {"trace_id":"afa8a0c2151fe1e9f0eada94b515daa1","span_id":"daad5ba3627d1af1","trace_flags":"01"}
+    2026-11-18T00:24:34.544Z error 	Failed to record access event, failing the read {"error":{"code":"P2021","meta":{"modelName":"AuditLogStaging","table":"public.audit_log_staging"},"clientVersion":"6.19.3","name":"PrismaClientKnownRequestError","message":"\nInva
+    The table `public.audit_log_staging` does not exist in the current database. {"trace_id":"171fd884dcb5124ae58cf65cf8e56183","span_id":"bd626f94c1652716","trace_flags":"01"}
+  ClickHouse access events since 2026-11-18 00:24:34 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+    public-api GET /api/public/v2/observations              observation list success              API_KEY Provisioned API Key      1     4
+  change events since 2026-11-18 00:24:34: 0
+  staging backlog (Postgres audit_log_staging rows): 0
+== 09 up — 2026-11-18 00:25:05 UTC, Langfuse 4.82.0 + EE, project langfuse-hols-v4audit, access events 'enforced', trusted proxies '0 (default)'
+  health: {"status":"OK","version":"4.82.0"}
+  web LANGFUSE_AUDIT_LOG_ACCESS_EVENTS='enforced'
+  web LANGFUSE_AUDIT_LOG_STAGING_ENABLED=''
+  web LANGFUSE_TRUSTED_PROXY_COUNT=''
+  worker relay log: 2026-11-18T00:15:01.180Z info 	Starting AuditLogRelay {"intervalMs":10000,"lockTtlSeconds":60,"leaseCheckIntervalMs":30000,"batchSize":5000}
+  proxy count unset: 192.168.65.1	audit-09-ip	b93420113d244320b4e29fe3974bd90e
+== 09 up — 2026-11-18 00:25:38 UTC, Langfuse 4.82.0 + EE, project langfuse-hols-v4audit, access events 'enforced', trusted proxies '1'
+  health: {"status":"OK","version":"4.82.0"}
+  web LANGFUSE_AUDIT_LOG_ACCESS_EVENTS='enforced'
+  web LANGFUSE_AUDIT_LOG_STAGING_ENABLED=''
+  web LANGFUSE_TRUSTED_PROXY_COUNT='1'
+  worker relay log: 2026-11-18T00:15:01.180Z info 	Starting AuditLogRelay {"intervalMs":10000,"lockTtlSeconds":60,"leaseCheckIntervalMs":30000,"batchSize":5000}
+  proxy count 1: 203.0.113.7	audit-09-ip	a3cab61b1d92f78af1738bc4d06d0c86
+== 09 up — 2026-11-18 00:26:11 UTC, Langfuse 4.82.0 + EE, project langfuse-hols-v4audit, access events 'enforced', trusted proxies '0 (default)'
+  health: {"status":"OK","version":"4.82.0"}
+  web LANGFUSE_AUDIT_LOG_ACCESS_EVENTS='enforced'
+  web LANGFUSE_AUDIT_LOG_STAGING_ENABLED=''
+  web LANGFUSE_TRUSTED_PROXY_COUNT=''
+  worker relay log: 2026-11-18T00:15:01.180Z info 	Starting AuditLogRelay {"intervalMs":10000,"lockTtlSeconds":60,"leaseCheckIntervalMs":30000,"batchSize":5000}
+  (lab: org Access Logging set back to false in Postgres before the enforced pass)
+== 09 api enforced — 2026-11-18 00:26:26 UTC
+  first MCP answer (last key): {"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"MCP error -32600: Access denied. The \"traces:read\" permission is required to access this resource."}
+  HTTP per key (label: FULL VIEWER DEVELOPER APPLICATION):
+    api.datasets         FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.ds.items         FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.exp.items        FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.experiments      FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.metrics.v2       FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.obs.v1           FULL=404 VIEWER=404 DEVELOPER=404 APPLICATION=404
+    api.obs.v2           FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403 BADKEY=401
+    api.prompts          FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=200
+    api.scores.v3        FULL=200 VIEWER=200 DEVELOPER=200 APPLICATION=403
+    api.trace.v1         FULL=404 VIEWER=404 DEVELOPER=404 APPLICATION=404
+    mcp.getObservation   FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listExperiments  FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listObservations FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+    mcp.listScores       FULL=200/ok VIEWER=200/ok DEVELOPER=200/ok APPLICATION=200/rpc-error
+  ClickHouse access events since 2026-11-18 00:26:26 (surface, route, resource, action, outcome, reason, actor, key note/user, events, rows):
+    mcp        getObservation                               observation read success              API_KEY Provisioned API Key      1     0
+    mcp        getObservation                               observation read success              API_KEY 09 VIEWER                1     0
+    mcp        getObservation                               observation read success              API_KEY 09 DEVELOPER             1     0
+    mcp        listExperiments                              experiment  list success              API_KEY Provisioned API Key      1     0
+    mcp        listExperiments                              experiment  list success              API_KEY 09 VIEWER                1     0
+    mcp        listExperiments                              experiment  list success              API_KEY 09 DEVELOPER             1     0
+    mcp        listObservations                             observation list success              API_KEY Provisioned API Key      1     4
+    mcp        listObservations                             observation list success              API_KEY 09 VIEWER                1     4
+    mcp        listObservations                             observation list success              API_KEY 09 DEVELOPER             1     4
+    mcp        listScores                                   score       list success              API_KEY Provisioned API Key      1     6
+    mcp        listScores                                   score       list success              API_KEY 09 VIEWER                1     6
+    mcp        listScores                                   score       list success              API_KEY 09 DEVELOPER             1     6
+    public-api GET /api/public/experiment-items             experiment  list success              API_KEY Provisioned API Key      1     0
+    public-api GET /api/public/experiment-items             experiment  list success              API_KEY 09 VIEWER                1     0
+    public-api GET /api/public/experiment-items             experiment  list success              API_KEY 09 DEVELOPER             1     0
+    public-api GET /api/public/experiments                  experiment  list success              API_KEY Provisioned API Key      1     0
+    public-api GET /api/public/experiments                  experiment  list success              API_KEY 09 VIEWER                1     0
+    public-api GET /api/public/experiments                  experiment  list success              API_KEY 09 DEVELOPER             1     0
+    public-api GET /api/public/v2/observations              observation list success              API_KEY Provisioned API Key      1     4
+    public-api GET /api/public/v2/observations              observation list success              API_KEY 09 VIEWER                1     4
+    public-api GET /api/public/v2/observations              observation list success              API_KEY 09 DEVELOPER             1     4
+    public-api GET /api/public/v3/scores                    score       list success              API_KEY Provisioned API Key      1     6
+    public-api GET /api/public/v3/scores                    score       list success              API_KEY 09 VIEWER                1     6
+    public-api GET /api/public/v3/scores                    score       list success              API_KEY 09 DEVELOPER             1     6
+  change events since 2026-11-18 00:26:26: 0
+  staging backlog (Postgres audit_log_staging rows): 0
+  (lab: the two batch exports above FAILED — 'Batch export is not enabled'; the base stack sets LANGFUSE_S3_BATCH_EXPORT_ENABLED=false. Overlay now passes true; web and worker recreated.)
+== 09 up — 2026-11-18 00:50:08 UTC, Langfuse 4.82.0 + EE, project langfuse-hols-v4audit, access events 'enforced', trusted proxies '0 (default)'
+  health: {"status":"OK","version":"4.82.0"}
+  web LANGFUSE_AUDIT_LOG_ACCESS_EVENTS='enforced'
+  web LANGFUSE_AUDIT_LOG_STAGING_ENABLED=''
+  web LANGFUSE_TRUSTED_PROXY_COUNT=''
+  worker relay log: 2026-11-18T00:50:14.454Z info 	Starting AuditLogRelay {"intervalMs":10000,"lockTtlSeconds":60,"leaseCheckIntervalMs":30000,"batchSize":5000}
+== 09 export — audit-log JSONL export (UI, project settings → Audit Logs → Export → as JSONL), batch export cmwlenekg0007oa3s85fcgsiz COMPLETED 00:50:41
+  rows: 83 ( 74 access, 9 change,)
+  fields: action, actorEmail, actorName, after, apiKeyId, before, createdAt, eventKind, id, orgId, outcome, outcomeReason, params, projectId, resourceId, resourceRefs, resourceType, resultCount, route, surface, type, userId, userOrgRole, userProjectRole
+  no ip / user agent / request id fields in the export
+  one v2 observations row: {"type":"API_KEY","resultCount":4,"resourceRefs":["observation:f24180743fa89283","trace:5e18d654bcaaebd3d85d5e1a924a6c5c","session:session-4468","observation:fb6bce0890cdc652","session:session-7465","observation:c6cc66db632f51fb","session:session-6966","observation:e2f2ef4e4eb5626c","session:session-7858"]}
+== 09 report — 2026-11-18 00:51:16 UTC, since 1970-01-01 00:00:00
+  org setting: ch-workshop access_audit_log_enabled=false
+  all access events by surface and route (outcome, events, rows):
+    internal-api	GET /api/traces/{traceId}/download	success	1	4
+    internal-api	GET /api/traces/{traceId}/observations/{observationId}/io/{field}	success	1	1
+    mcp	getObservation	success	6	0
+    mcp	listExperiments	success	6	0
+    mcp	listObservations	success	6	24
+    mcp	listScores	success	6	36
+    public-api	GET /api/public/experiment-items	success	6	0
+    public-api	GET /api/public/experiments	success	8	0
+    public-api	GET /api/public/v2/observations	success	9	36
+    public-api	GET /api/public/v3/scores	success	6	36
+    trpc	batchExport.create	success	3	0
+    trpc	events.all	success	1	50
+    trpc	events.batchIO	success	5	54
+    trpc	events.byTraceId	denied	1	0
+    trpc	events.byTraceId	success	1	4
+    trpc	events.getAgentGraphData	success	1	4
+    trpc	events.scoresForTrace	success	1	0
+    trpc	events.transcriptByTraceId	success	1	0
+    trpc	scores.allFromEvents	success	1	6
+    trpc	scores.metricsFromEvents	success	1	6
+    trpc	sessions.allFromEvents	success	1	50
+    trpc	sessions.byIdWithScoresFromEvents	success	1	0
+    trpc	sessions.metricsFromEvents	success	1	50
+    trpc	sessions.tracesFromEvents	success	1	1
+  change events by resource and action:
+    apiKey	create	USER	3
+    batchExport	create	USER	3
+    dataset	create	API_KEY	1
+    datasetItem	create	API_KEY	3
+    organization	update	USER	1
+  table engine, sort key and TTL:
+    ReplacingMergeTree PARTITION BY toYYYYMM(timestamp) PRIMARY KEY (org_id, project_id, toStartOfMinute(timestamp)) ORDER BY (org_id, project_id, toStartOfMinute(timestamp), id) SETTINGS index_granularity = 8192
+  one access event per surface (all fields but before/after):
+    Row 1:
+    ──────
+    id:                01a1ec22-6b89-73f5-9d5a-62bf3d3635d0
+    timestamp:         2026-11-18 00:50:41.163
+    org_id:            ch-workshop
+    project_id:        llm-observability
+    event_kind:        access
+    outcome:           success
+    outcome_reason:    
+    actor_type:        USER
+    user_id:           cmwlddp0s0000p63uk9e8mx7k
+    api_key_id:        
+    actor_name:        Workshop Admin
+    actor_email:       admin@example.com
+    user_org_role:     OWNER
+    user_project_role: OWNER
+    support_access:    false
+    resource_type:     batchExport
+    resource_id:       cmwlenekg0007oa3s85fcgsiz
+    resource_refs:     []
+    action:            export
+    surface:           trpc
+    route:             batchExport.create
+    params:            {"projectId":"llm-observability","name":"2026-11-18T00:50:41.110Z - audit_logs as JSONL","query":{"tableName":"audit_logs","filter":[],"orderBy":{"column":"createdAt","order":"DESC"}},"format":"JSONL","destination":"batch
+    result_count:      0
+    ip:                
+    user_agent:        Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/6.6395.0 Chrome/156.0.8078.100 Safari/537.36
+    request_id:        3428fd41d5551ed287fb84cddf8abf1a
+    inserted_at:       2026-11-18 00:50:44.617
+    
+    Row 2:
+    ──────
+    id:                01a1ec0c-431b-75b0-b814-ca8a5058f9e0
+    timestamp:         2026-11-18 00:26:29.019
+    org_id:            ch-workshop
+    project_id:        llm-observability
+    event_kind:        access
+    outcome:           success
+    outcome_reason:    
+    actor_type:        API_KEY
+    user_id:           
+    api_key_id:        cmwldgrrf… (key record id, shortened)
+    actor_name:        
+    actor_email:       
+    user_org_role:     
+    user_project_role: 
+    support_access:    false
+    resource_type:     experiment
+    resource_id:       
+    resource_refs:     []
+    action:            list
+    surface:           mcp
+    route:             listExperiments
+    params:            {"fields":["core"],"limit":10,"scoreLimit":50,"fromStartTime":"2026-11-17T00:26:28Z","toStartTime":"2026-11-18T01:26:28Z"}
+    result_count:      0
+    ip:                192.168.65.1
+    user_agent:        curl/8.7.1
+    request_id:        f8540df0d0708be03bcbec27999300e4
+    inserted_at:       2026-11-18 00:26:32.124
+    
+    Row 3:
+    ──────
+    id:                01a1ec0c-408a-734a-9801-1ef1ad561cc4
+    timestamp:         2026-11-18 00:26:28.362
+    org_id:            ch-workshop
+    project_id:        llm-observability
+    event_kind:        access
+    outcome:           success
+    outcome_reason:    
+    actor_type:        API_KEY
+    user_id:           
+    api_key_id:        cmwldgrrf… (key record id, shortened)
+    actor_name:        
+    actor_email:       
+    user_org_role:     
+    user_project_role: 
+    support_access:    false
+    resource_type:     experiment
+    resource_id:       
+    resource_refs:     []
+    action:            list
+    surface:           public-api
+    route:             GET /api/public/experiment-items
+    params:            {"fields":["core","dataset"],"limit":10,"scoreLimit":50,"fromStartTime":"2026-11-17T00:26:28Z"}
+    result_count:      0
+    ip:                192.168.65.1
+    user_agent:        curl/8.7.1
+    request_id:        b0926647f61c71205d288a37ea25f082
+    inserted_at:       2026-11-18 00:26:32.124
+    
+    Row 4:
+    ──────
+    id:                01a1ec08-b947-72fb-aa47-de2659752996
+    timestamp:         2026-11-18 00:22:37.127
+    org_id:            ch-workshop
+    project_id:        llm-observability
+    event_kind:        access
+    outcome:           success
+    outcome_reason:    
+    actor_type:        USER
+    user_id:           cmwlddp0s0000p63uk9e8mx7k
+    api_key_id:        
+    actor_name:        Workshop Admin
+    actor_email:       admin@example.com
+    user_org_role:     OWNER
+    user_project_role: OWNER
+    support_access:    false
+    resource_type:     observation
+    resource_id:       e2f2ef4e4eb5626c
+    resource_refs:     ['observation:e2f2ef4e4eb5626c','trace:5e18d654bcaaebd3d85d5e1a924a6c5c']
+    action:            download
+    surface:           internal-api
+    route:             GET /api/traces/{traceId}/observations/{observationId}/io/{field}
+    params:            {"traceId":"5e18d654bcaaebd3d85d5e1a924a6c5c","observationId":"e2f2ef4e4eb5626c","field":"input","projectId":"llm-observability","startTime":"2026-11-18T00:15:24.817Z","destination":"download"}
+    result_count:      1
+    ip:                192.168.65.1
+    user_agent:        curl/8.7.1
+    request_id:        5589dd689c3ee63f2c82fdcafc8ce898
+    inserted_at:       2026-11-18 00:22:41.818
+  staging backlog: 0
+== 09 up — 2026-11-18 00:52:52 UTC, Langfuse 4.82.0 + EE, project langfuse-hols-v4audit, access events 'org (default)', trusted proxies '0 (default)'
+  health: {"status":"OK","version":"4.82.0"}
+  web LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=''
+  web LANGFUSE_AUDIT_LOG_STAGING_ENABLED=''
+  web LANGFUSE_TRUSTED_PROXY_COUNT=''
+  worker relay log: 2026-11-18T00:50:14.454Z info 	Starting AuditLogRelay {"intervalMs":10000,"lockTtlSeconds":60,"leaseCheckIntervalMs":30000,"batchSize":5000}
+  (lab: org Access Logging set to true in Postgres for the switch capture)
+== 09 down — 2026-11-18 00:53:18 UTC: langfuse-hols-v4audit removed with its volumes

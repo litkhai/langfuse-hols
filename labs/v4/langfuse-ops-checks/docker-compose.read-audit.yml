@@ -1,0 +1,19 @@
+# Overlay for test 09: read-access audit logs on Langfuse >= 4.82.0, values passed from the shell.
+# Unset or empty = Langfuse's own default (web env.mjs / worker env.ts of langfuse/langfuse v4.82.0):
+#   LANGFUSE_AUDIT_LOG_ACCESS_EVENTS   org (default) | enforced | disabled        web
+#   LANGFUSE_AUDIT_LOG_STAGING_ENABLED true (default) | false — false also stops access events    web
+#   LANGFUSE_AUDIT_LOG_RELAY_ENABLED   true (default) | false — Postgres staging -> ClickHouse     worker
+#   LANGFUSE_TRUSTED_PROXY_COUNT       0 (default): proxies in front of web whose X-Forwarded-For hop is trusted
+#   LANGFUSE_S3_BATCH_EXPORT_ENABLED   the base stack sets false; the audit-log export is a batch export, so
+#                                      step `up` passes true (MinIO bucket and prefix come from the base file)
+services:
+  langfuse-web:
+    environment:
+      LANGFUSE_AUDIT_LOG_ACCESS_EVENTS: ${LANGFUSE_AUDIT_LOG_ACCESS_EVENTS:-}
+      LANGFUSE_AUDIT_LOG_STAGING_ENABLED: ${LANGFUSE_AUDIT_LOG_STAGING_ENABLED:-}
+      LANGFUSE_TRUSTED_PROXY_COUNT: ${LANGFUSE_TRUSTED_PROXY_COUNT:-}
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: ${LF09_BATCH_EXPORT:-true}
+  langfuse-worker:
+    environment:
+      LANGFUSE_AUDIT_LOG_RELAY_ENABLED: ${LANGFUSE_AUDIT_LOG_RELAY_ENABLED:-}
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: ${LF09_BATCH_EXPORT:-true}

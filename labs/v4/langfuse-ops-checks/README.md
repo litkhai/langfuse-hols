@@ -1,4 +1,4 @@
-# Langfuse v4 operations checks: blob-storage call rate, sizing, collection loss, per-database separation, audit log, loss mitigations, ClickHouse per tier and as a cluster
+# Langfuse v4 operations checks: blob-storage call rate, sizing, collection loss, per-database separation, audit log, loss mitigations, ClickHouse per tier and as a cluster, read-access audit (v4.82.0)
 
 [English](#english) | [한국어](#한국어)
 
@@ -6,7 +6,7 @@
 
 ## English
 
-Eight gap tests for a self-hosted Langfuse v4 review (context: a regulated financial deployment), run on the shared v4 stack (`_base/`, Docker Compose, single node) on **2026-11-04**. Tests 01–04 and 06–07 ran on **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13** (`events_only`, existing volumes, OSS mode except where noted); test 05 ran on **Langfuse v4.75.0** (latest v4 release, published 2026-11-04 09:26 UTC) with the EE overlay on fresh volumes; test 08 on the 01–04 pins in its own compose project on fresh volumes (ClickHouse 1 shard × 3 replicas + Keeper 26.8.22.13). Tests 06–08 add HAProxy 3.2.24 and OpenTelemetry Collector contrib 0.162.0. Docker 29.9.2, Compose v5.6.1, Python 3.12.14, opentelemetry-exporter-otlp-proto-http 1.45.0, Helm 4.3.1 (render only, chart langfuse 2.2.1). No cloud resources, no model calls. Every fact below names the file it was read from in the images; every number names its run. Raw results: [`results/`](results/).
+Eight gap tests for a self-hosted Langfuse v4 review (context: a regulated financial deployment), run on the shared v4 stack (`_base/`, Docker Compose, single node) on **2026-11-04**. Tests 01–04 and 06–07 ran on **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13** (`events_only`, existing volumes, OSS mode except where noted); test 05 ran on **Langfuse v4.75.0** (latest v4 release, published 2026-11-04 09:26 UTC) with the EE overlay on fresh volumes; test 08 on the 01–04 pins in its own compose project on fresh volumes (ClickHouse 1 shard × 3 replicas + Keeper 26.8.22.13). Tests 06–08 add HAProxy 3.2.24 and OpenTelemetry Collector contrib 0.162.0. Docker 29.9.2, Compose v5.6.1, Python 3.12.14, opentelemetry-exporter-otlp-proto-http 1.45.0, Helm 4.3.1 (render only, chart langfuse 2.2.1). No cloud resources, no model calls. Every fact below names the file it was read from in the images; every number names its run. Raw results: [`results/`](results/). Test 09 (read-access audit logs on **Langfuse v4.82.0**, own project, fresh volumes) was added on **2026-11-18**; its section lists its pins.
 
 **Laptop, not a cluster.** One Docker Desktop VM (12 CPUs, 16 GiB) on one laptop, load generator on the same host. From test 02 on, containers of other projects were running on the same VM (recorded per step; during the first half of 06 a kind cluster of another project too); timings are ratios between set-ups, not capacity promises.
 
@@ -22,7 +22,8 @@ Eight gap tests for a self-hosted Langfuse v4 review (context: a regulated finan
 | Does every observation arrive when a component dies? | **No — but nothing accepted is lost for good.** 20 s SIGKILL each, 12,000 observations sent: worker −4, web −1,596 (client gave up), ClickHouse −1,972, Redis −8, MinIO −1,524 (client got 500). Every server-side loss (worker, ClickHouse, Redis) was still in blob storage and was re-processed to 12,000 / 12,000 with [`03c-reconcile.sh`](03c-reconcile.sh). Client-side losses (web down, MinIO down) never reached Langfuse. |
 | What does the Python SDK do on 5xx? | Retries 429 / 502 / 503 / 504 and connection errors with backoff 1, 2, 4, 8, 16 s, at most 6 attempts, **within `LANGFUSE_TIMEOUT` (default 5 s)** — so 3 attempts in ~3 s by default. A **500 is not retried**: the batch is dropped. |
 | One ClickHouse server, one database per instance? | **Works.** `CLICKHOUSE_DB` is honoured by migrations, ingest and reads; user A gets `ACCESS_DENIED` on B's database and sees only its own in `SHOW DATABASES`. The database must exist first. Outside its database Langfuse reads `system.parts` and `system.query_log` (background jobs); without grants those jobs fail, ingest and reads do not. Granting `system.query_log` shows every user's queries. |
-| What lands in the audit log on v4.75.0? | Postgres `audit_logs`: prompt create / update / delete, API key create / delete, org membership create / update / delete, project membership create, project delete, batch export create. **Not**: project create / update, any read. Reads are recorded only with `LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=enforced` (or an org opt-in) and only for the UI trace detail (`events.byTraceId`); `GET /api/public/traces/{id}` answers 404 in `events_only`. The ClickHouse `audit_logs` table stays **empty** on self-hosted: its relay runs only on Langfuse Cloud. |
+| What lands in the audit log on v4.75.0? (05, 2026-11-04; for v4.82.0 see 09) | Postgres `audit_logs`: prompt create / update / delete, API key create / delete, org membership create / update / delete, project membership create, project delete, batch export create. **Not**: project create / update, any read. Reads are recorded only with `LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=enforced` (or an org opt-in) and only for the UI trace detail (`events.byTraceId`); `GET /api/public/traces/{id}` answers 404 in `events_only`. The ClickHouse `audit_logs` table stays **empty** on self-hosted: its relay runs only on Langfuse Cloud. |
+| Are reads recorded on v4.82.0 (09)? | **Yes, on self-hosted with an EE license.** With the org switch on or `LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=enforced`: UI tables, detail views and downloads, `v2/observations`, `v3/scores`, experiments, MCP reads, with the actor, route, params, row count, refs, IP and user agent, in ClickHouse `audit_logs` (the relay now runs on self-hosted). Not recorded: prompts, datasets, metrics, v1 routes, denied public-API and MCP calls. A failed audit write fails the read (500). The viewer has no filters; the export needs batch export enabled; no TTL. |
 | Two web replicas behind a load balancer? | **Removes the web-outage loss if the load balancer retries.** HAProxy over two webs, one SIGKILLed for 20 s: **0** of 12,000 lost (03, one web: 1,596), with `retry-on conn-failure empty-response …` + `option redispatch`, buffered requests and a 3 s health-check timeout. The same pair without retries: 80 lost. |
 | `LANGFUSE_TIMEOUT=30` on the SDK? | **Helps, does not close it.** The real SDK in one process at 80 spans/s, web down 20 s: 420 and 792 lost (default 5 s: 2,004 and 2,992). A batch's attempts fall at 0, 1, 3, 7, 15 s (a sixth only if it fits in 30 s), and while one batch retries the SDK's 2,048-span queue fills and drops; raise `OTEL_BSP_MAX_QUEUE_SIZE` too. |
 | An OpenTelemetry Collector with a disk queue in front? | **For web outages and Collector restarts, yes; for blob-storage outages, no.** Web down 20 s: 0 lost. Collector SIGKILLed with a non-empty `file_storage` queue: 0 of what it had acknowledged lost (clients lost 1,456 while it was down). MinIO down: web answers 500, which the `otlphttp` exporter treats as permanent and drops — 1,788 lost; no setting changes that. |
@@ -42,6 +43,7 @@ Eight gap tests for a self-hosted Langfuse v4 review (context: a regulated finan
 | [03c-reconcile.sh](03c-reconcile.sh), [requeue-otel.js](requeue-otel.js) | Test 03: blob files vs `events_full` rows per run; `--replay` puts short files back on the OTel queue |
 | [04-db-separation.sh](04-db-separation.sh) | Test 04: instances A and B on one ClickHouse, one database and one user each |
 | [05-audit-log.sh](05-audit-log.sh) | Test 05: CRUD and reads on the latest v4 with EE, then Postgres and ClickHouse audit tables |
+| [09-read-audit.sh](09-read-audit.sh), [09b-seed-experiment.py](09b-seed-experiment.py), [09c-captures.mjs](09c-captures.mjs), [docker-compose.read-audit.yml](docker-compose.read-audit.yml) | Test 09: read-access audit on v4.82.0 + EE (steps `up`, `seed`, `api`, `uiapi`, `denied`, `failclosed`, `ip`, `report`, `down`), its seed data, its Playwright captures, its overlay |
 | [06-mitigations.sh](06-mitigations.sh) | Test 06: two webs behind HAProxy (with and without retries), a 30 s client deadline, the SDK itself, an OTel Collector with a file-backed queue — each under 03's outage |
 | [06b-sdk-outage.py](06b-sdk-outage.py) | Test 06: the Langfuse Python SDK as the client, one process, counting the spans it drops and why |
 | [07-clickhouse-tiers.sh](07-clickhouse-tiers.sh) | Test 07: ClickHouse CPU-seconds, memory, inserts, parts, merges, disk growth at 1,000 / 2,000 / 4,000 traces/min |
@@ -65,6 +67,10 @@ cd labs/v4/langfuse-ops-checks
 ./03c-reconcile.sh --replay
 ./04-db-separation.sh       # ~5 min; CLEANUP=0 keeps A and B running
 ./05-audit-log.sh 4.75.0    # ~6 min; own project and volumes, stack stopped meanwhile
+./09-read-audit.sh up org && ./09-read-audit.sh seed   # 09: own project langfuse-hols-v4audit, v4.82.0 + EE
+./09-read-audit.sh api org-off       # then turn on Organization settings → Audit Logs → Access Logging
+./09-read-audit.sh api org-on; ./09-read-audit.sh uiapi; ./09-read-audit.sh denied; ./09-read-audit.sh failclosed
+./09-read-audit.sh ip; ./09-read-audit.sh api enforced; ./09-read-audit.sh report; ./09-read-audit.sh down
 ./06-mitigations.sh         # ~50 min; or e.g. ./06-mitigations.sh lb otel-minio
 RUNS_FILE=results/06-mitigations.jsonl ./03c-reconcile.sh <run_id ...>
 ./07-clickhouse-tiers.sh    # ~20 min; RATES="1000 2000 4000" SECS=240 IDLE=60
@@ -235,6 +241,7 @@ So storage can be separated per branch or project at database level on one Click
 - **ClickHouse `audit_logs` stayed empty in both passes** (0 rows; 29 columns from `id` to `inserted_at`). Access events stay in the Postgres outbox `audit_log_staging` (1 row after the enforced pass). Source: the relay starts only `if (env.NEXT_PUBLIC_LANGFUSE_CLOUD_REGION && LANGFUSE_AUDIT_LOG_RELAY_ENABLED === "true")`, comment *Only in cloud deployments* (`/app/worker/dist/app.js:628-633`, worker 4.75.0). Change events go to the Postgres `audit_logs` table, as before, and to the web log (`Audit log: prompt.create … by API_KEY …`).
 - Read coverage on self-hosted v4.75.0 in `events_only`: one route, the UI trace detail, and only with `enforced`. Lists, exports and the v2 public API record no read; `GET /api/public/traces/{id}` is unavailable in `events_only`, so its v4.73.0 recording does not apply. The `org` mode's switch is shown only to internal users (#19211), so on self-hosted `enforced` is the way to get reads.
 - Not covered: UI-side CRUD (tRPC) — the public API path was used; org settings changes; the `org` opt-in path.
+- **Later (2026-11-18): v4.82.0 changes this** — reads on every surface, the relay on self-hosted, the org switch visible; see [09](#09--read-access-audit-logs-on-langfuse-v4820). This section stays as the 4.75.0 record.
 
 ### 06 — Loss mitigations: two webs behind a load balancer, a 30 s SDK timeout, an OpenTelemetry Collector
 
@@ -320,6 +327,43 @@ A first attempt at **a** (14:38 UTC, no `timeout check`, so 1 s; no warm-up; no 
 - **A load balancer as `CLICKHOUSE_URL` closed it**: HAProxy with `GET /ping` checks every 1 s (`fall 2`), `retry-on conn-failure empty-response 502 503 504`, `option redispatch`, buffered requests; inserts spread over the three replicas. In Kubernetes the equivalent is a Service over all replicas with a readiness probe — not run here, and kube-proxy does not retry, so the writer's 3 attempts must outlast failure detection.
 - Not tested: an INSERT is acknowledged after one replica wrote it (no `insert_quorum`), so rows on a replica whose disk is lost before the others fetched exist only in blob storage; read-after-write through a load balancer may reach a replica a few seconds behind (catch-up here ≤ 5 s); Keeper outage (one Keeper here; ClickHouse documents that Replicated tables go read-only without Keeper); a three-node Keeper; `ON CLUSTER` with a non-admin user (04: needs the `CLUSTER` grant); the Helm chart's cluster mode.
 
+### 09 — Read-access audit logs on Langfuse v4.82.0
+
+**Version.** v4.82.0 is the release that completes read-access logging (GitHub release published 2026-11-17 14:28 UTC; changelog *Read-access audit logs*, 2026-11-17; read 2026-11-18). Its audit change is *read audit logs from ClickHouse* (#20045): the project and organization viewers and the audit-log export read ClickHouse `audit_logs`. Source at the tag: the worker starts `AuditLogRelay` when `isEnterpriseLicenseAvailable() && LANGFUSE_AUDIT_LOG_RELAY_ENABLED === "true"` (default `true`, `worker/src/app.ts`, `worker/src/env.ts`). On 4.75.0 the same relay also needed `NEXT_PUBLIC_LANGFUSE_CLOUD_REGION` (05), so access events stayed in Postgres on self-hosted.
+
+**Run.** 2026-11-18 00:14–00:53 UTC. `LANGFUSE_VERSION=4.82.0` set in the shell only (`_base/.env` untouched), EE overlay + [`docker-compose.read-audit.yml`](docker-compose.read-audit.yml), own compose project `langfuse-hols-v4audit` on fresh volumes, removed at the end (the v4 stack was not running before and was left stopped). ClickHouse 26.8.22.13, Docker 29.9.3 (Desktop VM 12 CPUs, 16 GiB), Compose 5.7.0, Python 3.12.14 with langfuse 4.17.0, Playwright 1.65.0 (Chromium) for the captures. Data: 30 load-generator traces (4 observations each, with sessions), 3 scores, a dataset with 3 items. Four project API keys: the init key (`Provisioned API Key`) plus **Viewer**, **Developer** (role `MEMBER`) and **Application**, made with tRPC `projectApiKeys.create` (role presets are on by default on 4.82.0: `API_AUTH_MIGRATION=enforce`, `API_KEY_PROJECT_ROLES_ENABLE=true`). Three passes with the same reads for every key: `org` mode with the organization's Access Logging switch **off** → switch turned **on** in the UI → `enforced` with the switch set back off in Postgres. UI reads: a browser walk (traces table, one trace with an observation opened, sessions table, one session, scores, experiments) and the UI's own HTTP routes with the init user's cookie (step `uiapi`). Log: [results/09-read-audit.txt](results/09-read-audit.txt), actions: [results/09-actions.tsv](results/09-actions.tsv), captures: [captures/](captures/).
+
+| Read (how) | HTTP: Full / Viewer / Developer / Application | Access event: org off / org on / enforced |
+|---|---|---|
+| `GET /api/public/v2/observations?traceId=…&fields=core,basic,io` | 200 / 200 / 200 / **403** | none / `observation list`, 4 rows, refs to the trace, its observations and sessions / same |
+| `GET /api/public/v3/scores` | 200 ×3 / 403 | none / `score list`, 6 rows / same |
+| `GET /api/public/experiments`, `/experiment-items` (`fromStartTime` is required) | 200 ×3 / 403 | none / `experiment list`, 0 rows (the seeded run did not appear in the experiments API) / same |
+| MCP `getObservation`, `listObservations`, `listScores`, `listExperiments` (needs a ≤ 14-day window) | ok ×3 / JSON-RPC error *"traces:read" permission is required* | none / surface `mcp`, one event per call / same |
+| v1 `GET /api/public/traces/{id}`, `GET /api/public/observations` | 404 for all (`events_only`) | not recorded |
+| prompts, datasets, dataset items, `GET /api/public/v2/metrics` | 200 ×3; Application: prompts 200, the rest 403 | **not recorded** |
+| Application key's 403s; an unknown key (401) | — | **not recorded** |
+| UI browser walk (session) | 200 | 13 tRPC routes, e.g. `events.all` (traces table, 50 rows), `events.byTraceId`, `events.batchIO`, `sessions.allFromEvents`, `sessions.byIdWithScoresFromEvents`, `scores.allFromEvents`, `batchExport.create` (org on) |
+| UI trace download `GET /api/traces/{id}/download`, observation IO stream | 200 | surface `internal-api`, action `download`, refs to the trace and observation |
+| signed-up user with no membership: UI trace detail | 401 | `denied`, `UNAUTHORIZED`, with the user's email |
+| same user: trace download | 401 | **not recorded** |
+
+- **The organization switch is visible on self-hosted** (in 05 only internal users saw it). Turning it on is itself a change event at organization level (`organization update`, after `{"accessAuditLogEnabled":true}`). With `enforced` the switch is hidden and reads were recorded although the flag was false.
+- **The relay runs on self-hosted.** The worker logged `Starting AuditLogRelay` (interval 10 s) and the Postgres outbox `audit_log_staging` was empty after every pass.
+- **Fail-closed.** With `audit_log_staging` renamed, `GET /api/public/v2/observations` → 500 and the UI trace detail → 500 (web log *Failed to record access event, failing the read*); the prompts list, which is not audited, → 200; after renaming back → 200. Source only, not run: `LANGFUSE_AUDIT_LOG_STAGING_ENABLED=false` makes reads succeed unrecorded.
+- **Client IP.** With `LANGFUSE_TRUSTED_PROXY_COUNT` unset, `ip` was the Docker Desktop gateway (192.168.65.1) although the request carried `X-Forwarded-For: 203.0.113.7`; with `=1` it was 203.0.113.7. `user_agent` and `request_id` were set on every sampled row. The one browser tRPC row sampled (`batchExport.create`) had an empty `ip`.
+- **Actor.** An API key read carries `actor_type = API_KEY` and `api_key_id` only; `actor_name`, `actor_email` and both role columns are empty. A user read carries name, email, org and project role.
+- **Viewer** (project settings → Audit Logs; organization settings → Audit Logs shows organization-level rows only): columns Time, Actor, Event, Outcome, Resource Type, Resource ID, Action, Before, After; newest first, no filters. Route, params, row count, refs and IP are not shown; an API key appears as its public key. Times are in the browser's time zone.
+- **Export** (Export → as CSV / JSON / JSONL; the menu says filters are not applied and all project audit logs are exported) is a batch export. With the base stack's `LANGFUSE_S3_BATCH_EXPORT_ENABLED=false` both exports **failed** (*Batch export is not enabled*); with `true` the JSONL export completed: 83 rows (74 access, 9 change) at 00:50:41 UTC. Fields: `action, actorEmail, actorName, after, apiKeyId, before, createdAt, eventKind, id, orgId, outcome, outcomeReason, params, projectId, resourceId, resourceRefs, resourceType, resultCount, route, surface, type, userId, userOrgRole, userProjectRole` — refs and params included, no IP, user agent or request id.
+- **Storage.** `audit_logs` is `ReplacingMergeTree PARTITION BY toYYYYMM(timestamp) ORDER BY (org_id, project_id, toStartOfMinute(timestamp), id)` with **no TTL**.
+
+![API key presets on v4.82.0](captures/09-api-key-presets.png)
+![Project audit log with access and change events](captures/09-project-audit-log.png)
+![Audit log export menu](captures/09-audit-log-export-menu.png)
+![Organization Access Logging switch in org mode](captures/09-org-access-logging-switch.png)
+![Organization audit log in enforced mode, switch hidden](captures/09-org-audit-log-enforced.png)
+
+- Not covered: experiments with rows (the SDK run of [09b-seed-experiment.py](09b-seed-experiment.py) did not show in the experiments API or UI), organization API keys, SSO users, a Helm deployment, the extra load of recording, the `disabled` mode, an upgrade from v3. The first `denied` attempt in the log failed at sign-up (password rules) and recorded nothing.
+
 ### Not done, and why
 
 - Test 02 was run while containers of other projects used the same Docker VM; see the per-step `foreign_cpu_pct`. The first attempt (`results/02-sizing-contended.*`) ran under ~6 CPUs of foreign load and was discarded.
@@ -332,7 +376,7 @@ A first attempt at **a** (14:38 UTC, no `timeout check`, so 1 s; no warm-up; no 
 
 ## 한국어
 
-자체 호스팅 Langfuse v4 검토(맥락: 규제를 받는 금융권 배포)를 위한 공백 점검 여덟 가지를 **2026-11-04** 공유 v4 스택(`_base/`, Docker Compose 단일 노드)에서 실행했습니다. 01–04와 06–07은 **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13**(`events_only`, 기존 볼륨, 따로 적지 않으면 OSS 모드), 05는 최신 v4 릴리스 **Langfuse v4.75.0**(2026-11-04 09:26 UTC 공개)에 EE 오버레이와 새 볼륨으로, 08은 01–04와 같은 버전으로 새 볼륨의 별도 compose 프로젝트에서(ClickHouse 1 shard × 3 replica + Keeper 26.8.22.13) 실행했습니다. 06–08에는 HAProxy 3.2.24와 OpenTelemetry Collector contrib 0.162.0이 더해집니다. Docker 29.9.2, Compose v5.6.1, Python 3.12.14, opentelemetry-exporter-otlp-proto-http 1.45.0, Helm 4.3.1(렌더만, chart langfuse 2.2.1). 클라우드 리소스와 모델 호출은 없습니다. 아래의 사실은 모두 이미지 안의 어느 파일에서 읽었는지, 수치는 모두 어느 실행인지 밝힙니다. 원본 결과: [`results/`](results/).
+자체 호스팅 Langfuse v4 검토(맥락: 규제를 받는 금융권 배포)를 위한 공백 점검 여덟 가지를 **2026-11-04** 공유 v4 스택(`_base/`, Docker Compose 단일 노드)에서 실행했습니다. 01–04와 06–07은 **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13**(`events_only`, 기존 볼륨, 따로 적지 않으면 OSS 모드), 05는 최신 v4 릴리스 **Langfuse v4.75.0**(2026-11-04 09:26 UTC 공개)에 EE 오버레이와 새 볼륨으로, 08은 01–04와 같은 버전으로 새 볼륨의 별도 compose 프로젝트에서(ClickHouse 1 shard × 3 replica + Keeper 26.8.22.13) 실행했습니다. 06–08에는 HAProxy 3.2.24와 OpenTelemetry Collector contrib 0.162.0이 더해집니다. Docker 29.9.2, Compose v5.6.1, Python 3.12.14, opentelemetry-exporter-otlp-proto-http 1.45.0, Helm 4.3.1(렌더만, chart langfuse 2.2.1). 클라우드 리소스와 모델 호출은 없습니다. 아래의 사실은 모두 이미지 안의 어느 파일에서 읽었는지, 수치는 모두 어느 실행인지 밝힙니다. 원본 결과: [`results/`](results/). 09(**Langfuse v4.82.0**의 조회 감사 로그, 별도 프로젝트, 새 볼륨)는 **2026-11-18**에 추가했고 버전은 그 절에 적었습니다.
 
 **클러스터가 아니라 노트북입니다.** 노트북 한 대의 Docker Desktop VM(12 CPU, 16 GiB)이고 부하 생성기도 같은 호스트에서 돌았습니다. 02부터는 다른 프로젝트의 컨테이너가 같은 VM에서 돌고 있었습니다(단계마다 기록, 06의 앞쪽 절반에는 다른 프로젝트의 kind 클러스터도). 시간 수치는 구성 사이의 비율로 읽고, 용량 약속으로 읽지 마세요.
 
@@ -348,7 +392,8 @@ A first attempt at **a** (14:38 UTC, no `timeout check`, so 1 s; no warm-up; no 
 | 구성 요소가 죽어도 관측치가 모두 도착하나? | **아니요. 다만 수락된 것은 영구 손실되지 않았습니다.** 각각 20초 SIGKILL, 12,000건 전송: worker −4, web −1,596(클라이언트 포기), ClickHouse −1,972, Redis −8, MinIO −1,524(클라이언트가 500 수신). 서버 쪽 손실(worker, ClickHouse, Redis)은 모두 blob storage에 남아 있었고 [`03c-reconcile.sh`](03c-reconcile.sh)로 다시 처리해 12,000 / 12,000이 됐습니다. 클라이언트 쪽 손실(web, MinIO 중단)은 Langfuse에 도달하지 않았습니다. |
 | Python SDK는 5xx에 어떻게 하나? | 429 / 502 / 503 / 504와 연결 오류를 1, 2, 4, 8, 16초 간격으로 최대 6회 재시도하되 **`LANGFUSE_TIMEOUT`(기본 5초) 안에서만** 하므로 기본값에선 약 3초 동안 3회입니다. **500은 재시도하지 않고** 배치를 버립니다. |
 | ClickHouse 서버 하나에 인스턴스마다 DB 하나? | **됩니다.** `CLICKHOUSE_DB`를 migration, 수집, 조회가 모두 따릅니다. 사용자 A는 B의 DB에서 `ACCESS_DENIED`, `SHOW DATABASES`에는 자기 DB만 보입니다. DB는 먼저 만들어 두어야 합니다. 자기 DB 밖으로는 `system.parts`와 `system.query_log`를 읽습니다(백그라운드 작업). 권한이 없으면 그 작업만 실패하고 수집과 조회는 정상입니다. `system.query_log`를 주면 모든 사용자의 쿼리가 보입니다. |
-| v4.75.0에서 감사 로그에 남는 것은? | Postgres `audit_logs`: prompt 생성/수정/삭제, API 키 생성/삭제, 조직 멤버십 생성/수정/삭제, 프로젝트 멤버십 생성, 프로젝트 삭제, batch export 생성. **남지 않음**: 프로젝트 생성/수정, 모든 조회. 조회는 `LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=enforced`(또는 조직 opt-in)일 때 UI trace 상세(`events.byTraceId`)만 남고, `GET /api/public/traces/{id}`는 `events_only`에서 404입니다. ClickHouse `audit_logs` 테이블은 자체 호스팅에서 **비어 있습니다**: relay가 Langfuse Cloud에서만 돕니다. |
+| v4.75.0에서 감사 로그에 남는 것은?(05, 2026-11-04. v4.82.0은 09) | Postgres `audit_logs`: prompt 생성/수정/삭제, API 키 생성/삭제, 조직 멤버십 생성/수정/삭제, 프로젝트 멤버십 생성, 프로젝트 삭제, batch export 생성. **남지 않음**: 프로젝트 생성/수정, 모든 조회. 조회는 `LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=enforced`(또는 조직 opt-in)일 때 UI trace 상세(`events.byTraceId`)만 남고, `GET /api/public/traces/{id}`는 `events_only`에서 404입니다. ClickHouse `audit_logs` 테이블은 자체 호스팅에서 **비어 있습니다**: relay가 Langfuse Cloud에서만 돕니다. |
+| v4.82.0에서 조회가 기록되나?(09) | **EE 라이선스가 있으면 자체 호스팅에서도 됩니다.** 조직 스위치를 켜거나 `LANGFUSE_AUDIT_LOG_ACCESS_EVENTS=enforced`면 UI 목록·상세·다운로드, `v2/observations`, `v3/scores`, experiments, MCP 조회가 행위자, 경로, 파라미터, 행 수, 참조, IP, user agent와 함께 ClickHouse `audit_logs`에 남습니다(relay가 이제 자체 호스팅에서 돔). 기록 안 됨: prompts, datasets, metrics, v1 경로, 거부된 public API·MCP 호출. 감사 기록이 실패하면 조회도 실패(500). 화면에 필터 없음, export는 batch export가 켜져 있어야 함, TTL 없음. |
 | 로드 밸런서 뒤의 web 복제본 2개? | **로드 밸런서가 재시도하면 web 중단 손실이 없어집니다.** web 2개 앞의 HAProxy, 하나를 20초 SIGKILL: 12,000건 중 **0** 손실(03, web 1개: 1,596). `retry-on conn-failure empty-response …` + `option redispatch`, 요청 버퍼링, health check timeout 3초. 같은 구성에서 재시도 없이: 80 손실. |
 | SDK의 `LANGFUSE_TIMEOUT=30`? | **도움은 되지만 막지는 못합니다.** 프로세스 하나에서 초당 80 span을 보내는 실제 SDK, web 20초 중단: 420과 792 손실(기본 5초: 2,004와 2,992). 배치의 시도는 0, 1, 3, 7, 15초(6번째는 30초 안에 들어갈 때만)이고, 배치 하나가 재시도하는 동안 SDK의 2,048 span 큐가 차서 버립니다. `OTEL_BSP_MAX_QUEUE_SIZE`도 올려야 합니다. |
 | 앞단에 디스크 큐를 둔 OpenTelemetry Collector? | **web 중단과 Collector 재시작에는 됩니다. blob storage 중단에는 안 됩니다.** web 20초 중단: 0 손실. 큐(`file_storage`)가 찬 상태로 Collector를 SIGKILL: 확인해 준 것 중 0 손실(Collector가 멈춘 동안 클라이언트가 1,456 잃음). MinIO 중단: web이 500으로 답하고 `otlphttp` exporter는 이를 영구 오류로 보고 버림 — 1,788 손실, 바꿀 설정 없음. |
@@ -368,6 +413,7 @@ A first attempt at **a** (14:38 UTC, no `timeout check`, so 1 s; no warm-up; no 
 | [03c-reconcile.sh](03c-reconcile.sh), [requeue-otel.js](requeue-otel.js) | 03: 실행별 blob 파일과 `events_full` 행 대조, `--replay`로 모자란 파일을 OTel 큐에 다시 넣기 |
 | [04-db-separation.sh](04-db-separation.sh) | 04: ClickHouse 하나에 DB·사용자를 하나씩 가진 인스턴스 A, B |
 | [05-audit-log.sh](05-audit-log.sh) | 05: 최신 v4 + EE에서 CRUD와 조회, 이어서 Postgres와 ClickHouse 감사 테이블 확인 |
+| [09-read-audit.sh](09-read-audit.sh), [09b-seed-experiment.py](09b-seed-experiment.py), [09c-captures.mjs](09c-captures.mjs), [docker-compose.read-audit.yml](docker-compose.read-audit.yml) | 09: v4.82.0 + EE의 조회 감사(단계 `up`, `seed`, `api`, `uiapi`, `denied`, `failclosed`, `ip`, `report`, `down`), 시드 데이터, Playwright 캡처, 오버레이 |
 | [06-mitigations.sh](06-mitigations.sh) | 06: HAProxy 뒤의 web 2개(재시도 있음·없음), 클라이언트 기한 30초, SDK 자체, 파일 큐 OTel Collector — 각각 03의 중단 아래 |
 | [06b-sdk-outage.py](06b-sdk-outage.py) | 06: Langfuse Python SDK를 클라이언트로, 프로세스 하나, 버린 span과 이유를 셈 |
 | [07-clickhouse-tiers.sh](07-clickhouse-tiers.sh) | 07: 분당 1,000 / 2,000 / 4,000 trace에서 ClickHouse CPU-초, 메모리, insert, part, merge, 디스크 증가 |
@@ -391,6 +437,10 @@ cd labs/v4/langfuse-ops-checks
 ./03c-reconcile.sh --replay
 ./04-db-separation.sh       # 약 5분. CLEANUP=0이면 A, B를 남겨 둠
 ./05-audit-log.sh 4.75.0    # 약 6분. 별도 프로젝트와 볼륨, 그동안 스택은 멈춤
+./09-read-audit.sh up org && ./09-read-audit.sh seed   # 09: 별도 프로젝트 langfuse-hols-v4audit, v4.82.0 + EE
+./09-read-audit.sh api org-off       # 이어서 조직 설정 → Audit Logs → Access Logging 켜기
+./09-read-audit.sh api org-on; ./09-read-audit.sh uiapi; ./09-read-audit.sh denied; ./09-read-audit.sh failclosed
+./09-read-audit.sh ip; ./09-read-audit.sh api enforced; ./09-read-audit.sh report; ./09-read-audit.sh down
 ./06-mitigations.sh         # 약 50분. 또는 예: ./06-mitigations.sh lb otel-minio
 RUNS_FILE=results/06-mitigations.jsonl ./03c-reconcile.sh <run_id ...>
 ./07-clickhouse-tiers.sh    # 약 20분. RATES="1000 2000 4000" SECS=240 IDLE=60
@@ -561,6 +611,7 @@ HPA 목표 50 %에서 2 CPU web pod 두 개는 확장 전에 약 2 CPU의 일을
 - **ClickHouse `audit_logs`는 두 패스 모두 비어 있었습니다**(0행, `id`부터 `inserted_at`까지 29열). 조회 이벤트는 Postgres outbox `audit_log_staging`에 머뭅니다(enforced 패스 뒤 1행). 소스: relay는 `if (env.NEXT_PUBLIC_LANGFUSE_CLOUD_REGION && LANGFUSE_AUDIT_LOG_RELAY_ENABLED === "true")`일 때만 시작하고 주석은 *Only in cloud deployments*입니다(`/app/worker/dist/app.js:628-633`, worker 4.75.0). 변경 이벤트는 예전처럼 Postgres `audit_logs` 테이블과 web 로그(`Audit log: prompt.create … by API_KEY …`)로 갑니다.
 - `events_only`의 자체 호스팅 v4.75.0에서 조회 기록 범위: UI trace 상세 한 경로, 그것도 `enforced`일 때만. 목록, export, v2 public API는 조회를 남기지 않고, `GET /api/public/traces/{id}`는 `events_only`에서 쓸 수 없으므로 v4.73.0의 기록 대상이 적용되지 않습니다. `org` 모드의 스위치는 내부 사용자에게만 보이므로(#19211) 자체 호스팅에서 조회를 남기려면 `enforced`입니다.
 - 다루지 않은 것: UI 쪽 CRUD(tRPC) — public API 경로를 썼음, 조직 설정 변경, `org` opt-in 경로.
+- **이후(2026-11-18): v4.82.0에서 달라졌습니다** — 모든 경로의 조회 기록, 자체 호스팅의 relay, 조직 스위치 노출. [09](#09--langfuse-v4820의-조회-감사-로그)를 보세요. 이 절은 4.75.0 기록으로 둡니다.
 
 ### 06 — 손실 완화책: 로드 밸런서 뒤 web 2개, SDK timeout 30초, OpenTelemetry Collector
 
@@ -645,6 +696,43 @@ HPA 목표 50 %에서 2 CPU web pod 두 개는 확장 전에 약 2 CPU의 일을
 - **복제본은 데이터를 지키지만 수집 경로는 지키지 않습니다.** Langfuse가 장애 조치되는 무언가를 거쳐 닿을 때만 다릅니다. `CLICKHOUSE_URL`에 호스트가 하나면 그 호스트의 중단은 단일 노드 03과 같습니다(거기서 1,972, 여기서 1,604 손실). writer가 3회 뒤 버리고, 원본 이벤트는 blob storage에 남고, 대조로 되살립니다.
 - **`CLICKHOUSE_URL`을 로드 밸런서로 하자 손실이 없었습니다.** HAProxy, `GET /ping` check 1초마다(`fall 2`), `retry-on conn-failure empty-response 502 503 504`, `option redispatch`, 요청 버퍼링. insert는 세 복제본에 나뉘었습니다. Kubernetes에서는 readiness probe가 있는 전체 복제본 대상 Service가 같은 역할입니다 — 여기서 실행하지 않았고, kube-proxy는 재시도하지 않으므로 writer의 3회 시도가 장애 감지 시간보다 길어야 합니다.
 - 시험하지 않음: INSERT는 복제본 하나가 쓰면 확인됩니다(`insert_quorum` 없음). 다른 복제본이 받아 가기 전에 그 복제본의 디스크를 잃으면 그 행은 blob storage에만 있습니다. 로드 밸런서를 거친 쓰기 직후 조회는 몇 초 뒤처진 복제본에 닿을 수 있습니다(여기서 따라잡기 5초 이하). Keeper 중단(여기선 Keeper 하나. Keeper가 없으면 Replicated 테이블이 읽기 전용이 된다고 ClickHouse 문서에 있음), Keeper 3노드, 관리자가 아닌 사용자의 `ON CLUSTER`(04: `CLUSTER` 권한 필요), Helm chart의 클러스터 모드.
+
+### 09 — Langfuse v4.82.0의 조회 감사 로그
+
+**버전.** v4.82.0이 조회 기록 기능을 완성한 릴리스입니다(GitHub release 2026-11-17 14:28 UTC 공개, changelog *Read-access audit logs* 2026-11-17, 2026-11-18 확인). 감사 로그 쪽 변경은 *read audit logs from ClickHouse*(#20045)로, 프로젝트·조직 화면과 감사 로그 export가 ClickHouse `audit_logs`를 읽습니다. 태그의 소스: worker는 `isEnterpriseLicenseAvailable() && LANGFUSE_AUDIT_LOG_RELAY_ENABLED === "true"`(기본 `true`, `worker/src/app.ts`, `worker/src/env.ts`)일 때 `AuditLogRelay`를 시작합니다. 4.75.0에서는 같은 relay에 `NEXT_PUBLIC_LANGFUSE_CLOUD_REGION`도 필요해서(05), 자체 호스팅에서는 조회 이벤트가 Postgres에 머물렀습니다.
+
+**실행.** 2026-11-18 00:14–00:53 UTC. `LANGFUSE_VERSION=4.82.0`은 셸에서만 지정(`_base/.env`는 그대로), EE 오버레이 + [`docker-compose.read-audit.yml`](docker-compose.read-audit.yml), 새 볼륨의 별도 compose 프로젝트 `langfuse-hols-v4audit`, 끝나고 삭제(v4 스택은 원래 꺼져 있었고 그대로 둠). ClickHouse 26.8.22.13, Docker 29.9.3(Desktop VM 12 CPU, 16 GiB), Compose 5.7.0, Python 3.12.14 + langfuse 4.17.0, 캡처는 Playwright 1.65.0(Chromium). 데이터: 부하 생성기 trace 30개(trace마다 observation 4개, session 포함), score 3개, item 3개짜리 dataset. 프로젝트 API 키 네 개: 초기 키(`Provisioned API Key`)와 tRPC `projectApiKeys.create`로 만든 **Viewer**, **Developer**(role `MEMBER`), **Application**(4.82.0은 role preset이 기본으로 켜져 있음: `API_AUTH_MIGRATION=enforce`, `API_KEY_PROJECT_ROLES_ENABLE=true`). 키마다 같은 조회로 세 번 돌렸습니다: `org` 모드에서 조직의 Access Logging 스위치 **끔** → UI에서 **켬** → `enforced`(스위치는 Postgres에서 다시 끔). UI 조회: 브라우저로 화면을 돌고(traces 목록, trace 하나와 observation 열기, sessions 목록, session 하나, scores, experiments) 초기 사용자 쿠키로 UI 자체 HTTP 경로를 불렀습니다(`uiapi` 단계). 로그: [results/09-read-audit.txt](results/09-read-audit.txt), 동작: [results/09-actions.tsv](results/09-actions.tsv), 캡처: [captures/](captures/).
+
+| 조회(방법) | HTTP: Full / Viewer / Developer / Application | 조회 이벤트: 스위치 끔 / 켬 / enforced |
+|---|---|---|
+| `GET /api/public/v2/observations?traceId=…&fields=core,basic,io` | 200 / 200 / 200 / **403** | 없음 / `observation list`, 4행, trace·observation·session 참조 / 같음 |
+| `GET /api/public/v3/scores` | 200 ×3 / 403 | 없음 / `score list`, 6행 / 같음 |
+| `GET /api/public/experiments`, `/experiment-items`(`fromStartTime` 필수) | 200 ×3 / 403 | 없음 / `experiment list`, 0행(넣은 실행이 experiments API에 나오지 않음) / 같음 |
+| MCP `getObservation`, `listObservations`, `listScores`, `listExperiments`(14일 이내 구간 필요) | ok ×3 / JSON-RPC 오류 *"traces:read" permission is required* | 없음 / surface `mcp`, 호출마다 1건 / 같음 |
+| v1 `GET /api/public/traces/{id}`, `GET /api/public/observations` | 모두 404(`events_only`) | 기록 안 됨 |
+| prompts, datasets, dataset items, `GET /api/public/v2/metrics` | 200 ×3, Application은 prompts 200, 나머지 403 | **기록 안 됨** |
+| Application 키의 403, 없는 키(401) | — | **기록 안 됨** |
+| UI 화면 돌기(세션) | 200 | tRPC 경로 13개. 예: `events.all`(traces 목록, 50행), `events.byTraceId`, `events.batchIO`, `sessions.allFromEvents`, `sessions.byIdWithScoresFromEvents`, `scores.allFromEvents`, `batchExport.create`(스위치 켬) |
+| UI trace 다운로드 `GET /api/traces/{id}/download`, observation IO 스트림 | 200 | surface `internal-api`, action `download`, trace·observation 참조 |
+| 멤버십 없이 가입한 사용자: UI trace 상세 | 401 | `denied`, `UNAUTHORIZED`, 사용자 이메일 포함 |
+| 같은 사용자: trace 다운로드 | 401 | **기록 안 됨** |
+
+- **자체 호스팅에서도 조직 스위치가 보입니다**(05에서는 내부 사용자에게만 보였음). 켜는 동작 자체가 조직 단위 변경 이벤트로 남습니다(`organization update`, after `{"accessAuditLogEnabled":true}`). `enforced`에서는 스위치가 숨겨지고, 플래그가 false여도 조회가 기록됐습니다.
+- **relay가 자체 호스팅에서 돕니다.** worker 로그에 `Starting AuditLogRelay`(10초 간격)가 찍혔고, 패스마다 Postgres outbox `audit_log_staging`이 비어 있었습니다.
+- **fail-closed.** `audit_log_staging` 이름을 바꾸자 `GET /api/public/v2/observations` → 500, UI trace 상세 → 500(web 로그 *Failed to record access event, failing the read*). 기록 대상이 아닌 prompts 목록 → 200. 이름을 되돌리자 → 200. 소스로만 확인(실행 안 함): `LANGFUSE_AUDIT_LOG_STAGING_ENABLED=false`면 조회는 기록 없이 성공합니다.
+- **클라이언트 IP.** `LANGFUSE_TRUSTED_PROXY_COUNT` 미설정에서는 요청에 `X-Forwarded-For: 203.0.113.7`이 있어도 `ip`가 Docker Desktop 게이트웨이(192.168.65.1)였고, `=1`에서는 203.0.113.7이었습니다. 표본으로 본 행에는 모두 `user_agent`와 `request_id`가 있었습니다. 표본 중 브라우저 tRPC 행 하나(`batchExport.create`)는 `ip`가 비어 있었습니다.
+- **행위자.** API 키 조회에는 `actor_type = API_KEY`와 `api_key_id`만 남고 `actor_name`, `actor_email`, 역할 두 열은 비어 있습니다. 사용자 조회에는 이름, 이메일, 조직·프로젝트 역할이 남습니다.
+- **화면**(프로젝트 설정 → Audit Logs, 조직 설정 → Audit Logs는 조직 단위 행만): 열은 Time, Actor, Event, Outcome, Resource Type, Resource ID, Action, Before, After. 최신순, 필터 없음. 경로, 파라미터, 행 수, 참조, IP는 나오지 않고 API 키는 public key로 표시됩니다. 시각은 브라우저 시간대입니다.
+- **Export**(Export → as CSV / JSON / JSONL, 메뉴에 필터는 적용되지 않고 프로젝트 감사 로그 전체가 나간다고 적혀 있음)는 batch export입니다. 기본 스택의 `LANGFUSE_S3_BATCH_EXPORT_ENABLED=false`에서는 두 번 모두 **실패**했고(*Batch export is not enabled*), `true`에서 JSONL export가 끝났습니다: 00:50:41 UTC 기준 83행(access 74, change 9). 필드: `action, actorEmail, actorName, after, apiKeyId, before, createdAt, eventKind, id, orgId, outcome, outcomeReason, params, projectId, resourceId, resourceRefs, resourceType, resultCount, route, surface, type, userId, userOrgRole, userProjectRole`. 참조와 파라미터는 있고 IP, user agent, request id는 없습니다.
+- **저장.** `audit_logs`는 `ReplacingMergeTree PARTITION BY toYYYYMM(timestamp) ORDER BY (org_id, project_id, toStartOfMinute(timestamp), id)`이고 **TTL이 없습니다**.
+
+![v4.82.0의 API 키 preset](captures/09-api-key-presets.png)
+![조회·변경 이벤트가 섞인 프로젝트 감사 로그](captures/09-project-audit-log.png)
+![감사 로그 export 메뉴](captures/09-audit-log-export-menu.png)
+![org 모드의 조직 Access Logging 스위치](captures/09-org-access-logging-switch.png)
+![enforced 모드의 조직 감사 로그, 스위치 숨김](captures/09-org-audit-log-enforced.png)
+
+- 하지 않은 것: 행이 있는 experiments([09b-seed-experiment.py](09b-seed-experiment.py)의 SDK 실행이 experiments API와 화면에 나오지 않음), 조직 API 키, SSO 사용자, Helm 배포, 기록에 따른 추가 부하, `disabled` 모드, v3에서의 업그레이드. 로그의 첫 `denied` 시도는 가입 단계에서 실패해(비밀번호 규칙) 아무것도 기록되지 않았습니다.
 
 ### 하지 못한 것과 이유
 

@@ -32,3 +32,6 @@ _base/encryption/certs/
 
 # Private-registry run state (CA, server key, htpasswd, pull config) — labs/v4/langfuse-k8s/05-private-registry.sh
 labs/v4/langfuse-k8s/.private-registry/
+
+# Test 09 keys made in the UI (labs/v4/langfuse-ops-checks/09-read-audit.sh), never committed
+labs/v4/langfuse-ops-checks/.09-keys.env

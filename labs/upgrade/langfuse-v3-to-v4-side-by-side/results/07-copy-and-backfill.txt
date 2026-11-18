@@ -1,0 +1,53 @@
+
+==> columns v3 has and v4 does not (not copied), per table
+traces: 
+observations: 
+scores: 
+dataset_run_items_rmt: 
+blob_storage_file_log: 
+v3 tables not copied: analytics_observations analytics_scores analytics_traces dataset_run_items event_log project_environments
+
+==> initial copy
+traces 177 0 0.3
+observations 276 0 0.3
+scores 50 0 0.3
+dataset_run_items_rmt 4 0 0.4
+blob_storage_file_log 259 0 0.3
+watermark 2026-11-18 06:58:26.062
+initial copy: 3.5 s
+
+==> historic backfill on v4: gate on, worker restarted
+backfill steps 1-4: 193.1 s (gate on to last step finished)
+20260701_v4_step_1_create_root_spans_from_traces|t|f|
+20260701_v4_step_2_rewrite_observations_to_pid_tid_sorting|t|f|
+20260701_v4_step_3_backfill_events_full_from_observations|t|f|
+20260701_v4_step_4_backfill_events_full_from_dataset_run_items|t|f|
+20260701_v4_step_5_drop_pid_tid_sorting_tables|f|f|
+PASS  failed backfill steps: 0
+
+==> v3 (default) vs v4 (langfuse_v4)
+PASS  traces: v3 vs distinct trace_id in v4 events_full: 177
+PASS  traces of v3 without a row in v4 events_full: 0
+PASS  observations of v3 missing from v4 events_full: 0
+PASS  scores: v3 vs v4: 50
+v3 traces 177, observations 276, scores 50; v4 events_full rows 453, virtual roots 177
+default	observations	34.79 KiB
+default	scores	14.42 KiB
+default	traces	30.72 KiB
+langfuse_v4	events_core	143.85 KiB
+langfuse_v4	events_full	151.23 KiB
+langfuse_v4	observations	34.99 KiB
+langfuse_v4	observations_pid_tid_sorting	35.79 KiB
+langfuse_v4	scores	12.76 KiB
+langfuse_v4	traces	19.76 KiB
+
+==> old traces through v4's API
+PASS  GET /api/public/v2/observations?traceId=<v3 trace>: 200
+[{"name":"answer","type":"GENERATION"},{"name":"retrieve-context","type":"SPAN"},{"name":"support-request","type":"SPAN"},{"name":"support-request","type":"SPAN"}]
+PASS  observations of it on v4 (virtual root + SDK root + 2 children): 4
+PASS  GET /api/public/v3/scores?traceId=<v3 trace>: 1
+PASS  legacy-API trace from v3: observations on v4 (virtual root + generation): 2
+PASS  GET /api/public/experiments (the v3 experiment run): 1
+PASS  GET /api/public/v2/prompts/support-system: 200
+PASS  GET /api/public/v2/datasets/support-golden: 200
+{"http":200,"name":"support-request","observations":3,"scores":1,"error":null}

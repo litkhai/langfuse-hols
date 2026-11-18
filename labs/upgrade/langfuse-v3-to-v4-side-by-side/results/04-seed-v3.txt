@@ -1,0 +1,43 @@
+{"status":"OK","version":"3.172.1"}
+prompts 2, dataset items 4, experiment run baseline-3.15.0 - 2026-11-18T06:53:49.839174Z
+PUT /api/public/llm-connections -> 201 {"id": "cmwlrmh5c000f550b02334ag6", "provider": "mock-openai", "adapter": "openai", "displaySecretKey": "...0001", "baseURL": "http://mock-llm:8080/v1", "customModels": ["mock-model"], "withDefaultMod
+
+==> media: one PNG attached to a trace's input (POST /api/public/media, PUT to S3 in-cluster, PATCH)
+{"mediaId":"vAnCWQ0lAsj_rxo8CaqJ3y","uploadUrl":"http://minio:9000/langfuse/media/sbs-lab/vAnCWQ0lAsj_rxo8Caq"}
+PUT to S3: 200
+PATCH media: 200
+{"successes":[{"id":"media-trace-1794984833-e","status":201}],"errors":[]}
+python-sdk-3.15.0: 40 traces, phase v3-start -> http://127.0.0.1:61408
+legacy-http: 10/10 accepted, phase v3-start -> http://127.0.0.1:61408
+
+==> background migrations on 3.172.1 (wait until none is unfinished)
+20241024_1216_add_generations_cost_backfill|t|f
+20241024_1730_migrate_traces_from_pg_to_ch|t|f
+20241024_1737_migrate_observations_from_pg_to_ch|t|f
+20241024_1738_migrate_scores_from_pg_to_ch|t|f
+20250102_backfill_billing_cycle_anchors|t|f
+20250417_1737_migrate_event_log_to_blob_storage|t|f
+20250711_1347_patch_llm_tool_schema_audit_logs|t|f
+20250814_1001_migrate_dataset_run_items_rmt_pg_to_ch|t|f
+20251216_1001_backfill_dataset_items_valid_to|t|f
+20260106_encrypt_blob_storage_secrets|t|f
+pg.users 1
+pg.organizations 1
+pg.projects 1
+pg.api_keys 1
+pg.prompts 2
+pg.datasets 1
+pg.dataset_items 4
+pg.dataset_runs 1
+pg.llm_api_keys 1
+pg.media 1
+pg.trace_media 1
+pg.observation_media 0
+pg.background_migrations 10
+ch.traces 55
+ch.observations 134
+ch.scores 40
+ch.dataset_run_items_rmt 4
+ch.blob_storage_file_log 109
+ch.events_full -
+ch.events_core -

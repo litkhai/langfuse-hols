@@ -1,0 +1,24 @@
+configmap/clickhouse-config created
+service/clickhouse-hl created
+service/clickhouse created
+statefulset.apps/clickhouse created
+service/pg-main created
+statefulset.apps/pg-main created
+service/valkey created
+statefulset.apps/valkey created
+service/minio created
+deployment.apps/minio created
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+deployment "minio" successfully rolled out
+
+==> versions
+25.2.1.3085
+default	clickhouse-0.clickhouse-hl.langfuse.svc.cluster.local	1
+keeper root nodes: 2
+17.3 (Debian 17.3-3.pgdg120+1)
+redis_version:7.2.4
+valkey_version:8.0.2
+mc version DEVELOPMENT.2024-11-21T17-21-54Z (commit-id=1681e4497c09d7438a34e846f76dbde972ab7daf)

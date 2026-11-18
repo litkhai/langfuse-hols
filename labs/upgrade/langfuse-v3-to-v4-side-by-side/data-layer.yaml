@@ -1,0 +1,155 @@
+# The data layer, deployed apart from both Langfuse charts so both releases can point at it.
+# 02 substitutes the ${...} image tags and passwords (envsubst-style, from lib.sh).
+# ClickHouse runs as a one-replica cluster named `default` with embedded Keeper, as chart v1's
+# bundled ClickHouse does by default (clickhouse.clusterEnabled: true): the v3 migrations use
+# ON CLUSTER and Replicated* engines, and so do the v4 ones.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: clickhouse-config}
+data:
+  cluster.xml: |
+    <clickhouse>
+      <macros><shard>01</shard><replica>clickhouse-0</replica></macros>
+      <remote_servers>
+        <default><shard><replica><host>clickhouse-0.clickhouse-hl.langfuse.svc.cluster.local</host><port>9000</port></replica></shard></default>
+      </remote_servers>
+      <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <raft_configuration><server><id>1</id><hostname>localhost</hostname><port>9234</port></server></raft_configuration>
+      </keeper_server>
+      <zookeeper><node><host>localhost</host><port>9181</port></node></zookeeper>
+      <distributed_ddl><path>/clickhouse/task_queue/ddl</path></distributed_ddl>
+    </clickhouse>
+---
+apiVersion: v1
+kind: Service
+metadata: {name: clickhouse-hl}
+spec:
+  clusterIP: None
+  selector: {app: clickhouse}
+  ports: [{name: tcp, port: 9000}, {name: http, port: 8123}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: clickhouse}
+spec:
+  selector: {app: clickhouse}
+  ports: [{name: tcp, port: 9000}, {name: http, port: 8123}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: clickhouse}
+spec:
+  serviceName: clickhouse-hl
+  replicas: 1
+  selector: {matchLabels: {app: clickhouse}}
+  template:
+    metadata: {labels: {app: clickhouse}}
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:${CH_START}
+          env:
+            - {name: CLICKHOUSE_USER, value: default}
+            - {name: CLICKHOUSE_PASSWORD, value: "${CH_PW}"}
+            - {name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: "1"}
+          ports: [{containerPort: 9000}, {containerPort: 8123}]
+          readinessProbe:
+            httpGet: {path: /ping, port: 8123}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/clickhouse}
+            - {name: config, mountPath: /etc/clickhouse-server/config.d/cluster.xml, subPath: cluster.xml}
+          resources: {requests: {cpu: "1", memory: 2Gi}, limits: {memory: 4Gi}}
+      volumes:
+        - {name: config, configMap: {name: clickhouse-config}}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 10Gi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: pg-main}
+spec:
+  selector: {app: pg-main}
+  ports: [{port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: pg-main}
+spec:
+  serviceName: pg-main
+  replicas: 1
+  selector: {matchLabels: {app: pg-main}}
+  template:
+    metadata: {labels: {app: pg-main}}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:${PG_MAIN}
+          env:
+            - {name: POSTGRES_PASSWORD, value: "${PG_PW}"}
+            - {name: POSTGRES_DB, value: langfuse}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{containerPort: 5432}]
+          readinessProbe:
+            exec: {command: [pg_isready, -U, postgres]}
+            periodSeconds: 2
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 5Gi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: valkey}
+spec:
+  selector: {app: valkey}
+  ports: [{port: 6379}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: valkey}
+spec:
+  serviceName: valkey
+  replicas: 1
+  selector: {matchLabels: {app: valkey}}
+  template:
+    metadata: {labels: {app: valkey}}
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:${VALKEY}
+          args: [valkey-server, --requirepass, "${REDIS_PW}", --maxmemory-policy, noeviction]
+          ports: [{containerPort: 6379}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: minio}
+spec:
+  selector: {app: minio}
+  ports: [{port: 9000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: minio}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: minio}}
+  template:
+    metadata: {labels: {app: minio}}
+    spec:
+      containers:
+        - name: minio
+          image: ${MINIO_IMAGE}
+          env:
+            - {name: MINIO_ROOT_USER, value: "${S3_USER}"}
+            - {name: MINIO_ROOT_PASSWORD, value: "${S3_PW}"}
+            - {name: MINIO_DEFAULT_BUCKETS, value: "${BUCKET}"}
+          ports: [{containerPort: 9000}]
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: 9000}
+            periodSeconds: 2

@@ -1,0 +1,33 @@
+# Postgres option (a): a new instance for v4, restored from a dump of v3's database (08).
+apiVersion: v1
+kind: Service
+metadata: {name: pg-new}
+spec:
+  selector: {app: pg-new}
+  ports: [{port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: pg-new}
+spec:
+  serviceName: pg-new
+  replicas: 1
+  selector: {matchLabels: {app: pg-new}}
+  template:
+    metadata: {labels: {app: pg-new}}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17.12
+          env:
+            - {name: POSTGRES_PASSWORD, value: postgres-lab}
+            - {name: POSTGRES_DB, value: langfuse}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{containerPort: 5432}]
+          readinessProbe:
+            exec: {command: [pg_isready, -U, postgres]}
+            periodSeconds: 2
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 5Gi}}}

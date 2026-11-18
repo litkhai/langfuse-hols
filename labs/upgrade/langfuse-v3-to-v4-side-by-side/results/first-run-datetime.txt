@@ -1,0 +1,30 @@
+# First run, 2026-11-18 (kind lf-sbs, Apple M4 Pro, Docker 29.9.3 VM 12 CPU / 15.6 GiB):
+# ClickHouse 25.2.1.3085 -> 26.8.39.19 in place WITHOUT input_format_read_datetime_number_as_raw_value=1,
+# Langfuse 3.172.1 kept writing. Full step log: 05-ch-upgrade-without-setting.txt.
+
+## Rows v3.172.1 wrote after the upgrade (default.traces, grouped by phase tag)
+phase                    rows  min(created_at)            max(created_at)
+v3-start                 51    2026-11-18 06:10:34.552    2026-11-18 06:10:38.196
+after-ch-upgrade         15    9999-12-31 23:59:59.000    9999-12-31 23:59:59.000
+(traffic, no phase tag)  83    event_ts up to 9999-12-31 23:59:59.000
+
+## One of them, raw
+id                                toUnixTimestamp64Milli(event_ts)  toString(event_ts)
+11a32e6d50268c05a76e94a3de7bba0f  1794982514059000                  9999-12-31 23:59:59.000
+# 1794982514059 ms was stored as 1794982514059 s: the value is 1000x, not clamped, so it can be repaired.
+
+## The same JSONEachRow value in clickhouse-local
+# echo '{"t":1794982514059}' | clickhouse-local --input-format JSONEachRow -S 't DateTime64(3)' -q 'SELECT toString(t) FROM table'
+25.2.1.3085                                              2026-11-18 06:15:14.059
+26.8.39.19                                               9999-12-31 23:59:59.000
+26.8.39.19 --compatibility 25.2                          2026-11-18 06:15:14.059
+26.8.39.19 --input_format_read_datetime_number_as_raw_value 1   2026-11-18 06:15:14.059
+# system.settings_changes on 26.8.39.19: 26.8  input_format_read_datetime_number_as_raw_value  1 -> 0
+
+## Repair while copying to langfuse_v4 (copy-ch.sh initial: table, rows, rows repaired, seconds)
+traces 153 83 0.3
+observations 252 103 0.3
+scores 50 10 0.3
+dataset_run_items_rmt 4 0 0.3
+blob_storage_file_log 229 105 0.3
+# After the backfill: 153 traces in events_full, 0 observations missing, 0 rows after 2200.

@@ -1,0 +1,19 @@
+service/pg-new unchanged
+statefulset.apps/pg-new configured
+partitioned roll out complete: 1 new pods have been updated...
+17.12 (Debian 17.12-1.pgdg13+1)
+
+==> dump v3's database (pg-main) and restore it on the new instance (pg-new)
+dump | restore across instances: 0.7 s
+
+==> v4 -> option (a)
+v4 restart incl. 94 Prisma migrations: 26.9 s
+Prisma migrations ran in 0.2 s
+PASS  v4 on (a): GET /api/public/projects with the v3 key: 200
+PASS  v4 on (a): GET /api/public/v2/prompts/support-system: 200
+PASS  v4 on (a): observations of a v3 trace (ClickHouse unchanged): 4
+login 200, cookies: next-auth.callback-url, next-auth.csrf-token, next-auth.session-token
+
+==> v4 -> back to option (b), backfill gate on again (its chain is finished there, nothing reruns)
+v4 restart (no pending migrations): 26.9 s
+PASS  v4 on (b): GET /api/public/projects: 200

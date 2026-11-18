@@ -1,0 +1,131 @@
+traffic started
+1794986116.8 traffic on, langfuse-app -> lf-v3
+
+==> 1 delta copy while v3 serves
+1794986136.9 delta-1 start
+traces 20 0 0.8
+observations 20 0 0.6
+scores 0 0 0.4
+dataset_run_items_rmt 0 0 0.4
+blob_storage_file_log 20 0 0.4
+watermark 2026-11-18 07:15:37.607
+rebackfill ["202611"]: 143.3 s
+optimize final ["202611"]: 0.8 s
+1794986286.9 delta-1 done (partitions 202611)
+
+==> 2 final Postgres copy into langfuse_v4_cut; v4 restarted on it (not serving yet)
+1794986287.0 pg-final start
+NOTICE:  database "langfuse_v4_cut" does not exist, skipping
+1794986288.1 pg dump+restore done
+1794986317.5 pg-final done: v4 on langfuse_v4_cut
+PASS  v4 on the final Postgres copy: GET /api/public/projects: 200
+
+==> 3 switch langfuse-app -> lf-v4
+1794986318.8 switch
+["10.244.0.45"]
+
+==> 4 drain v3, final delta, backfill re-run
+1794986319.0 v3 queues drained (wait+active+prioritized = 0)
+traces 175 0 0.4
+observations 175 0 0.3
+scores 0 0 0.3
+dataset_run_items_rmt 0 0 0.3
+blob_storage_file_log 175 0 0.3
+watermark 2026-11-18 07:18:49.287
+rebackfill ["202611"]: 172.7 s
+optimize final ["202611"]: 0.7 s
+1794986506.2 read gap closed (final delta in events_full)
+
+==> 5 no-loss check
+traffic started
+http 200: 396
+failed requests: 0
+PASS  2xx traffic traces in v4 events_full: 396
+of them served by v3 (in default.traces): 195, by v4 directly: 201
+last trace served by v3: 2026-11-18 07:18:38.000, first served by v4: 2026-11-18 07:18:39.000000 (switch at 2026-11-18 07:18:38)
+PASS  v3 traces missing from v4 events_full: 0
+PASS  v3 observations missing from v4 events_full: 0
+PASS  v3 scores missing from v4: 0
+
+==> 6 rollback rehearsal: langfuse-app -> lf-v3 for 30 s, then -> lf-v4 again
+1794986530.3 rollback to v3
+1794986560.5 forward to v4
+traces 29 0 0.4
+observations 29 0 0.4
+scores 0 0 0.3
+dataset_run_items_rmt 0 0 0.3
+blob_storage_file_log 29 0 0.3
+watermark 2026-11-18 07:22:51.160
+rebackfill ["202611"]: 202.3 s
+optimize final ["202611"]: 0.7 s
+1794986777.7 rollback window copied
+http 200: 260
+failed requests: 0
+PASS  2xx traffic traces of the rollback run in v4 events_full: 260
+of them served by v3 during the rollback window: 29
+
+==> 7 SDKs and APIs through langfuse-app (now v4)
+python-sdk-3.15.0: 5 traces, phase v4-after-cutover -> http://127.0.0.1:64351
+python-sdk-4.17.0: 5 traces, phase v4-after-cutover -> http://127.0.0.1:64351
+HTTP 207: [{"id": "32d9fcd70cd94043a72422d812fae41c", "status": 400, "message": "Event type not accepted", "error": "Event type \"trace-create\" is not accepted by /api/public/ingestion when LANGFUSE_MIGRATION_V4_WRITE_MODE is events_only. This endpoint only accepts score events. Upgrade to the latest Langfus
+HTTP 207: [{"id": "e35dcfcee8a0454d9f696fc9f07e2c0c", "status": 400, "message": "Event type not accepted", "error": "Event type \"trace-create\" is not accepted by /api/public/ingestion when LANGFUSE_MIGRATION_V4_WRITE_MODE is events_only. This endpoint only accepts score events. Upgrade to the latest Langfus
+legacy-http: 0/2 accepted, phase v4-after-cutover -> http://127.0.0.1:64351
+python-sdk-3.15.0: 5 traces in v4 events_full
+python-sdk-4.17.0: 5 traces in v4 events_full
+legacy-http: 0 traces in v4 events_full
+POST /api/public/ingestion trace-create on v4: {"successes":0,"errors":[{"status":400,"message":"Event type not accepted"}]}
+GET /api/public/traces -> 404
+GET /api/public/observations -> 404
+GET /api/public/v2/observations -> 200
+GET /api/public/v3/scores -> 200
+GET /api/public/metrics/daily -> 404
+
+==> 8 v3 down (scaled to 0; release, Postgres database and ClickHouse database kept)
+1794986838.7 v3 scaled to 0
+PASS  health through langfuse-app with v3 down: 4.82.0
+
+==> timeline
+1794986116.8 traffic on, langfuse-app -> lf-v3
+1794986136.9 delta-1 start
+traces 20 0 0.8
+observations 20 0 0.6
+scores 0 0 0.4
+dataset_run_items_rmt 0 0 0.4
+blob_storage_file_log 20 0 0.4
+watermark 2026-11-18 07:15:37.607
+rebackfill ["202611"]: 143.3 s
+optimize final ["202611"]: 0.8 s
+1794986286.9 delta-1 done (partitions 202611)
+1794986287.0 pg-final start
+1794986288.1 pg dump+restore done
+1794986317.5 pg-final done: v4 on langfuse_v4_cut
+1794986318.8 switch
+1794986319.0 v3 queues drained (wait+active+prioritized = 0)
+traces 175 0 0.4
+observations 175 0 0.3
+scores 0 0 0.3
+dataset_run_items_rmt 0 0 0.3
+blob_storage_file_log 175 0 0.3
+watermark 2026-11-18 07:18:49.287
+rebackfill ["202611"]: 172.7 s
+optimize final ["202611"]: 0.7 s
+1794986506.2 read gap closed (final delta in events_full)
+http 200: 396
+failed requests: 0
+of them served by v3 (in default.traces): 195, by v4 directly: 201
+last trace served by v3: 2026-11-18 07:18:38.000, first served by v4: 2026-11-18 07:18:39.000000 (switch at 2026-11-18 07:18:38)
+1794986530.3 rollback to v3
+1794986560.5 forward to v4
+traces 29 0 0.4
+observations 29 0 0.4
+scores 0 0 0.3
+dataset_run_items_rmt 0 0 0.3
+blob_storage_file_log 29 0 0.3
+watermark 2026-11-18 07:22:51.160
+rebackfill ["202611"]: 202.3 s
+optimize final ["202611"]: 0.7 s
+1794986777.7 rollback window copied
+http 200: 260
+failed requests: 0
+of them served by v3 during the rollback window: 29
+1794986838.7 v3 scaled to 0

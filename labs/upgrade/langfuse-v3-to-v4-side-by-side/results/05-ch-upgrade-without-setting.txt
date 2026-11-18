@@ -1,0 +1,45 @@
+
+==> before
+25.2.1.3085
+warning: Linux transparent hugepages are set to "always". Check /sys/kernel/mm/transparent_hugepage/enabled
+warning: Delay accounting is not enabled, OSIOWaitMicroseconds will not be gathered. You can enable it using `echo 1 > /proc/sys/kernel/task_delayacct` or by using sysctl.
+34	0
+
+==> traffic on (1 OTel trace/s to langfuse-app = v3) and a 0.5 s ClickHouse probe from inside the cluster
+traffic started
+
+==> upgrade: image 25.2.1.3085 -> 26.8.39.19 (StatefulSet rolling restart of the one replica)
+statefulset.apps/clickhouse image updated
+Waiting for partitioned roll out to finish: 0 out of 1 new pods have been updated...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+rollout: 7.7 s
+ClickHouse /ping not 200: 15 probes, window 8s
+traffic stopped:       83 requests -> ./.work/traffic-ch-upgrade.log
+http 200: 83
+failed requests: 0
+
+==> after
+26.8.39.19
+warning: Delay accounting is not enabled, OSIOWaitMicroseconds will not be gathered. You can enable it using `sudo sh -c \'echo 1 > /proc/sys/kernel/task_delayacct\'` or by using sysctl.
+warning: Linux transparent hugepages are set to "always". Check /sys/kernel/mm/transparent_hugepage/enabled
+34	0
+v3 web/worker restarts: lf-v3-langfuse-web-77869c9575-5b7sk=0 lf-v3-langfuse-worker-55fd66c57c-vvdr4=0 
+  83 ECONNREFUSED
+
+==> every 2xx traffic trace of the upgrade window is in v3's ClickHouse
+PASS  2xx traffic traces stored in default.traces: 83
+
+==> v3.172.1 after the upgrade: ingest (SDK v3 + legacy API) and read
+python-sdk-3.15.0: 10 traces, phase after-ch-upgrade -> http://127.0.0.1:57900
+legacy-http: 5/5 accepted, phase after-ch-upgrade -> http://127.0.0.1:57900
+PASS  new traces of after-ch-upgrade in default.traces: 15
+PASS  GET /api/public/traces/<v3-start trace>: 200
+PASS  observations of that trace: 3
+PASS  GET /api/public/observations: 200
+PASS  GET /api/public/scores: 200
+PASS  GET /api/public/metrics/daily: 200
+PASS  GET /api/public/sessions: 200
+traces in default.traces: before 55, after 153

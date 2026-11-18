@@ -1,0 +1,96 @@
+
+==> gate: every v3 background migration finished (v4 drops tables they emptied)
+PASS  unfinished or failed background migrations on v3: 0
+
+==> Postgres (b): dump v3's database, restore into a new database on the same server
+NOTICE:  database "langfuse_v4" does not exist, skipping
+CREATE DATABASE
+dump 455158 bytes
+dump + restore: 0.6 s
+
+==> ClickHouse: database langfuse_v4 on the same cluster (v4 migrations do not create the database)
+default	Atomic
+langfuse_v4	Atomic
+
+==> lf-v4-env: Postgres URL, Redis key prefix, backfill gate off
+REDIS_KEY_PREFIX=lf-v4
+LANGFUSE_BACKGROUND_MIGRATION_V4_ENABLE_HISTORIC_BACKFILL=false
+DATABASE_URL=postgresql://postgres:***@pg-main:5432/langfuse_v4
+
+==> helm install lf-v4 chart 2.2.5, Langfuse 4.82.0 (events_only, the v4 default)
+Release "lf-v4" does not exist. Installing it now.
+Pulled: ghcr.io/langfuse/langfuse-k8s/charts/langfuse:2.2.5
+Digest: sha256:89f4b12eb86b14805378e6d1ac2c80f72a2459983ede89e8f811349427941501
+NAME: lf-v4
+LAST DEPLOYED: Wed Nov 18 15:56:40 2026
+NAMESPACE: langfuse
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+install (Prisma + ClickHouse migrations, pods ready): 64.7 s
+NAME                                    READY   STATUS        RESTARTS   AGE
+lf-v4-langfuse-web-dbdb57bbb-l96db      1/1     Running       0          66s
+lf-v4-langfuse-worker-b8dc957fc-2dwl4   1/1     Terminating   0          66s
+lf-v4-langfuse-worker-f56c95cfb-hjktk   1/1     Running       0          3s
+
+==> background migrations that failed during the install race
+20261110_backfill_audit_logs_to_clickhouse|ClickHouse audit_logs table does not exist
+UPDATE 1
+PASS  failed background migrations on v4 after the reset: 0
+
+==> what v4 built
+ClickHouse schema version (langfuse_v4): 56 (v3 default: 34)
+analytics_observations	View
+analytics_scores	View
+analytics_traces	View
+audit_logs	ReplicatedReplacingMergeTree
+blob_storage_file_log	ReplicatedReplacingMergeTree
+dataset_run_items_rmt	ReplicatedReplacingMergeTree
+events_core	ReplicatedReplacingMergeTree
+events_core_mv	MaterializedView
+events_full	ReplicatedReplacingMergeTree
+observations	ReplicatedReplacingMergeTree
+observations_batch_staging	ReplicatedReplacingMergeTree
+schema_migrations	ReplicatedMergeTree
+scores	ReplicatedReplacingMergeTree
+topic_assignments	ReplicatedReplacingMergeTree
+topic_facet_summaries	ReplicatedReplacingMergeTree
+topics	ReplicatedReplacingMergeTree
+traces	ReplicatedReplacingMergeTree
+Prisma migrations: v3 db 391 / v4 db 485
+v4 Prisma migrations ran in 0.2 s
+legacy PG tables left in langfuse_v4: 
+20250102_backfill_billing_cycle_anchors|t|
+20250711_1347_patch_llm_tool_schema_audit_logs|t|
+20251216_1001_backfill_dataset_items_valid_to|t|
+20260106_encrypt_blob_storage_secrets|t|
+20260701_v4_step_1_create_root_spans_from_traces|f|LANGFUSE_BACKGROUND_MIGRATION_V4_ENABLE_HISTORIC_BACKFILL
+20260701_v4_step_2_rewrite_observations_to_pid_tid_sorting|f|LANGFUSE_BACKGROUND_MIGRATION_V4_ENABLE_HISTORIC_BACKFILL
+20260701_v4_step_3_backfill_events_full_from_observations|f|LANGFUSE_BACKGROUND_MIGRATION_V4_ENABLE_HISTORIC_BACKFILL
+20260701_v4_step_4_backfill_events_full_from_dataset_run_items|f|LANGFUSE_BACKGROUND_MIGRATION_V4_ENABLE_HISTORIC_BACKFILL
+20260701_v4_step_5_drop_pid_tid_sorting_tables|f|LANGFUSE_BACKGROUND_MIGRATION_V4_DROP_PID_TID_SORTING_TABLES
+20261022_encrypt_legacy_webhook_headers|t|
+20261110_backfill_audit_logs_to_clickhouse|f|
+role_assignments rows (new in v4, backfilled from api_keys and memberships): 2
+{"status":"OK","version":"4.82.0"}
+
+==> Q6 secrets: the v3 project API key on v4
+PASS  GET /api/public/projects with the v3 key on v4: 200
+PASS  same call, wrong secret key (negative control): 401
+
+==> Q6 secrets: a session cookie issued by v3, presented to v4 (NEXTAUTH_SECRET)
+login 200, cookies: next-auth.callback-url, next-auth.csrf-token, next-auth.session-token
+PASS  v4 /api/auth/session with the v3 cookie: admin@example.com
+PASS  same with a tampered cookie (negative control): null
+
+==> Q6 secrets: the LLM key v3 encrypted, decrypted by v4 (testUpdate sends it to mock-llm)
+login 200, cookies: next-auth.callback-url, next-auth.csrf-token, next-auth.session-token
+{"http": 200, "body": [{"result": {"data": {"json": {"success": true}}}}]}
+
+PASS  API key mock-llm received from v4: sk-mock-sbs-lab-0001
+
+==> Q5 media: the v3 attachment through v4 (row copied with the PG dump, object in v3's prefix)
+langfuse|media/sbs-lab/vAnCWQ0lAsj_rxo8CaqJ3y.png
+presigned by v4: http://minio:9000/langfuse/media/sbs-lab/vAnCWQ0lAsj_rxo8CaqJ3y.png
+PASS  sha256 of the object v4 links to: vAnCWQ0lAsj/rxo8CaqJ3yIuA9GGqNqgx/zmMh+26Sg=

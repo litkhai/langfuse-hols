@@ -4,64 +4,64 @@
  "runs": 5,
  "date": "2026-11-23",
  "build_ms": {
-  "b_none": 7534,
-  "b_word": 18659,
-  "b_ng2": 33795,
-  "b_cjk": 24453
+  "b_none": 3602,
+  "b_word": 8963,
+  "b_ng2": 12385,
+  "b_cjk": 8816
  },
  "sizes": {
   "b_none": {
    "rows": 1992540,
-   "table_compressed": 9848295,
-   "table_uncompressed": 1048099809,
+   "table_compressed": 9853296,
+   "table_uncompressed": 1047990249,
    "parts": 1,
-   "content_compressed": 2473373,
-   "content_uncompressed": 911606850
+   "content_compressed": 2483285,
+   "content_uncompressed": 911497290
   },
   "b_word": {
    "rows": 1992540,
-   "table_compressed": 9848295,
-   "table_uncompressed": 1048099809,
+   "table_compressed": 9853296,
+   "table_uncompressed": 1047990249,
    "parts": 1,
-   "index_compressed": 64444316,
-   "index_uncompressed": 64658218,
-   "content_compressed": 2473373,
-   "content_uncompressed": 911606850
+   "index_compressed": 63718213,
+   "index_uncompressed": 63932549,
+   "content_compressed": 2483285,
+   "content_uncompressed": 911497290
   },
   "b_cjk": {
    "rows": 1992540,
-   "table_compressed": 9848295,
-   "table_uncompressed": 1048099809,
+   "table_compressed": 9853296,
+   "table_uncompressed": 1047990249,
    "parts": 1,
-   "index_compressed": 61268321,
-   "index_uncompressed": 61339739,
-   "content_compressed": 2473373,
-   "content_uncompressed": 911606850
+   "index_compressed": 60935305,
+   "index_uncompressed": 61007329,
+   "content_compressed": 2483285,
+   "content_uncompressed": 911497290
   },
   "b_ng2": {
    "rows": 1992540,
-   "table_compressed": 9848295,
-   "table_uncompressed": 1048099809,
+   "table_compressed": 9853296,
+   "table_uncompressed": 1047990249,
    "parts": 1,
-   "index_compressed": 175098292,
-   "index_uncompressed": 175101737,
-   "content_compressed": 2473373,
-   "content_uncompressed": 911606850
+   "index_compressed": 173565849,
+   "index_uncompressed": 173569329,
+   "content_compressed": 2483285,
+   "content_uncompressed": 911497290
   }
  },
  "results": [
   {
    "runs": 5,
-   "ms": 565,
+   "ms": 140,
    "read_rows": 1992540,
-   "read_bytes": 968280728,
+   "read_bytes": 970176086,
    "marks": 244,
    "ms_all": [
-    261,
-    398,
-    617,
-    565,
-    855
+    132,
+    140,
+    140,
+    142,
+    136
    ],
    "term": "대출",
    "method": "LIKE, no index",
@@ -73,16 +73,16 @@
   },
   {
    "runs": 5,
-   "ms": 702,
+   "ms": 136,
    "read_rows": 1992540,
-   "read_bytes": 968280728,
+   "read_bytes": 970176086,
    "marks": 244,
    "ms_all": [
-    664,
-    793,
-    702,
-    559,
-    1031
+    129,
+    136,
+    143,
+    125,
+    138
    ],
    "term": "대출",
    "method": "ILIKE, no index",
@@ -94,16 +94,16 @@
   },
   {
    "runs": 5,
-   "ms": 125,
-   "read_rows": 1835008,
-   "read_bytes": 72483211,
-   "marks": 224,
+   "ms": 35,
+   "read_rows": 1867776,
+   "read_bytes": 73776672,
+   "marks": 228,
    "ms_all": [
-    189,
-    67,
-    154,
-    125,
-    122
+    31,
+    38,
+    32,
+    35,
+    35
    ],
    "term": "대출",
    "method": "hasToken, splitByNonAlpha",
@@ -115,16 +115,16 @@
   },
   {
    "runs": 5,
-   "ms": 553,
-   "read_rows": 1835008,
-   "read_bytes": 905736176,
-   "marks": 224,
+   "ms": 167,
+   "read_rows": 1867776,
+   "read_bytes": 921349298,
+   "marks": 228,
    "ms_all": [
-    906,
-    1019,
-    404,
-    553,
-    540
+    167,
+    164,
+    167,
+    160,
+    192
    ],
    "term": "대출",
    "method": "Langfuse UI form, splitByNonAlpha",
@@ -136,16 +136,16 @@
   },
   {
    "runs": 5,
-   "ms": 714,
-   "read_rows": 1835008,
-   "read_bytes": 905736176,
-   "marks": 224,
+   "ms": 119,
+   "read_rows": 1867776,
+   "read_bytes": 921349298,
+   "marks": 228,
    "ms_all": [
-    786,
-    714,
-    701,
-    932,
-    460
+    115,
+    116,
+    127,
+    119,
+    128
    ],
    "term": "대출",
    "method": "lower LIKE, ngrams(2)",
@@ -157,16 +157,16 @@
   },
   {
    "runs": 5,
-   "ms": 112,
-   "read_rows": 1835008,
-   "read_bytes": 72483211,
-   "marks": 224,
+   "ms": 32,
+   "read_rows": 1867776,
+   "read_bytes": 73776672,
+   "marks": 228,
    "ms_all": [
-    163,
-    84,
-    121,
-    112,
-    72
+    32,
+    32,
+    32,
+    27,
+    35
    ],
    "term": "대출",
    "method": "hasAllTokens, ngrams(2)",
@@ -178,16 +178,16 @@
   },
   {
    "runs": 5,
-   "ms": 582,
-   "read_rows": 1835008,
-   "read_bytes": 905736176,
-   "marks": 224,
+   "ms": 158,
+   "read_rows": 1867776,
+   "read_bytes": 921349298,
+   "marks": 228,
    "ms_all": [
-    1055,
-    411,
-    582,
-    865,
-    370
+    155,
+    158,
+    154,
+    220,
+    191
    ],
    "term": "대출",
    "method": "hasPhrase, ngrams(2)",
@@ -199,16 +199,16 @@
   },
   {
    "runs": 5,
-   "ms": 585,
-   "read_rows": 1908736,
-   "read_bytes": 941973070,
-   "marks": 233,
+   "ms": 200,
+   "read_rows": 1925120,
+   "read_bytes": 949002913,
+   "marks": 235,
    "ms_all": [
-    585,
-    402,
-    1003,
-    1147,
-    472
+    492,
+    282,
+    200,
+    180,
+    191
    ],
    "term": "대출",
    "method": "hasPhrase, asciiCJK",
@@ -220,16 +220,16 @@
   },
   {
    "runs": 5,
-   "ms": 266,
+   "ms": 115,
    "read_rows": 1992540,
-   "read_bytes": 955078050,
+   "read_bytes": 961973072,
    "marks": 244,
    "ms_all": [
-    246,
-    285,
-    274,
-    266,
-    251
+    126,
+    115,
+    112,
+    114,
+    128
    ],
    "term": "중도상환수수료",
    "method": "LIKE, no index",
@@ -241,16 +241,16 @@
   },
   {
    "runs": 5,
-   "ms": 236,
+   "ms": 105,
    "read_rows": 1992540,
-   "read_bytes": 955078050,
+   "read_bytes": 961973072,
    "marks": 244,
    "ms_all": [
-    236,
-    391,
-    467,
-    178,
-    223
+    103,
+    105,
+    120,
+    98,
+    122
    ],
    "term": "중도상환수수료",
    "method": "ILIKE, no index",
@@ -262,16 +262,16 @@
   },
   {
    "runs": 5,
-   "ms": 2,
+   "ms": 1,
    "read_rows": 0,
    "read_bytes": 0,
    "marks": 0,
    "ms_all": [
     1,
     1,
-    2,
-    2,
-    2
+    1,
+    1,
+    1
    ],
    "term": "중도상환수수료",
    "method": "hasToken, splitByNonAlpha",
@@ -283,16 +283,16 @@
   },
   {
    "runs": 5,
-   "ms": 3,
+   "ms": 1,
    "read_rows": 0,
    "read_bytes": 0,
    "marks": 0,
    "ms_all": [
-    3,
-    3,
-    4,
+    1,
+    1,
     2,
-    3
+    1,
+    1
    ],
    "term": "중도상환수수료",
    "method": "Langfuse UI form, splitByNonAlpha",
@@ -304,16 +304,16 @@
   },
   {
    "runs": 5,
-   "ms": 209,
-   "read_rows": 1622016,
-   "read_bytes": 801432106,
-   "marks": 198,
+   "ms": 105,
+   "read_rows": 1695744,
+   "read_bytes": 837752026,
+   "marks": 207,
    "ms_all": [
-    209,
-    220,
-    203,
-    552,
-    203
+    105,
+    111,
+    124,
+    89,
+    94
    ],
    "term": "중도상환수수료",
    "method": "lower LIKE, ngrams(2)",
@@ -325,16 +325,16 @@
   },
   {
    "runs": 5,
-   "ms": 74,
-   "read_rows": 1622016,
-   "read_bytes": 64070307,
-   "marks": 198,
+   "ms": 32,
+   "read_rows": 1695744,
+   "read_bytes": 66981427,
+   "marks": 207,
    "ms_all": [
-    62,
-    74,
-    69,
-    113,
-    105
+    29,
+    32,
+    32,
+    36,
+    30
    ],
    "term": "중도상환수수료",
    "method": "hasAllTokens, ngrams(2)",
@@ -346,16 +346,16 @@
   },
   {
    "runs": 5,
-   "ms": 228,
-   "read_rows": 1622016,
-   "read_bytes": 801432106,
-   "marks": 198,
+   "ms": 134,
+   "read_rows": 1695744,
+   "read_bytes": 837752026,
+   "marks": 207,
    "ms_all": [
-    448,
-    216,
-    369,
-    228,
-    201
+    134,
+    128,
+    131,
+    141,
+    148
    ],
    "term": "중도상환수수료",
    "method": "hasPhrase, ngrams(2)",
@@ -367,16 +367,16 @@
   },
   {
    "runs": 5,
-   "ms": 332,
-   "read_rows": 1884160,
-   "read_bytes": 926833994,
-   "marks": 230,
+   "ms": 172,
+   "read_rows": 1925120,
+   "read_bytes": 939852455,
+   "marks": 235,
    "ms_all": [
-    424,
-    246,
-    329,
-    332,
-    526
+    172,
+    168,
+    175,
+    184,
+    171
    ],
    "term": "중도상환수수료",
    "method": "hasPhrase, asciiCJK",
@@ -388,163 +388,163 @@
   },
   {
    "runs": 5,
-   "ms": 253,
+   "ms": 103,
    "read_rows": 1992540,
-   "read_bytes": 964043290,
+   "read_bytes": 959450948,
    "marks": 244,
    "ms_all": [
-    190,
-    253,
-    256,
-    204,
-    254
+    108,
+    122,
+    103,
+    93,
+    94
    ],
    "term": "비밀번호 재설정",
    "method": "LIKE, no index",
    "table": "b_none",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content LIKE '%비밀번호 재설정%'"
   },
   {
    "runs": 5,
-   "ms": 213,
+   "ms": 139,
    "read_rows": 1992540,
-   "read_bytes": 964043290,
+   "read_bytes": 959450948,
    "marks": 244,
    "ms_all": [
-    173,
-    213,
-    233,
-    258,
-    164
+    171,
+    151,
+    115,
+    139,
+    137
    ],
    "term": "비밀번호 재설정",
    "method": "ILIKE, no index",
    "table": "b_none",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content ILIKE '%비밀번호 재설정%'"
   },
   {
    "runs": 5,
-   "ms": 218,
-   "read_rows": 1695744,
-   "read_bytes": 838584697,
-   "marks": 207,
+   "ms": 155,
+   "read_rows": 1671168,
+   "read_bytes": 825636479,
+   "marks": 204,
    "ms_all": [
-    349,
-    218,
-    160,
-    203,
-    274
+    187,
+    154,
+    156,
+    154,
+    155
    ],
    "term": "비밀번호 재설정",
    "method": "Langfuse UI form, splitByNonAlpha",
    "table": "b_word",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE content ILIKE '%비밀번호 재설정%' AND hasAllTokens(lower(content), arraySlice(arrayDistinct(tokens(lower('%비밀번호 재설정%'))), 1, 64))"
   },
   {
    "runs": 5,
-   "ms": 140,
-   "read_rows": 1695744,
-   "read_bytes": 838584697,
-   "marks": 207,
+   "ms": 138,
+   "read_rows": 1671168,
+   "read_bytes": 825636479,
+   "marks": 204,
    "ms_all": [
-    140,
-    94,
-    118,
-    249,
-    302
+    138,
+    127,
+    156,
+    148,
+    101
    ],
    "term": "비밀번호 재설정",
    "method": "lower LIKE, ngrams(2)",
    "table": "b_ng2",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE lower(content) LIKE '%비밀번호 재설정%'"
   },
   {
    "runs": 5,
-   "ms": 44,
-   "read_rows": 1695744,
-   "read_bytes": 66982035,
-   "marks": 207,
+   "ms": 28,
+   "read_rows": 1671168,
+   "read_bytes": 66011570,
+   "marks": 204,
    "ms_all": [
-    49,
-    39,
-    52,
-    44,
-    38
+    31,
+    31,
+    28,
+    27,
+    26
    ],
    "term": "비밀번호 재설정",
    "method": "hasAllTokens, ngrams(2)",
    "table": "b_ng2",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasAllTokens(lower(content), '비밀번호 재설정')"
   },
   {
    "runs": 5,
-   "ms": 255,
-   "read_rows": 1695744,
-   "read_bytes": 838584697,
-   "marks": 207,
+   "ms": 148,
+   "read_rows": 1671168,
+   "read_bytes": 825636479,
+   "marks": 204,
    "ms_all": [
-    255,
-    311,
-    195,
-    244,
-    289
+    138,
+    148,
+    141,
+    155,
+    164
    ],
    "term": "비밀번호 재설정",
    "method": "hasPhrase, ngrams(2)",
    "table": "b_ng2",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasPhrase(lower(content), '비밀번호 재설정')"
   },
   {
    "runs": 5,
-   "ms": 348,
-   "read_rows": 1810432,
-   "read_bytes": 892929756,
-   "marks": 221,
+   "ms": 197,
+   "read_rows": 1785856,
+   "read_bytes": 880222435,
+   "marks": 218,
    "ms_all": [
-    306,
-    348,
-    347,
-    462,
-    927
+    190,
+    197,
+    195,
+    201,
+    209
    ],
    "term": "비밀번호 재설정",
    "method": "hasPhrase, asciiCJK",
    "table": "b_cjk",
-   "count": 184800,
-   "truth": 184800,
+   "count": 184140,
+   "truth": 184140,
    "marks_total": 245,
    "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_cjk WHERE hasPhrase(lower(content), '비밀번호 재설정')"
   },
   {
    "runs": 5,
-   "ms": 626,
+   "ms": 202,
    "read_rows": 1992540,
-   "read_bytes": 965073383,
+   "read_bytes": 962954119,
    "marks": 244,
    "ms_all": [
-    1037,
-    626,
-    679,
-    584,
-    323
+    213,
+    184,
+    158,
+    327,
+    202
    ],
    "term": "timeout",
    "method": "LIKE, no index",
@@ -556,16 +556,16 @@
   },
   {
    "runs": 5,
-   "ms": 326,
+   "ms": 171,
    "read_rows": 1992540,
-   "read_bytes": 965073383,
+   "read_bytes": 962954119,
    "marks": 244,
    "ms_all": [
-    469,
-    295,
-    399,
-    326,
-    294
+    172,
+    177,
+    171,
+    127,
+    154
    ],
    "term": "timeout",
    "method": "ILIKE, no index",
@@ -577,16 +577,16 @@
   },
   {
    "runs": 5,
-   "ms": 91,
-   "read_rows": 1761280,
-   "read_bytes": 69569781,
+   "ms": 38,
+   "read_rows": 1754972,
+   "read_bytes": 69321488,
    "marks": 215,
    "ms_all": [
-    144,
-    100,
-    91,
-    49,
-    58
+    40,
+    40,
+    38,
+    35,
+    30
    ],
    "term": "timeout",
    "method": "hasToken, splitByNonAlpha",
@@ -598,16 +598,16 @@
   },
   {
    "runs": 5,
-   "ms": 361,
-   "read_rows": 1761280,
-   "read_bytes": 867902571,
+   "ms": 166,
+   "read_rows": 1754972,
+   "read_bytes": 863759167,
    "marks": 215,
    "ms_all": [
-    274,
-    352,
-    402,
-    361,
-    368
+    177,
+    166,
+    149,
+    151,
+    170
    ],
    "term": "timeout",
    "method": "Langfuse UI form, splitByNonAlpha",
@@ -619,16 +619,16 @@
   },
   {
    "runs": 5,
-   "ms": 383,
-   "read_rows": 1777664,
-   "read_bytes": 875841648,
-   "marks": 217,
+   "ms": 116,
+   "read_rows": 1763164,
+   "read_bytes": 868206205,
+   "marks": 216,
    "ms_all": [
-    501,
-    245,
-    525,
-    319,
-    383
+    113,
+    109,
+    127,
+    116,
+    130
    ],
    "term": "timeout",
    "method": "lower LIKE, ngrams(2)",
@@ -640,16 +640,16 @@
   },
   {
    "runs": 5,
-   "ms": 52,
-   "read_rows": 1777664,
-   "read_bytes": 70216848,
-   "marks": 217,
+   "ms": 29,
+   "read_rows": 1763164,
+   "read_bytes": 69645051,
+   "marks": 216,
    "ms_all": [
-    51,
-    47,
-    52,
-    68,
-    62
+    29,
+    29,
+    29,
+    32,
+    33
    ],
    "term": "timeout",
    "method": "hasAllTokens, ngrams(2)",
@@ -661,16 +661,16 @@
   },
   {
    "runs": 5,
-   "ms": 257,
-   "read_rows": 1777664,
-   "read_bytes": 875841648,
-   "marks": 217,
+   "ms": 173,
+   "read_rows": 1763164,
+   "read_bytes": 868206205,
+   "marks": 216,
    "ms_all": [
-    327,
-    331,
-    256,
-    217,
-    257
+    173,
+    187,
+    156,
+    154,
+    177
    ],
    "term": "timeout",
    "method": "hasPhrase, ngrams(2)",
@@ -682,16 +682,16 @@
   },
   {
    "runs": 5,
-   "ms": 318,
-   "read_rows": 1777664,
-   "read_bytes": 875841648,
-   "marks": 217,
+   "ms": 126,
+   "read_rows": 1763164,
+   "read_bytes": 868206205,
+   "marks": 216,
    "ms_all": [
-    331,
-    484,
-    318,
-    302,
-    238
+    145,
+    124,
+    126,
+    125,
+    132
    ],
    "term": "timeout",
    "method": "hasPhrase, asciiCJK",
@@ -703,16 +703,16 @@
   },
   {
    "runs": 5,
-   "ms": 317,
+   "ms": 78,
    "read_rows": 1992540,
-   "read_bytes": 906573213,
+   "read_bytes": 905370962,
    "marks": 244,
    "ms_all": [
-    213,
-    317,
-    333,
-    211,
-    347
+    78,
+    74,
+    63,
+    79,
+    79
    ],
    "term": "E1371066",
    "method": "LIKE, no index",
@@ -724,16 +724,16 @@
   },
   {
    "runs": 5,
-   "ms": 261,
+   "ms": 76,
    "read_rows": 1992540,
-   "read_bytes": 906573213,
+   "read_bytes": 905370962,
    "marks": 244,
    "ms_all": [
-    246,
-    261,
-    287,
-    212,
-    488
+    93,
+    59,
+    87,
+    60,
+    76
    ],
    "term": "E1371066",
    "method": "ILIKE, no index",
@@ -745,16 +745,16 @@
   },
   {
    "runs": 5,
-   "ms": 12,
+   "ms": 2,
    "read_rows": 98304,
-   "read_bytes": 3882987,
+   "read_bytes": 3882474,
    "marks": 12,
    "ms_all": [
-    17,
-    26,
-    9,
-    12,
-    11
+    3,
+    2,
+    2,
+    2,
+    2
    ],
    "term": "E1371066",
    "method": "hasToken, splitByNonAlpha",
@@ -766,16 +766,16 @@
   },
   {
    "runs": 5,
-   "ms": 29,
+   "ms": 6,
    "read_rows": 98304,
-   "read_bytes": 48050289,
+   "read_bytes": 48093645,
    "marks": 12,
    "ms_all": [
-    29,
-    23,
-    20,
-    127,
-    72
+    7,
+    7,
+    5,
+    5,
+    6
    ],
    "term": "E1371066",
    "method": "Langfuse UI form, splitByNonAlpha",
@@ -787,16 +787,16 @@
   },
   {
    "runs": 5,
-   "ms": 73,
+   "ms": 6,
    "read_rows": 122880,
-   "read_bytes": 60419862,
+   "read_bytes": 60068958,
    "marks": 15,
    "ms_all": [
-    51,
-    45,
-    80,
-    97,
-    73
+    7,
+    6,
+    6,
+    9,
+    5
    ],
    "term": "E1371066",
    "method": "lower LIKE, ngrams(2)",
@@ -808,16 +808,16 @@
   },
   {
    "runs": 5,
-   "ms": 10,
+   "ms": 3,
    "read_rows": 122880,
-   "read_bytes": 4853767,
+   "read_bytes": 4853382,
    "marks": 15,
    "ms_all": [
-    26,
-    10,
-    13,
-    8,
-    6
+    3,
+    3,
+    3,
+    3,
+    3
    ],
    "term": "E1371066",
    "method": "hasAllTokens, ngrams(2)",
@@ -829,16 +829,16 @@
   },
   {
    "runs": 5,
-   "ms": 31,
+   "ms": 7,
    "read_rows": 122880,
-   "read_bytes": 60419862,
+   "read_bytes": 60068958,
    "marks": 15,
    "ms_all": [
-    32,
-    16,
-    31,
-    20,
-    46
+    9,
+    6,
+    7,
+    6,
+    7
    ],
    "term": "E1371066",
    "method": "hasPhrase, ngrams(2)",
@@ -850,16 +850,16 @@
   },
   {
    "runs": 5,
-   "ms": 15,
+   "ms": 8,
    "read_rows": 122880,
-   "read_bytes": 60419862,
+   "read_bytes": 60068958,
    "marks": 15,
    "ms_all": [
-    31,
-    15,
-    15,
-    15,
-    11
+    8,
+    10,
+    9,
+    8,
+    6
    ],
    "term": "E1371066",
    "method": "hasPhrase, asciiCJK",
@@ -871,8 +871,8 @@
   }
  ],
  "host_load_1min": {
-  "start": 34.9,
-  "end": 36.6
+  "start": 34.2,
+  "end": 34.3
  },
  "host": {
   "max_threads": "12",

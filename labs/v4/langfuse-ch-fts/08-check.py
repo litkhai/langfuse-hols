@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""07-check.py — the lab's claims as checks, against the live servers and the .run/ results.
+"""08-check.py — the lab's claims as checks, against the live servers and the .run/ results.
 
-    python3 labs/v4/langfuse-ch-fts/07-check.py           # every check must pass
-    python3 labs/v4/langfuse-ch-fts/07-check.py --fault   # two expectations inverted: must fail
+    python3 labs/v4/langfuse-ch-fts/08-check.py           # every check must pass
+    python3 labs/v4/langfuse-ch-fts/08-check.py --fault   # two expectations inverted: must fail
 
-Needs 03-copy-mv.sql, 04-tokenizers.py, 05-mv-live.py and 06-bench.py to have run.
+Needs 03-copy-mv.sql and steps 04 to 07 to have run.
 """
 import glob
 import json
@@ -76,7 +76,23 @@ def main():
           ui["answer-generation"]["ui"] == 0 and ui["answer-generation"]["truth"] > 0)
     check("Langfuse UI predicate: every support-chat row (JSON-escaped output) for 중도상환수수료",
           ui["support-chat"]["ui"] == ui["support-chat"]["truth"] > 0)
+    check("the v4.83.0 form of the UI predicate (LIKE-escaped values) gives the same counts as v4.56.0",
+          all(d["ui_4_83"] == d["ui"] for t in tk["langfuse_ui"].values() for d in t.values()))
     check("the JSON decode gives Hangul on both servers", all(v.startswith('[{"role":"user","content":"대출을') for v in tk["decode"].values()))
+
+    print("── Langfuse's own search: Observations API v2 `matches` (.run/langfuse-search.json)")
+    ls = load("langfuse-search.json")["terms"]
+    m_esc = ls["중도상환수수료"]["output"]["support-chat"]
+    check("API matches finds none of 중도상환수수료 in JSON-escaped output (support-chat)", m_esc["api"] == 0 and m_esc["truth"] > 0)
+    m_plain = ls["중도상환수수료"]["output"]["answer-generation"]
+    check("API matches finds none of the bare word in plain-string output (answer-generation)", m_plain["api"] == 0 and m_plain["truth"] > 0)
+    m_part = ls["중도상환수수료는"]["output"]["answer-generation"]
+    check("… but every row with the word + particle 중도상환수수료는 (positive control)", m_part["api"] == m_part["truth"] > 0)
+    m_ascii = ls["OTP"]["input"]["support-chat"]
+    check("API matches finds an ASCII term in JSON-escaped input (OTP, positive control)", m_ascii["api"] == m_ascii["truth"] > 0)
+    check("the copy's ngrams(2) index finds every 중도상환수수료 row the API missed",
+          all(ls["중도상환수수료"]["output"][n]["copy_ngrams2"] == ls["중도상환수수료"]["output"][n]["truth"]
+              for n in ("support-chat", "retrieve-context", "answer-generation")))
 
     print("── benchmark (.run/bench-*.json)")
     for path in sorted(glob.glob(os.path.join(lablib.RUN_DIR, "bench-*.json"))):

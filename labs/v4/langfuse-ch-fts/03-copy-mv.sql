@@ -38,7 +38,7 @@ CREATE TABLE lab_langfuse_ch_fts.events_text
     is_deleted  UInt8,
     -- For Korean: every two characters, so 대출 is a token inside 대출을 and 주택담보대출.
     -- (One text index per expression: ClickHouse rejects a second one on lower(input_text).
-    -- 06-bench.py compares tokenizers on separate tables.)
+    -- 07-bench.py compares tokenizers on separate tables.)
     INDEX idx_in_ng2   lower(input_text)  TYPE text(tokenizer = ngrams(2)),
     INDEX idx_out_ng2  lower(output_text) TYPE text(tokenizer = ngrams(2))
 )

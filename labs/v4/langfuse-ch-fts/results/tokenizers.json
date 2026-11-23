@@ -604,56 +604,68 @@
   "중도상환수수료": {
    "answer-generation": {
     "ui": 0,
+    "ui_4_83": 0,
     "truth": 188
    },
    "retrieve-context": {
     "ui": 283,
+    "ui_4_83": 283,
     "truth": 283
    },
    "support-chat": {
     "ui": 188,
+    "ui_4_83": 188,
     "truth": 188
    }
   },
   "주택담보대출": {
    "answer-generation": {
     "ui": 87,
+    "ui_4_83": 87,
     "truth": 233
    },
    "retrieve-context": {
     "ui": 316,
+    "ui_4_83": 316,
     "truth": 316
    },
    "support-chat": {
     "ui": 233,
+    "ui_4_83": 233,
     "truth": 233
    }
   },
   "OTP": {
    "answer-generation": {
     "ui": 283,
+    "ui_4_83": 283,
     "truth": 370
    },
    "retrieve-context": {
     "ui": 442,
+    "ui_4_83": 442,
     "truth": 442
    },
    "support-chat": {
     "ui": 370,
+    "ui_4_83": 370,
     "truth": 370
    }
   },
   "대출": {
    "answer-generation": {
     "ui": 524,
+    "ui_4_83": 524,
     "truth": 524
    },
    "retrieve-context": {
     "ui": 524,
+    "ui_4_83": 524,
     "truth": 524
    },
    "support-chat": {
     "ui": 524,
+    "ui_4_83": 524,
     "truth": 524
    }
   }

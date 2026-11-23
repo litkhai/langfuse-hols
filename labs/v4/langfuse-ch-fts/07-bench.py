@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""06-bench.py — LIKE / ILIKE vs hasToken vs the text index, on the lab's own ClickHouse.
+"""07-bench.py — LIKE / ILIKE vs hasToken vs the text index, on the lab's own ClickHouse.
 
 The 9000 decoded rows of the copy (remote() from the stack's server) are repeated COPIES times
 (default 220, about 2 million rows) into four tables that differ only in their text index:
@@ -18,8 +18,8 @@ Every query runs RUNS times (default 5) after one warm-up; the numbers are the m
 system.query_log (query_duration_ms, read_rows, read_bytes, ProfileEvents SelectedMarks).
 Writes .run/bench-<version>.json.
 
-    python3 labs/v4/langfuse-ch-fts/06-bench.py            # COPIES=220 RUNS=5
-    COPIES=20 python3 labs/v4/langfuse-ch-fts/06-bench.py  # quick
+    python3 labs/v4/langfuse-ch-fts/07-bench.py            # COPIES=220 RUNS=5
+    COPIES=20 python3 labs/v4/langfuse-ch-fts/07-bench.py  # quick
 """
 import json
 import os

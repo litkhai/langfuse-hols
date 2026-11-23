@@ -127,6 +127,7 @@ def main():
                          f"arraySlice(arrayDistinct(tokens(lower({{{p}:String}}))), 1, 64)))")
         return f"({one('q')} OR {one('qe')})"
     out["langfuse_ui"] = {}
+    B = chr(92)  # a backslash
     for term in ["중도상환수수료", "주택담보대출", "OTP", "대출"]:
         qe = "".join(c if ord(c) < 0x80 else "\\u%04x" % ord(c) for c in term)
         sql = f"""SELECT e.name AS name, countIf({pred('e.input')} OR {pred('e.output')}) AS ui,
@@ -134,8 +135,12 @@ def main():
                   FROM default.events_full AS e INNER JOIN {DB}.events_text AS t USING (span_id)
                   WHERE has(e.tags, '{lablib.LAB_TAG}') AND has(e.tags, 'batch:base') GROUP BY name ORDER BY name"""
         res = lablib.rows("LF", sql, settings={"param_q": f"%{term}%", "param_qe": f"%{qe}%"})
-        out["langfuse_ui"][term] = {r["name"]: {"ui": int(r["ui"]), "truth": int(r["truth"])} for r in res}
-        print(f"   {term:8} " + "  ".join(f"{r['name']} {r['ui']}/{r['truth']}" for r in res))
+        # v4.83.0 (search.ts) passes both values through escapeSqlLikePattern first: \ → \\, % → \%, _ → \_.
+        like = lambda v: v.replace(B, B + B).replace("%", B + "%").replace("_", B + "_")  # noqa: E731
+        res483 = lablib.rows("LF", sql, settings={"param_q": f"%{like(term)}%", "param_qe": f"%{like(qe)}%"})
+        ui483 = {r["name"]: int(r["ui"]) for r in res483}
+        out["langfuse_ui"][term] = {r["name"]: {"ui": int(r["ui"]), "ui_4_83": ui483[r["name"]], "truth": int(r["truth"])} for r in res}
+        print(f"   {term:8} " + "  ".join(f"{r['name']} {r['ui']}/{r['truth']} (4.83 form {ui483[r['name']]})" for r in res))
     json.dump(out, open(os.path.join(lablib.RUN_DIR, "tokenizers.json"), "w"), ensure_ascii=False, indent=1)
     print(f"✓ .run/tokenizers.json ({n} rows, {len(TOKENIZERS)} tokenizers, {len(TERMS)} terms)")
 

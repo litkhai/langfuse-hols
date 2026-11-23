@@ -1,0 +1,18 @@
+# First design, 2026-11-23 10:37–10:41 UTC, 2M synthetic observations (05-bench.sh 2), CH 26.8.22.13 on the shared v4 stack, another session inserting at the same time.
+# traces as AggregateFunction(uniqExact, String); review_observations ORDER BY (project_id, trace_id, span_id).
+   ┌─table─────────────────┬────rows─┬─compressed─┐
+1. │ events_full_mv        │ 2000000 │ 213.89 MiB │
+2. │ obs_hourly_by_service │    5768 │ 14.63 MiB  │
+3. │ obs_hourly_by_tag     │   14420 │ 28.45 MiB  │
+4. │ review_observations   │  240738 │ 18.60 MiB  │
+   └───────────────────────┴─────────┴────────────┘
+
+date	step	duration_ms	read_rows	read_bytes	result_rows
+2026-11-23T10:37:26Z	insert 1M rows, no views	23042	1000000	8000000	1000000
+2026-11-23T10:37:26Z	insert 1M rows, with the 3 views	37551	4000000	1022704599	1181678
+2026-11-23T10:37:26Z	Q1 raw: per service, 7 days	182	497092	99996993	4
+2026-11-23T10:37:26Z	Q1 view: per service, 7 days	95	2156	849464	4
+2026-11-23T10:37:26Z	Q2 raw: cost per team tag per day, 30 days	175	2000000	268356999	93
+2026-11-23T10:37:26Z	Q2 view: cost per team tag per day, 30 days	22	14420	591220	93
+2026-11-23T10:37:26Z	Q3 raw: review:needed observations, 24 h, with input	46	103876	36273687	7797
+2026-11-23T10:37:26Z	Q3 copy: review:needed observations, 24 h, with input	87	180303	44411980	7797

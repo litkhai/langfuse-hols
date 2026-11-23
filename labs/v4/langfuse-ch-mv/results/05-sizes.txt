@@ -1,0 +1,6 @@
+   ┌─table─────────────────┬────rows─┬─compressed─┐
+1. │ events_full_mv        │ 6000000 │ 652.74 MiB │
+2. │ obs_hourly_by_service │    5774 │ 6.50 MiB   │
+3. │ obs_hourly_by_tag     │   14436 │ 13.48 MiB  │
+4. │ review_observations   │  720423 │ 56.18 MiB  │
+   └───────────────────────┴─────────┴────────────┘

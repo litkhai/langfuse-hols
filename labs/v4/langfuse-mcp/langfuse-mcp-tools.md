@@ -101,7 +101,7 @@ The 4.56.0 source (tag `v4.56.0`, `web/src/features/mcp/server/`) defines 94 too
 
 ### Compared with v4.83.0 — read from source and release notes, not run
 
-Read on 2026-11-23 from tag `v4.83.0` (`fe82bdc`) of `langfuse/langfuse`: `web/src/features/mcp/server/bootstrap.ts`, every tool file, and the GitHub release notes of v4.57.0–v4.83.0 (24 entries mention MCP). **The shared stack was not upgraded; none of this ran.**
+Read on 2026-11-23 from tag `v4.83.0` (`fe82bdc`, published 2026-11-19, the latest release that day) of `langfuse/langfuse`: `web/src/features/mcp/server/bootstrap.ts`, every tool file, and the GitHub release notes of v4.57.0–v4.83.0 (24 entries mention MCP). **The shared stack was not upgraded; none of this ran.**
 
 | Change in 4.83.0 source | Tools | Release |
 |---|---|---|
@@ -130,7 +130,7 @@ Without gates, the 4.83.0 source defines 108 tools (104 under `web/src/features/
 
 ### v4.83.0과 비교: 소스와 릴리스 노트로 읽은 것, 실행하지 않음
 
-2026-11-23에 `langfuse/langfuse`의 `v4.83.0` 태그(`fe82bdc`)에서 `web/src/features/mcp/server/bootstrap.ts`, 모든 도구 파일, v4.57.0–v4.83.0 GitHub 릴리스 노트(MCP 언급 24건)를 읽었습니다. **공유 스택은 업그레이드하지 않았고, 아래 내용은 하나도 실행하지 않았습니다.**
+2026-11-23에 `langfuse/langfuse`의 `v4.83.0` 태그(`fe82bdc`, 2026-11-19 공개, 그날 기준 최신 릴리스)에서 `web/src/features/mcp/server/bootstrap.ts`, 모든 도구 파일, v4.57.0–v4.83.0 GitHub 릴리스 노트(MCP 언급 24건)를 읽었습니다. **공유 스택은 업그레이드하지 않았고, 아래 내용은 하나도 실행하지 않았습니다.**
 
 | 4.83.0 소스의 변화 | 도구 | 릴리스 |
 |---|---|---|

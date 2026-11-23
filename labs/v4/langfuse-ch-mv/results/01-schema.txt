@@ -1,0 +1,76 @@
+# 01-schema.sh, 2026-11-23T10:50:11Z, ClickHouse 26.8.22.13, Langfuse image docker.io/langfuse/langfuse:4.56.0
+
+## Tables in database default
+    ┌─name─────────────────────────┬─engine─────────────┬─total_rows─┐
+ 1. │ events_core_mv               │ MaterializedView   │       ᴺᵁᴸᴸ │
+ 2. │ schema_migrations            │ MergeTree          │        102 │
+ 3. │ blob_storage_file_log        │ ReplacingMergeTree │       3654 │
+ 4. │ dataset_run_items_rmt        │ ReplacingMergeTree │          0 │
+ 5. │ events_core                  │ ReplacingMergeTree │      24289 │
+ 6. │ events_full                  │ ReplacingMergeTree │      34380 │
+ 7. │ observations                 │ ReplacingMergeTree │          0 │
+ 8. │ observations_batch_staging   │ ReplacingMergeTree │          0 │
+ 9. │ observations_pid_tid_sorting │ ReplacingMergeTree │          0 │
+10. │ scores                       │ ReplacingMergeTree │       3291 │
+11. │ topic_assignments            │ ReplacingMergeTree │          0 │
+12. │ topic_facet_summaries        │ ReplacingMergeTree │          0 │
+13. │ topics                       │ ReplacingMergeTree │          0 │
+14. │ traces                       │ ReplacingMergeTree │          0 │
+15. │ analytics_observations       │ View               │       ᴺᵁᴸᴸ │
+16. │ analytics_scores             │ View               │       ᴺᵁᴸᴸ │
+17. │ analytics_traces             │ View               │       ᴺᵁᴸᴸ │
+    └──────────────────────────────┴────────────────────┴────────────┘
+last migration applied: 51
+
+## events_full
+ReplacingMergeTree(event_ts, is_deleted) PARTITION BY toYYYYMM(start_time) PRIMARY KEY (project_id, toStartOfMinute(start_time), xxHash32(trace_id)) ORDER BY (project_id, toStartOfMinute(start_time), xxHash32(trace_id), span_id, start_time) SAMPLE BY xxHash32(trace_id)
+columns: 78
+    ┌─name────────────────┬─type─────────────────────────────────────────┬─default_kind─┬─default_expression────┐
+ 1. │ project_id          │ String                                       │              │                       │
+ 2. │ trace_id            │ String                                       │              │                       │
+ 3. │ span_id             │ String                                       │              │                       │
+ 4. │ parent_span_id      │ String                                       │              │                       │
+ 5. │ start_time          │ DateTime64(6)                                │              │                       │
+ 6. │ end_time            │ Nullable(DateTime64(6))                      │              │                       │
+ 7. │ name                │ String                                       │              │                       │
+ 8. │ type                │ LowCardinality(String)                       │              │                       │
+ 9. │ trace_name          │ String                                       │              │                       │
+10. │ tags                │ Array(String)                                │              │                       │
+11. │ level               │ LowCardinality(String)                       │              │                       │
+12. │ provided_model_name │ String                                       │              │                       │
+13. │ usage_details       │ Map(LowCardinality(String), UInt64)          │              │                       │
+14. │ cost_details        │ Map(LowCardinality(String), Decimal(18, 12)) │              │                       │
+15. │ total_cost          │ Decimal(18, 12)                              │ ALIAS        │ cost_details['total'] │
+16. │ input               │ String                                       │              │                       │
+17. │ output              │ String                                       │              │                       │
+18. │ service_name        │ String                                       │              │                       │
+19. │ created_at          │ DateTime64(6)                                │ DEFAULT      │ now()                 │
+20. │ event_ts            │ DateTime64(6)                                │              │                       │
+21. │ is_deleted          │ UInt8                                        │              │                       │
+    └─────────────────────┴──────────────────────────────────────────────┴──────────────┴───────────────────────┘
+
+## Materialized views Langfuse ships
+   ┌─name───────────┬─engine───────────┐
+1. │ events_core_mv │ MaterializedView │
+   └────────────────┴──────────────────┘
+FROM default.events_full
+TO default.events_core
+arrayMap(v -> leftUTF8(v, 200), metadata_values)
+leftUTF8(input, 200)
+leftUTF8(output, 200)
+
+## One trace of this lab, as rows of events_full
+   ┌─root─┬─type───────┬─name──────┬─service_name─┬─model───────┬─tokens─┬───────cost─┬──ms─┬─tags───────────────────────────────────────────────────────────────────┐
+1. │    0 │ SPAN       │ 문서-검색 │ policy-qa    │             │      0 │          0 │  30 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+2. │    1 │ SPAN       │ 규정-질의 │ policy-qa    │             │      0 │          0 │ 409 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+3. │    0 │ GENERATION │ 답변-생성 │ policy-qa    │ gpt-4o-mini │   1837 │ 0.00038625 │ 357 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+4. │    0 │ GENERATION │ 근거-확인 │ policy-qa    │ gpt-4o-mini │    203 │  0.0000327 │  22 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+   └──────┴────────────┴───────────┴──────────────┴─────────────┴────────┴────────────┴─────┴────────────────────────────────────────────────────────────────────────┘
+
+## Rows of this lab by service (OpenTelemetry service.name)
+   ┌─service_name─┬─observations─┬─traces─┐
+1. │ doc-summary  │          506 │    253 │
+2. │ policy-qa    │          993 │    251 │
+3. │ support-chat │         1002 │    255 │
+4. │ voc-classify │          506 │    253 │
+   └──────────────┴──────────────┴────────┘

@@ -170,7 +170,7 @@ Changes no Langfuse migration has made to `events_full` up to 4.83.0, each on a 
 | `MODIFY COLUMN tags String` | OK | **ERROR** Code 43, `has` needs an array | 4,789 | **ERROR** remains (the `SELECT *` view's filter) |
 | `ADD COLUMN lab_probe String DEFAULT ''` | OK | OK | 4,789 | OK |
 
-The failed insert had already written the source rows. The worker that gets the error retries, and every retry adds the rows again. The same happens to a single async insert (`INSERT … VALUES` in Play after the RENAME: error returned, row written):
+The failed insert had already written the source rows. Langfuse's worker puts a failed batch back on its queue and writes it again until `LANGFUSE_INGESTION_CLICKHOUSE_MAX_ATTEMPTS` (default 3) is reached (`ClickhouseWriter` in the 4.56.0 worker image; read in the code, not run here), so each attempt adds the rows again. The same happens to a single async insert (`INSERT … VALUES` in Play after the RENAME: error returned, row written):
 
 ![ClickHouse Play: an insert into the renamed copy fails while pushing to the per-service view](captures/09-upgrade.png)
 
@@ -194,7 +194,7 @@ Before upgrading:
 | Q1 / Q2 / Q3 | 224 → 14 ms, 142 → 6 ms, 50 → 16 ms (6M synthetic rows, medians of 3) |
 | Upgrade 4.56.0 → 4.83.0 | 2 migrations on `events_full` (0053, 0056), both OK with the views attached |
 
-Not covered: a real in-place upgrade of the shared stack (the migrations ran on copies), Langfuse's `dual` and `legacy` write modes, a clustered ClickHouse (`ON CLUSTER`, replicated targets), and refreshable MVs as the alternative for exact counts under retries (see the notes article).
+Not covered: a real in-place upgrade of the shared stack (the migrations ran on copies), Langfuse's `dual` and `legacy` write modes, a clustered ClickHouse (`ON CLUSTER`, replicated targets), and refreshable MVs as the alternative for exact counts under retries (see the notes article), and the worker's re-write of a failed batch after a RENAME (read in the code only).
 
 ---
 
@@ -291,7 +291,7 @@ Langfuse는 새 web 컨테이너가 시작할 때 ClickHouse 마이그레이션�
 | `MODIFY COLUMN tags String` | 성공 | **오류** Code 43, `has`에는 배열이 필요 | 4,789 | **오류** 그대로(`SELECT *` MV의 필터) |
 | `ADD COLUMN lab_probe String DEFAULT ''` | 성공 | 성공 | 4,789 | 성공 |
 
-실패한 INSERT도 원본 행은 이미 써 두었습니다. 오류를 받은 worker는 재시도하고, 재시도할 때마다 행이 또 들어갑니다. 비동기 INSERT 한 건도 같았습니다(RENAME 뒤 Play의 `INSERT … VALUES`: 오류를 돌려주고 행은 써짐).
+실패한 INSERT도 원본 행은 이미 써 두었습니다. Langfuse worker는 실패한 배치를 큐에 다시 넣고 `LANGFUSE_INGESTION_CLICKHOUSE_MAX_ATTEMPTS`(기본값 3)에 이를 때까지 다시 씁니다(4.56.0 worker 이미지의 `ClickhouseWriter`, 코드로 확인했고 여기서 실행하지는 않음). 시도할 때마다 행이 또 들어갑니다. 비동기 INSERT 한 건도 같았습니다(RENAME 뒤 Play의 `INSERT … VALUES`: 오류를 돌려주고 행은 써짐).
 
 업그레이드 전에:
 
@@ -305,4 +305,4 @@ Langfuse는 새 web 컨테이너가 시작할 때 ClickHouse 마이그레이션�
 
 영어 절의 "Measured" 표와 같습니다(2026-11-23, 10:50–11:05 UTC 실행).
 
-다루지 않은 것: 공유 스택의 실제 in-place 업그레이드(마이그레이션은 사본에서만 실행), Langfuse의 `dual`·`legacy` 쓰기 모드, 클러스터 ClickHouse(`ON CLUSTER`, 복제 대상 테이블), 재시도에도 정확한 집계를 위한 refreshable MV(노트 글 참고).
+다루지 않은 것: 공유 스택의 실제 in-place 업그레이드(마이그레이션은 사본에서만 실행), Langfuse의 `dual`·`legacy` 쓰기 모드, 클러스터 ClickHouse(`ON CLUSTER`, 복제 대상 테이블), 재시도에도 정확한 집계를 위한 refreshable MV(노트 글 참고), RENAME 뒤 worker가 실패한 배치를 다시 쓰는 동작(코드로만 확인).

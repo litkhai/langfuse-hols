@@ -1,0 +1,7 @@
+# Publishing keys (tools/lab.schema.md). `web` is not set: whether this lab gets a card is the owner's call.
+title_ko: "Langfuse trace를 한국어 임베딩으로: ClickHouse 벡터 검색으로 비슷한 사례 찾기"
+summary_ko: "Langfuse v4 events_full의 질문과 답을 한국어 임베딩 모델(KURE-v1)로 로컬에서 임베딩해 ClickHouse에 증분으로 쌓고, 실패한 trace와 비슷한 과거 사례 찾기와 주제 묶기를 해 봅니다. 전수 비교와 HNSW 인덱스의 지연과 recall@10도 10만 건까지 쟀습니다."
+title_en: "Similar-case search over Langfuse traces with a Korean embedding model"
+summary_en: "Embed the questions and answers of Langfuse v4 events_full locally with a Korean model (KURE-v1), store them incrementally in ClickHouse, find past traces like a failing one and group traces into topics; brute force vs the HNSW index, latency and recall@10 up to 100,000 vectors."
+category: langfuse
+tags: [langfuse, vector-search, llm]

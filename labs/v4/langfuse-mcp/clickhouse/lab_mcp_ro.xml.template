@@ -1,0 +1,50 @@
+<!-- users.d file for the MCP user. 01-ro-user.sh renders it (password hash) into the
+     ClickHouse container's /etc/clickhouse-server/users.d/; ClickHouse reloads users.d
+     without a restart. The stack's admin user has access_management=0, so the user is
+     defined here instead of by CREATE USER; the <grants> entries are ordinary GRANT/REVOKE
+     statements and read the same in SQL. -->
+<clickhouse>
+  <profiles>
+    <lab_mcp_ro_profile>
+      <!-- readonly=1: SELECT only, and the client cannot change any setting below -->
+      <readonly>1</readonly>
+      <max_execution_time>10</max_execution_time>
+      <!-- not lower: clickhouse-connect (inside mcp-clickhouse) reads all of system.settings,
+           about 1,820 rows on 26.8, when it connects; with 1000 every MCP tool call failed -->
+      <max_result_rows>10000</max_result_rows>
+      <result_overflow_mode>throw</result_overflow_mode>
+      <max_rows_to_read>50000000</max_rows_to_read>
+      <max_memory_usage>1000000000</max_memory_usage>
+    </lab_mcp_ro_profile>
+  </profiles>
+  <quotas>
+    <lab_mcp_ro_quota>
+      <interval>
+        <duration>3600</duration>
+        <queries>600</queries>
+        <errors>100</errors>
+      </interval>
+    </lab_mcp_ro_quota>
+  </quotas>
+  <users>
+    <lab_mcp_ro>
+      <password_sha256_hex>@PASSWORD_SHA256@</password_sha256_hex>
+      <networks><ip>::/0</ip></networks>
+      <profile>lab_mcp_ro_profile</profile>
+      <quota>lab_mcp_ro_quota</quota>
+      <default_database>default</default_database>
+      <access_management>0</access_management>
+      <grants>
+        <!-- the Langfuse database only; no other database, no system writes -->
+        <query>GRANT SELECT ON default.*</query>
+        <!-- prompt and completion bodies stay out of reach of the model -->
+        <query>REVOKE SELECT(input, output) ON default.events_full</query>
+        <query>REVOKE SELECT(input, output) ON default.events_core</query>
+        <query>REVOKE SELECT(input, output) ON default.traces</query>
+        <query>REVOKE SELECT(input, output) ON default.observations</query>
+        <query>REVOKE SELECT(input, output) ON default.observations_batch_staging</query>
+        <query>REVOKE SELECT(input, output) ON default.observations_pid_tid_sorting</query>
+      </grants>
+    </lab_mcp_ro>
+  </users>
+</clickhouse>

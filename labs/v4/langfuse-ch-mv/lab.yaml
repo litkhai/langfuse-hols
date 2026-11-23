@@ -1,0 +1,7 @@
+# Publishing keys (tools/lab.schema.md). Not published: `web` is the owner's call for this lab.
+title_ko: "Langfuse 트레이스 위의 증분 Materialized View"
+summary_ko: "Langfuse v4가 ClickHouse events_full에 쓰는 observation을 서비스·태그별 시간 단위 롤업과 중요 trace 복사본으로. 원본 대비 읽는 행 수와 시간, 재전송·삭제가 MV에 남기는 차이, 업그레이드 마이그레이션이 MV에 하는 일을 측정합니다."
+title_en: "Incremental materialized views on Langfuse traces"
+summary_en: "Hourly rollups per service and tag, and a copy of flagged traces, from Langfuse v4's events_full: rows read vs raw, what retries and deletes leave in a view, what a migration does to it."
+category: langfuse
+tags: [langfuse, materialized-view, llm, performance]

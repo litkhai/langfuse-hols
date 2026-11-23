@@ -1,0 +1,403 @@
+
+===== 99-drop.sh (10:43:47 UTC)
+dropped lab_langfuse_ch_mv
+dropped lab_langfuse_ch_mv_bench
+dropped lab_langfuse_ch_mv_upgrade
+
+===== 01-schema.sh (10:43:47 UTC)
+# 01-schema.sh, 2026-11-23T10:43:48Z, ClickHouse 26.8.22.13, Langfuse image docker.io/langfuse/langfuse:4.56.0
+
+## Tables in database default
+    ┌─name─────────────────────────┬─engine─────────────┬─total_rows─┐
+ 1. │ events_core_mv               │ MaterializedView   │       ᴺᵁᴸᴸ │
+ 2. │ schema_migrations            │ MergeTree          │        102 │
+ 3. │ blob_storage_file_log        │ ReplacingMergeTree │       2598 │
+ 4. │ dataset_run_items_rmt        │ ReplacingMergeTree │          0 │
+ 5. │ events_core                  │ ReplacingMergeTree │      22813 │
+ 6. │ events_full                  │ ReplacingMergeTree │      22816 │
+ 7. │ observations                 │ ReplacingMergeTree │          0 │
+ 8. │ observations_batch_staging   │ ReplacingMergeTree │          0 │
+ 9. │ observations_pid_tid_sorting │ ReplacingMergeTree │          0 │
+10. │ scores                       │ ReplacingMergeTree │       2478 │
+11. │ topic_assignments            │ ReplacingMergeTree │          0 │
+12. │ topic_facet_summaries        │ ReplacingMergeTree │          0 │
+13. │ topics                       │ ReplacingMergeTree │          0 │
+14. │ traces                       │ ReplacingMergeTree │          0 │
+15. │ analytics_observations       │ View               │       ᴺᵁᴸᴸ │
+16. │ analytics_scores             │ View               │       ᴺᵁᴸᴸ │
+17. │ analytics_traces             │ View               │       ᴺᵁᴸᴸ │
+    └──────────────────────────────┴────────────────────┴────────────┘
+
+last migration applied: 51
+
+## events_full
+ReplacingMergeTree(event_ts, is_deleted) PARTITION BY toYYYYMM(start_time) PRIMARY KEY (project_id, toStartOfMinute(start_time), xxHash32(trace_id)) ORDER BY (project_id, toStartOfMinute(start_time), xxHash32(trace_id), span_id, start_time) SAMPLE BY xxHash32(trace_id)
+
+columns: 78
+    ┌─name────────────────┬─type─────────────────────────────────────────┬─default_kind─┬─default_expression────┐
+ 1. │ project_id          │ String                                       │              │                       │
+ 2. │ trace_id            │ String                                       │              │                       │
+ 3. │ span_id             │ String                                       │              │                       │
+ 4. │ parent_span_id      │ String                                       │              │                       │
+ 5. │ start_time          │ DateTime64(6)                                │              │                       │
+ 6. │ end_time            │ Nullable(DateTime64(6))                      │              │                       │
+ 7. │ name                │ String                                       │              │                       │
+ 8. │ type                │ LowCardinality(String)                       │              │                       │
+ 9. │ trace_name          │ String                                       │              │                       │
+10. │ tags                │ Array(String)                                │              │                       │
+11. │ level               │ LowCardinality(String)                       │              │                       │
+12. │ provided_model_name │ String                                       │              │                       │
+13. │ usage_details       │ Map(LowCardinality(String), UInt64)          │              │                       │
+14. │ cost_details        │ Map(LowCardinality(String), Decimal(18, 12)) │              │                       │
+15. │ total_cost          │ Decimal(18, 12)                              │ ALIAS        │ cost_details['total'] │
+16. │ input               │ String                                       │              │                       │
+17. │ output              │ String                                       │              │                       │
+18. │ service_name        │ String                                       │              │                       │
+19. │ created_at          │ DateTime64(6)                                │ DEFAULT      │ now()                 │
+20. │ event_ts            │ DateTime64(6)                                │              │                       │
+21. │ is_deleted          │ UInt8                                        │              │                       │
+    └─────────────────────┴──────────────────────────────────────────────┴──────────────┴───────────────────────┘
+
+
+## Materialized views Langfuse ships
+   ┌─name───────────┬─engine───────────┐
+1. │ events_core_mv │ MaterializedView │
+   └────────────────┴──────────────────┘
+
+FROM default.events_full
+TO default.events_core
+arrayMap(v -> leftUTF8(v, 200), metadata_values)
+leftUTF8(input, 200)
+leftUTF8(output, 200)
+
+## One trace of this lab, as rows of events_full
+   ┌─root─┬─type───────┬─name──────┬─service_name─┬─model───────┬─tokens─┬───────cost─┬──ms─┬─tags───────────────────────────────────────────────────────────────────┐
+1. │    0 │ SPAN       │ 문서-검색 │ policy-qa    │             │      0 │          0 │  30 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+2. │    1 │ SPAN       │ 규정-질의 │ policy-qa    │             │      0 │          0 │ 409 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+3. │    0 │ GENERATION │ 답변-생성 │ policy-qa    │ gpt-4o-mini │   1837 │ 0.00038625 │ 357 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+4. │    0 │ GENERATION │ 근거-확인 │ policy-qa    │ gpt-4o-mini │    203 │  0.0000327 │  22 │ ['svc:policy-qa','team:compliance','env:staging','lab:langfuse-ch-mv'] │
+   └──────┴────────────┴───────────┴──────────────┴─────────────┴────────┴────────────┴─────┴────────────────────────────────────────────────────────────────────────┘
+
+
+## Rows of this lab by service (OpenTelemetry service.name)
+   ┌─service_name─┬─observations─┬─traces─┐
+1. │ doc-summary  │          206 │    103 │
+2. │ policy-qa    │          401 │    102 │
+3. │ support-chat │          407 │    104 │
+4. │ voc-classify │          206 │    103 │
+   └──────────────┴──────────────┴────────┘
+
+
+===== 02-seed.sh 11231043a 100 (10:43:48 UTC)
+✓ voc-classify: 100 traces (batch 11231043a, 15 tagged review:needed)
+✓ doc-summary: 100 traces (batch 11231043a, 14 tagged review:needed)
+✓ policy-qa: 100 traces (batch 11231043a, 16 tagged review:needed)
+✓ support-chat: 100 traces (batch 11231043a, 9 tagged review:needed)
+batch 11231043a: 1191 observations in events_full
+   ┌─service_name─┬─type───────┬─observations─┬─traces─┐
+1. │ doc-summary  │ GENERATION │          100 │    100 │
+2. │ doc-summary  │ SPAN       │          100 │    100 │
+3. │ policy-qa    │ GENERATION │          195 │    100 │
+4. │ policy-qa    │ SPAN       │          200 │    100 │
+5. │ support-chat │ GENERATION │          196 │    100 │
+6. │ support-chat │ SPAN       │          200 │    100 │
+7. │ voc-classify │ GENERATION │          100 │    100 │
+8. │ voc-classify │ SPAN       │          100 │    100 │
+   └──────────────┴────────────┴──────────────┴────────┘
+
+
+===== 03-mv.sh (10:44:47 UTC)
+cutoff: 2026-11-23 10:45:07.000000 (server time zone UTC)
+backfilled obs_hourly_by_service: 9 rows
+backfilled obs_hourly_by_tag: 20 rows
+backfilled review_observations: 301 rows
+   ┌─name─────────────────────┬─engine───────────────┬─total_rows─┐
+1. │ obs_hourly_by_service    │ AggregatingMergeTree │          9 │
+2. │ obs_hourly_by_service_mv │ MaterializedView     │       ᴺᵁᴸᴸ │
+3. │ obs_hourly_by_tag        │ AggregatingMergeTree │         20 │
+4. │ obs_hourly_by_tag_mv     │ MaterializedView     │       ᴺᵁᴸᴸ │
+5. │ review_observations      │ ReplacingMergeTree   │        301 │
+6. │ review_observations_mv   │ MaterializedView     │       ᴺᵁᴸᴸ │
+   └──────────────────────────┴──────────────────────┴────────────┘
+
+
+===== 04-check.sh (10:45:28 UTC)
+# 04-check.sh, 2026-11-23T10:45:28Z: the per-service rollup now
+   ┌─service_name─┬─traces─┬─observations─┬─errors─┬─tokens─┬─cost_usd─┬─gen_p95_ms─┐
+1. │ doc-summary  │    203 │          406 │      9 │ 613990 │   2.1062 │        383 │
+2. │ policy-qa    │    202 │          796 │     12 │ 311758 │   0.0683 │        368 │
+3. │ support-chat │    204 │          803 │     11 │ 252843 │    0.205 │        386 │
+4. │ voc-classify │    203 │          406 │     13 │  64951 │   0.0113 │        386 │
+   └──────────────┴────────┴──────────────┴────────┴────────┴──────────┴────────────┘
+
+PASS  per service: observations, errors, tokens, cost  (4 rows)
+PASS  per service: traces (distinct trace_id vs root observations)  (4 rows)
+PASS  per tag: observations, traces, tokens, cost  (10 rows)
+PASS  review copy (FINAL): rows, traces, input+output bytes  (301	111	69450)
+INFO  review copy without FINAL: 301 rows
+INFO  latency p95 of GENERATION observations (ms), raw quantileExact vs view t-digest:
+   ┌─service_name─┬─p95_exact─┬─p95_tdigest─┐
+1. │ doc-summary  │       383 │         383 │
+2. │ policy-qa    │       368 │         368 │
+3. │ support-chat │       386 │         386 │
+4. │ voc-classify │       386 │         386 │
+   └──────────────┴───────────┴─────────────┘
+
+4 PASS, 0 FAIL
+
+===== 02-seed.sh 11231043b 50 (10:45:29 UTC)
+✓ doc-summary: 50 traces (batch 11231043b, 11 tagged review:needed)
+✓ voc-classify: 50 traces (batch 11231043b, 5 tagged review:needed)
+✓ policy-qa: 50 traces (batch 11231043b, 2 tagged review:needed)
+✓ support-chat: 50 traces (batch 11231043b, 8 tagged review:needed)
+batch 11231043b: 597 observations in events_full
+   ┌─service_name─┬─type───────┬─observations─┬─traces─┐
+1. │ doc-summary  │ GENERATION │           50 │     50 │
+2. │ doc-summary  │ SPAN       │           50 │     50 │
+3. │ policy-qa    │ GENERATION │          100 │     50 │
+4. │ policy-qa    │ SPAN       │          100 │     50 │
+5. │ support-chat │ GENERATION │           97 │     50 │
+6. │ support-chat │ SPAN       │          100 │     50 │
+7. │ voc-classify │ GENERATION │           50 │     50 │
+8. │ voc-classify │ SPAN       │           50 │     50 │
+   └──────────────┴────────────┴──────────────┴────────┘
+
+
+===== 04-check.sh (10:46:06 UTC)
+# 04-check.sh, 2026-11-23T10:46:06Z: the per-service rollup now
+   ┌─service_name─┬─traces─┬─observations─┬─errors─┬─tokens─┬─cost_usd─┬─gen_p95_ms─┐
+1. │ doc-summary  │    253 │          506 │     13 │ 762914 │   2.6066 │        383 │
+2. │ policy-qa    │    252 │          996 │     12 │ 392791 │   0.0857 │        365 │
+3. │ support-chat │    254 │         1000 │     14 │ 311025 │    0.252 │        384 │
+4. │ voc-classify │    253 │          506 │     14 │  81625 │   0.0142 │        387 │
+   └──────────────┴────────┴──────────────┴────────┴────────┴──────────┴────────────┘
+
+PASS  per service: observations, errors, tokens, cost  (4 rows)
+PASS  per service: traces (distinct trace_id vs root observations)  (4 rows)
+PASS  per tag: observations, traces, tokens, cost  (10 rows)
+PASS  review copy (FINAL): rows, traces, input+output bytes  (370	137	86739)
+INFO  review copy without FINAL: 370 rows
+INFO  latency p95 of GENERATION observations (ms), raw quantileExact vs view t-digest:
+   ┌─service_name─┬─p95_exact─┬─p95_tdigest─┐
+1. │ doc-summary  │       383 │         383 │
+2. │ policy-qa    │       365 │         365 │
+3. │ support-chat │       384 │         384 │
+4. │ voc-classify │       387 │         387 │
+   └──────────────┴───────────┴─────────────┘
+
+4 PASS, 0 FAIL
+
+===== 07-retry-delete.sh (10:46:09 UTC)
+# 07-retry-delete.sh, 2026-11-23T10:46:09Z
+## 1. exporter retry
+export 1: SUCCESS (2 spans)
+export 2: SUCCESS (2 spans)
+b42c0012749b51ef85aa05a24a8ca111
+   ┌─t─────────────────────────┬─rows─┐
+1. │ events_full               │    4 │
+2. │ review_observations       │    4 │
+3. │ review_observations FINAL │    2 │
+4. │ events_full FINAL         │    2 │
+   └───────────────────────────┴──────┘
+
+inserts into events_full that carried this trace (system.query_log, last 5 min, written_rows = 2):
+   ┌──────────event_time─┬─written_rows─┐
+1. │ 2026-11-23 10:46:26 │            2 │
+   └─────────────────────┴──────────────┘
+
+## 2. trace deleted in Langfuse
+trace b30e586e46b7ba55e82811f79f539c87: 3 rows in events_full, 3 in the copy
+{"message":"Trace deleted successfully"}
+gone from events_full after 40 s (polled every 5 s)
+still in the copy: 3 rows, input of the root: {"\\uc9c8\\ubb38": "\\uace0\\uac1d \\uc815\\ubcf4\\ub97c \\uc678\\ubd80 \\ud074\\ub77c\\uc6b0\\ub4dc\\uc5d0 \\uc800\\uc7a5\\ud560 \\ub54c \\ud544\\uc694\\ud55c \\uc2b9\\uc778 \\uc808\\ucc28\\ub294?"}
+## 04-check.sh now (FAIL expected)
+# 04-check.sh, 2026-11-23T10:47:36Z: the per-service rollup now
+   ┌─service_name─┬─traces─┬─observations─┬─errors─┬─tokens─┬─cost_usd─┬─gen_p95_ms─┐
+1. │ doc-summary  │    253 │          506 │     13 │ 762914 │   2.6066 │        383 │
+2. │ policy-qa    │    252 │          996 │     12 │ 392791 │   0.0857 │        365 │
+3. │ support-chat │    256 │         1004 │     14 │ 313425 │   0.2525 │        384 │
+4. │ voc-classify │    253 │          506 │     14 │  81625 │   0.0142 │        387 │
+   └──────────────┴────────┴──────────────┴────────┴────────┴──────────┴────────────┘
+
+FAIL  per service: observations, errors, tokens, cost
+      2,3c2,3
+      < policy-qa	993	11	392791	0.08568194992
+      < support-chat	1002	14	312225	0.252271299918
+      ---
+      > policy-qa	996	12	392791	0.08568194992
+      > support-chat	1004	14	313425	0.252541299918
+FAIL  per service: traces (distinct trace_id vs root observations)
+      2,3c2,3
+      < policy-qa	251
+      < support-chat	255
+      ---
+      > policy-qa	252
+      > support-chat	256
+FAIL  per tag: observations, traces, tokens, cost
+      1c1
+      < env:production	2431	819	1255288	2.379422899813
+      ---
+      > env:production	2436	821	1256488	2.379692899813
+      3c3
+      < review:needed	369	137	143630	0.314733199988
+      ---
+      > review:needed	374	139	144830	0.315003199988
+      5,6c5,6
+      < svc:policy-qa	993	251	392791	0.08568194992
+      < svc:support-chat	1002	255	312225	0.252271299918
+      ---
+      > svc:policy-qa	996	252	392791	0.08568194992
+      > svc:support-chat	1004	256	313425	0.252541299918
+      8,9c8,9
+      < team:compliance	993	251	392791	0.08568194992
+      < team:cx	1508	508	393850	0.266474799892
+      ---
+      > team:compliance	996	252	392791	0.08568194992
+      > team:cx	1510	509	395050	0.266744799892
+FAIL  review copy (FINAL): rows, traces, input+output bytes
+      1c1
+      < 369	137	86216
+      ---
+      > 372	138	86845
+INFO  review copy without FINAL: 374 rows
+INFO  latency p95 of GENERATION observations (ms), raw quantileExact vs view t-digest:
+   ┌─service_name─┬─p95_exact─┬─p95_tdigest─┐
+1. │ doc-summary  │       383 │         383 │
+2. │ policy-qa    │       365 │         365 │
+3. │ support-chat │       384 │         384 │
+4. │ voc-classify │       387 │         387 │
+   └──────────────┴───────────┴─────────────┘
+
+0 PASS, 4 FAIL
+04-check.sh exit code: 1
+
+===== 08-repair.sh (10:47:37 UTC)
+obs_hourly_by_service: rebuilding hours '2026-11-23 10:00:00'
+obs_hourly_by_tag: rebuilding hours '2026-11-23 10:00:00'
+review_observations: 3 rows whose observation is gone from events_full
+
+===== 04-check.sh (10:47:37 UTC)
+# 04-check.sh, 2026-11-23T10:47:37Z: the per-service rollup now
+   ┌─service_name─┬─traces─┬─observations─┬─errors─┬─tokens─┬─cost_usd─┬─gen_p95_ms─┐
+1. │ doc-summary  │    253 │          506 │     13 │ 762914 │   2.6066 │        383 │
+2. │ policy-qa    │    251 │          993 │     11 │ 392791 │   0.0857 │        365 │
+3. │ support-chat │    255 │         1002 │     14 │ 312225 │   0.2523 │        384 │
+4. │ voc-classify │    253 │          506 │     14 │  81625 │   0.0142 │        387 │
+   └──────────────┴────────┴──────────────┴────────┴────────┴──────────┴────────────┘
+
+PASS  per service: observations, errors, tokens, cost  (4 rows)
+PASS  per service: traces (distinct trace_id vs root observations)  (4 rows)
+PASS  per tag: observations, traces, tokens, cost  (10 rows)
+PASS  review copy (FINAL): rows, traces, input+output bytes  (369	137	86216)
+INFO  review copy without FINAL: 371 rows
+INFO  latency p95 of GENERATION observations (ms), raw quantileExact vs view t-digest:
+   ┌─service_name─┬─p95_exact─┬─p95_tdigest─┐
+1. │ doc-summary  │       383 │         383 │
+2. │ policy-qa    │       365 │         365 │
+3. │ support-chat │       384 │         384 │
+4. │ voc-classify │       387 │         387 │
+   └──────────────┴───────────┴─────────────┘
+
+4 PASS, 0 FAIL
+
+===== 05-bench.sh 6 (10:47:38 UTC)
+   ┌─table─────────────────┬────rows─┬─compressed─┐
+1. │ events_full_mv        │ 6000000 │ 652.79 MiB │
+2. │ obs_hourly_by_service │    5768 │ 6.52 MiB   │
+3. │ obs_hourly_by_tag     │   14420 │ 13.48 MiB  │
+4. │ review_observations   │  720423 │ 56.17 MiB  │
+   └───────────────────────┴─────────┴────────────┘
+
+PASS  bench: raw and view agree (traces, observations, cost per service)  (4 rows)
+date                  step                                                   duration_ms  read_rows  read_bytes  result_rows
+2026-11-23T10:47:38Z  insert 500000 rows, no views (median of 3)
+2026-11-23T10:47:38Z  insert 500000 rows, with the 3 views (median of 3)
+2026-11-23T10:47:38Z  Q1 raw: per service, 7 days                            90           1433665    288421254   4
+2026-11-23T10:47:38Z  Q1 view: per service, 7 days                           21           4312       871024      4
+2026-11-23T10:47:38Z  Q2 raw: cost per team tag per day, 30 days             113          6000000    805031565   93
+2026-11-23T10:47:38Z  Q2 view: cost per team tag per day, 30 days            3            14420      591220      93
+2026-11-23T10:47:38Z  Q3 raw: review:needed observations, 24 h, with input   15           244998     85726494    23835
+2026-11-23T10:47:38Z  Q3 copy: review:needed observations, 24 h, with input  4            39038      9620456     23835
+
+===== 06-upgrade.sh (10:49:21 UTC)
+# 06-upgrade.sh, 2026-11-23T10:49:21Z, ClickHouse 26.8.22.13, Langfuse 4.56.0 -> 4.83.0
+
+## Migrations in 4.83.0 that 4.56.0 does not have
+0052_create_audit_logs.up.sql: audit_logs 
+0053_add_skill_observation_references.up.sql: events_core events_core_mv events_full 
+0054_add_audit_logs_support_access.up.sql: audit_logs 
+0055_update_topic_tables.up.sql: topic_assignments topic_facet_summaries 
+0056_compute_event_bytes.up.sql: events_full 
+Shipped migrations whose text changed between the two images (already applied ones are not re-run):
+  0050_scores_trace_index_granularity.up.sql
+
+## Part 1: the events_full statements of the new migrations, applied to a copy with the views attached
+before the migrations (one load of this lab's rows):
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        3007 │                    3007 │                3007 │         369 │      3007 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+  0053_add_skill_observation_references.up.sql: ADD COLUMN IF NOT EXISTS skills_available,ADD COLUMN IF NOT EXISTS skills_resource_loaded: OK
+  0056_compute_event_bytes.up.sql: MODIFY COLUMN event_bytes: OK
+columns of the copy now: 80 (default.events_full: 78)
+insert after the migrations (a second load of the same rows):
+  INSERT INTO ev: OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        6014 │                    6014 │                6014 │         738 │      6014 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+SELECT * view, stored query: SELECT * FROM lab_langfuse_ch_mv_upgrade.ev WHERE has(tags, 'lab:langfuse-ch-mv')
+columns of its target: 78
+
+## Part 2: changes the views would not survive (none of them is in a Langfuse migration up to 4.83.0)
+### ALTER TABLE … RENAME COLUMN provided_model_name TO model_name
+  ALTER: OK
+  INSERT (a Langfuse write): ERROR Code: 47. DB::Exception: Unknown expression identifier `provided_model_name` in scope SELECT project_id, trace_id, span_id, parent_span_id, start_time, end_time, service_name, trace_name, name, type, level, status_message, us
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        3007 │                       0 │                   0 │           0 │         0 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+  INSERT with materialized_views_ignore_errors = 1: OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        6014 │                       0 │                3007 │           0 │      3007 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+### ALTER TABLE … DROP COLUMN service_name
+  ALTER: ERROR Code: 524. DB::Exception: Trying to ALTER DROP column service_name which is referenced by materialized view ['c2__star_mv','c2__review_observations_mv','c2__obs_hourly_by_service_mv']. (ALTER_OF_COLUMN_IS_FORBIDDEN) (version 26.8.22.13 (official
+  INSERT (a Langfuse write): OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        3007 │                    3007 │                3007 │         369 │      3007 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+  INSERT with materialized_views_ignore_errors = 1: OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        6014 │                    6014 │                6014 │         738 │      6014 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+### ALTER TABLE … MODIFY COLUMN tags String
+  ALTER: OK
+  INSERT (a Langfuse write): ERROR Code: 43. DB::Exception: First argument for function has must be an array, map or JSON. Actual String: In scope SELECT project_id, trace_id, span_id, parent_span_id, start_time, end_time, service_name, trace_name, name, type,
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        3007 │                       0 │                   0 │           0 │         0 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+  INSERT with materialized_views_ignore_errors = 1: OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        6014 │                       0 │                   0 │           0 │         0 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+### ALTER TABLE … ADD COLUMN lab_probe String DEFAULT ''
+  ALTER: OK
+  INSERT (a Langfuse write): OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        3007 │                    3007 │                3007 │         369 │      3007 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+  INSERT with materialized_views_ignore_errors = 1: OK
+   ┌─source_rows─┬─by_service_observations─┬─by_tag_observations─┬─review_rows─┬─star_rows─┐
+1. │        6014 │                    6014 │                6014 │         738 │      6014 │
+   └─────────────┴─────────────────────────┴─────────────────────┴─────────────┴───────────┘
+
+dropped lab_langfuse_ch_mv_upgrade
+
+===== done 10:49:28 UTC

@@ -1,0 +1,9 @@
+date	step	duration_ms	read_rows	read_bytes	result_rows
+2026-11-23T10:57:38Z	insert 500000 rows, no views (median of 3)	18577	500000	4000000	500000
+2026-11-23T10:57:38Z	insert 500000 rows, with the 3 views (median of 3)	18018	2000000	489771919	600397
+2026-11-23T10:57:38Z	Q1 raw: per service, 7 days	224	1435456	288780619	4
+2026-11-23T10:57:38Z	Q1 view: per service, 7 days	14	4320	872640	4
+2026-11-23T10:57:38Z	Q2 raw: cost per team tag per day, 30 days	142	6000000	805031565	93
+2026-11-23T10:57:38Z	Q2 view: cost per team tag per day, 30 days	6	14436	591876	93
+2026-11-23T10:57:38Z	Q3 raw: review:needed observations, 24 h, with input	50	238608	83490769	23793
+2026-11-23T10:57:38Z	Q3 copy: review:needed observations, 24 h, with input	16	39264	9676164	23793

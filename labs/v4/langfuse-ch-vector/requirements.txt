@@ -1,0 +1,10 @@
+# Python dependencies of labs/v4/langfuse-ch-vector (its own venv; the model needs torch).
+#   uv venv -p python3.12 .venv-vector && uv pip install -p .venv-vector/bin/python -r labs/v4/langfuse-ch-vector/requirements.txt
+# langfuse is the v4 track pin (_base/v4/requirements.txt); the rest are the latest on PyPI on
+# 2026-11-23 (pypi.org/pypi/<name>/json).
+langfuse==4.17.0
+sentence-transformers==6.3.0
+torch==2.15.0
+transformers==5.24.0
+numpy==2.5.5
+scikit-learn==1.9.1

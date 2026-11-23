@@ -1,0 +1,79 @@
+# 07-retry-delete.sh, 2026-11-23T10:52:32Z
+## 1. exporter retry
+export 1: SUCCESS (2 spans)
+export 2: SUCCESS (2 spans)
+00ec91a32863fc2226b6555459de95e1
+   ┌─t─────────────────────────┬─rows─┐
+1. │ events_full               │    4 │
+2. │ review_observations       │    4 │
+3. │ review_observations FINAL │    2 │
+4. │ events_full FINAL         │    2 │
+   └───────────────────────────┴──────┘
+inserts of exactly 2 rows into events_full, last 5 min (a retry can also share an insert with other rows):
+   ┌──────────event_time─┬─written_rows─┐
+1. │ 2026-11-23 10:52:33 │            2 │
+2. │ 2026-11-23 10:52:48 │            2 │
+   └─────────────────────┴──────────────┘
+## 2. trace deleted in Langfuse
+trace be6a4e64534104bcecd0cf0c4eea15fe: 3 rows in events_full, 3 in the copy
+{"message":"Trace deleted successfully"}
+gone from events_full after 259 s (polled every 5 s)
+still in the copy: 3 rows, input of the root: {"\\uc9c8\\ubb38": "\\uace0\\uac1d \\uc815\\ubcf4\\ub97c \\uc678\\ubd80 \\ud074\\ub77c\\uc6b0\\ub4dc\\uc5d0 \\uc800\\uc7a5\\ud560 \\ub54c \\ud544\\uc694\\ud55c \\uc2b9\\uc778 \\uc808\\ucc28\\ub294?"}
+## 04-check.sh now (FAIL expected)
+# 04-check.sh, 2026-11-23T10:57:36Z: the per-service rollup now
+   ┌─service_name─┬─traces─┬─observations─┬─errors─┬──tokens─┬─cost_usd─┬─gen_p95_ms─┐
+1. │ doc-summary  │    403 │          806 │     20 │ 1221578 │   4.1846 │        381 │
+2. │ policy-qa    │    401 │         1586 │     18 │  632486 │   0.1379 │        368 │
+3. │ support-chat │    407 │         1596 │     24 │  495396 │   0.3932 │        378 │
+4. │ voc-classify │    403 │          806 │     22 │  131312 │   0.0228 │        387 │
+   └──────────────┴────────┴──────────────┴────────┴─────────┴──────────┴────────────┘
+FAIL  per service: observations, errors, tokens, cost
+      2,3c2,3
+      < policy-qa	1583	17	632486	0.137933849877
+      < support-chat	1594	24	494196	0.392913599872
+      ---
+      > policy-qa	1586	18	632486	0.137933849877
+      > support-chat	1596	24	495396	0.393183599872
+FAIL  per service: traces (distinct trace_id vs root observations)
+      2,3c2,3
+      < policy-qa	400
+      < support-chat	406
+      ---
+      > policy-qa	401
+      > support-chat	407
+FAIL  per tag: observations, traces, tokens, cost
+      1c1
+      < env:production	3876	1306	1996021	3.788743449709
+      ---
+      > env:production	3881	1308	1997221	3.789013449709
+      3c3
+      < review:needed	561	206	206822	0.430448249979
+      ---
+      > review:needed	566	208	208022	0.430718249979
+      5,6c5,6
+      < svc:policy-qa	1583	400	632486	0.137933849877
+      < svc:support-chat	1594	406	494196	0.392913599872
+      ---
+      > svc:policy-qa	1586	401	632486	0.137933849877
+      > svc:support-chat	1596	407	495396	0.393183599872
+      8,9c8,9
+      < team:compliance	1583	400	632486	0.137933849877
+      < team:cx	2400	809	625508	0.415680749827
+      ---
+      > team:compliance	1586	401	632486	0.137933849877
+      > team:cx	2402	810	626708	0.415950749827
+FAIL  review copy (FINAL): rows, traces, input+output bytes
+      1c1
+      < 561	206	128549
+      ---
+      > 564	207	129178
+INFO  review copy without FINAL: 566 rows
+INFO  latency p95 of GENERATION observations (ms), raw quantileExact vs view t-digest:
+   ┌─service_name─┬─p95_exact─┬─p95_tdigest─┐
+1. │ doc-summary  │       381 │         381 │
+2. │ policy-qa    │       368 │         368 │
+3. │ support-chat │       378 │         378 │
+4. │ voc-classify │       387 │         387 │
+   └──────────────┴───────────┴─────────────┘
+0 PASS, 4 FAIL
+04-check.sh exit code: 1

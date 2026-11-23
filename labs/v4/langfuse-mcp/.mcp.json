@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "clickhouse": {
+      "command": "uvx",
+      "args": ["--python", "3.12", "mcp-clickhouse==0.7.0"],
+      "env": {
+        "CLICKHOUSE_HOST": "localhost",
+        "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_SECURE": "false",
+        "CLICKHOUSE_USER": "lab_mcp_ro",
+        "CLICKHOUSE_PASSWORD": "${CLICKHOUSE_RO_PASSWORD}",
+        "CLICKHOUSE_DATABASE": "default",
+        "CLICKHOUSE_MCP_QUERY_TIMEOUT": "15"
+      }
+    },
+    "langfuse": {
+      "type": "http",
+      "url": "${LANGFUSE_HOST:-http://localhost:3000}/api/public/mcp",
+      "headers": {
+        "Authorization": "Basic ${LANGFUSE_MCP_AUTH}"
+      }
+    }
+  }
+}

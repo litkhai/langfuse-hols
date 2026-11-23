@@ -19,7 +19,7 @@ with `--fault` (one expectation inverted) it failed. Log: [lab-output.md](lab-ou
 | What is missing for a Korean team? | A breakdown by a **metadata key** (team) or by `service.name` (neither is in the breakdown list), **KST days** (the widget query has no time-zone field; daily buckets come back in UTC days), **KRW**, a **ratio** such as failure rate per prompt version, and a **link** from a row to its trace. |
 | Simplest free tool that does it | Grafana OSS with the official ClickHouse datasource, provisioned from files in this directory: 7 panels, 5 variables, nothing set by hand in the UI. |
 | How expensive are the panels? | On Langfuse's own tables (3,659 seeded traces): 5–13 ms each. On a copy with **3.66 M traces / 11 M observations over 14 days**: 92–529 ms each on a quiet server (62–674 ms in a second quiet run); the two panels that read `team` from the metadata arrays read 6–7 GiB each. |
-| The fix for those two | `team` from a tag instead of the metadata arrays: 272 → 90 ms, 6.0 → 1.0 GiB. A per-day rollup: 4 ms, 58 rows read. The two-step top-N for costly traces: 529 → 213 ms. Rollups on Langfuse's tables as such are the subject of the MV lab ([#114](https://github.com/litkhai/langfuse-hols/issues/114)). |
+| The fix for those two | `team` from a tag instead of the metadata arrays: 272 → 90 ms, 6.0 → 1.0 GiB. A per-day rollup: 4 ms, 58 rows read. The two-step top-N for costly traces: 529 → 213 ms. Rollups on Langfuse's tables as such are the subject of the MV lab ([langfuse-ch-mv](../langfuse-ch-mv/)). |
 
 ### Built-in dashboards in Langfuse 4.56.0
 
@@ -199,7 +199,7 @@ the second pass uses the `idx_trace_id` bloom filter of `events_core`: `EXPLAIN 
 1,844 granules of the copy. Fix A needs the team
 in the trace tags as well (here the seed writes both). Fix B moves the work to insert time; this lab builds the rollup only
 on its own copy. An MV on Langfuse's own `events_core`, and what happens to it when Langfuse rewrites rows or an exporter
-retries, is the MV lab's subject ([#114](https://github.com/litkhai/langfuse-hols/issues/114)), not repeated here.
+retries, is the MV lab's subject ([langfuse-ch-mv](../langfuse-ch-mv/)), not repeated here.
 
 ---
 
@@ -218,7 +218,7 @@ Docker 29.9.3, Python 3.12.14, 화면 캡처용 Node 26.10.0 + Playwright. [07-c
 | 한국 팀에게 빠진 것 | **메타데이터 키**(팀)나 `service.name` 기준 분해(분해 목록에 없음), **KST 일 단위**(위젯 쿼리에 시간대 필드가 없고 일 단위 버킷이 UTC 날짜로 옴), **원화**, 프롬프트 버전별 실패율 같은 **비율**, 행에서 trace로 가는 **링크** |
 | 가장 간단한 무료 도구 | Grafana OSS + 공식 ClickHouse 데이터소스. 이 디렉터리의 파일로 프로비저닝하며 패널 7개, 변수 5개, UI에서 손으로 설정하는 것은 없습니다. |
 | 패널 비용 | Langfuse 테이블(넣은 trace 3,659개)에서는 패널당 5–13 ms. **trace 366만 개 / observation 1,098만 개(14일)** 복사본에서는 다른 쿼리가 없는 서버에서 92–529 ms(두 번째 조용한 실행에서는 62–674 ms). 메타데이터 배열에서 `team`을 꺼내는 두 패널은 각각 6–7 GiB를 읽습니다. |
-| 그 두 패널의 해결 | 메타데이터 대신 태그에서 `team`: 272 → 90 ms, 6.0 → 1.0 GiB. 일별 rollup: 4 ms, 58행. 비싼 trace는 두 단계 top-N: 529 → 213 ms. Langfuse 테이블 위의 rollup 자체는 MV 실습에서 다룹니다([#114](https://github.com/litkhai/langfuse-hols/issues/114)). |
+| 그 두 패널의 해결 | 메타데이터 대신 태그에서 `team`: 272 → 90 ms, 6.0 → 1.0 GiB. 일별 rollup: 4 ms, 58행. 비싼 trace는 두 단계 top-N: 529 → 213 ms. Langfuse 테이블 위의 rollup 자체는 MV 실습에서 다룹니다([langfuse-ch-mv](../langfuse-ch-mv/)). |
 
 ### Langfuse 4.56.0 기본 대시보드
 
@@ -363,4 +363,4 @@ p3와 p6가 6–7 GiB를 읽는 이유는 `team`이 `metadata_names` / `metadata
 1,844개 중 34개만 남았습니다. A는 팀이 trace 태그에도
 있어야 합니다(이 실습의 seed는 둘 다 씁니다). B는 일을 적재 시점으로 옮깁니다. 이 실습은 자기 복사본에만 rollup을
 만듭니다. Langfuse의 `events_core`에 직접 거는 MV와, Langfuse가 행을 다시 쓰거나 exporter가 재시도할 때 생기는 일은
-MV 실습에서 다루므로([#114](https://github.com/litkhai/langfuse-hols/issues/114)) 여기서는 반복하지 않습니다.
+MV 실습에서 다루므로([langfuse-ch-mv](../langfuse-ch-mv/)) 여기서는 반복하지 않습니다.

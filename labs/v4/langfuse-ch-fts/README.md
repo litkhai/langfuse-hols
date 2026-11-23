@@ -6,7 +6,7 @@
 
 ## English
 
-**Verified end to end on 2026-11-23** with **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13** (the shared v4 stack, `events_only` mode) and the lab's own **ClickHouse 26.10.10.3** (benchmark repeated on 26.8.22.13), Docker 29.9.3, Python 3.12.14 (seed) and 3.9.6 (stdlib scripts), from an empty lab database and no lab traces: [07-check.py](07-check.py) passed 34 checks; with `--fault` 3 of them failed. Log: [lab-output.md](lab-output.md).
+**Verified end to end on 2026-11-23** with **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13** (the shared v4 stack, `events_only` mode) and the lab's own **ClickHouse 26.10.10.3** (benchmark repeated on 26.8.22.13), Docker 29.9.3, Python 3.12.14 (seed) and 3.9.6 (stdlib scripts), from an empty lab database and no lab traces: [08-check.py](08-check.py) passed 34 checks; with `--fault` 3 of them failed. Log: [lab-output.md](lab-output.md).
 
 ### The short answer
 
@@ -290,7 +290,7 @@ WHERE has(tags, 'batch:live')
 
 ## 한국어
 
-**2026-11-23 처음부터 끝까지 검증**: **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13**(공용 v4 스택, `events_only` 모드), 실습용 **ClickHouse 26.10.10.3**(벤치마크는 26.8.22.13에서도 반복), Docker 29.9.3, Python 3.12.14(시드)와 3.9.6(표준 라이브러리 스크립트). 빈 실습 데이터베이스, 실습 trace 없는 상태에서 시작했습니다. [07-check.py](07-check.py)가 검사 34개를 통과했고, `--fault`에서는 그중 3개가 실패했습니다. 기록: [lab-output.md](lab-output.md).
+**2026-11-23 처음부터 끝까지 검증**: **Langfuse v4.56.0 / SDK 4.17.0 / CH 26.8.22.13**(공용 v4 스택, `events_only` 모드), 실습용 **ClickHouse 26.10.10.3**(벤치마크는 26.8.22.13에서도 반복), Docker 29.9.3, Python 3.12.14(시드)와 3.9.6(표준 라이브러리 스크립트). 빈 실습 데이터베이스, 실습 trace 없는 상태에서 시작했습니다. [08-check.py](08-check.py)가 검사 34개를 통과했고, `--fault`에서는 그중 3개가 실패했습니다. 기록: [lab-output.md](lab-output.md).
 
 ### 짧은 답
 

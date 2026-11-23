@@ -1,0 +1,293 @@
+{
+ "clickhouse": "26.8.22.13",
+ "terms": {
+  "중도상환수수료": {
+   "input": {
+    "support-chat": {
+     "api": 0,
+     "truth": 0,
+     "copy_ngrams2": 0
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 0,
+     "copy_ngrams2": 0
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 0,
+     "copy_ngrams2": 0
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 0,
+     "truth": 188,
+     "copy_ngrams2": 188
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 283,
+     "copy_ngrams2": 283
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 188,
+     "copy_ngrams2": 188
+    }
+   }
+  },
+  "중도상환수수료는": {
+   "input": {
+    "support-chat": {
+     "api": 0,
+     "truth": 0,
+     "copy_ngrams2": 0
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 0,
+     "copy_ngrams2": 0
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 0,
+     "copy_ngrams2": 0
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 0,
+     "truth": 188,
+     "copy_ngrams2": 188
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 283,
+     "copy_ngrams2": 283
+    },
+    "answer-generation": {
+     "api": 188,
+     "truth": 188,
+     "copy_ngrams2": 188
+    }
+   }
+  },
+  "주택담보대출": {
+   "input": {
+    "support-chat": {
+     "api": 0,
+     "truth": 87,
+     "copy_ngrams2": 87
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 87,
+     "copy_ngrams2": 87
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 87,
+     "copy_ngrams2": 87
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 0,
+     "truth": 181,
+     "copy_ngrams2": 181
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 273,
+     "copy_ngrams2": 273
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 181,
+     "copy_ngrams2": 181
+    }
+   }
+  },
+  "대출": {
+   "input": {
+    "support-chat": {
+     "api": 0,
+     "truth": 524,
+     "copy_ngrams2": 524
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 524,
+     "copy_ngrams2": 524
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 524,
+     "copy_ngrams2": 524
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 0,
+     "truth": 524,
+     "copy_ngrams2": 524
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 524,
+     "copy_ngrams2": 524
+    },
+    "answer-generation": {
+     "api": 389,
+     "truth": 524,
+     "copy_ngrams2": 524
+    }
+   }
+  },
+  "환불요청": {
+   "input": {
+    "support-chat": {
+     "api": 0,
+     "truth": 132,
+     "copy_ngrams2": 132
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 132,
+     "copy_ngrams2": 132
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 132,
+     "copy_ngrams2": 132
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 0,
+     "truth": 252,
+     "copy_ngrams2": 392
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 399,
+     "copy_ngrams2": 532
+    },
+    "answer-generation": {
+     "api": 252,
+     "truth": 252,
+     "copy_ngrams2": 392
+    }
+   }
+  },
+  "OTP": {
+   "input": {
+    "support-chat": {
+     "api": 168,
+     "truth": 168,
+     "copy_ngrams2": 168
+    },
+    "retrieve-context": {
+     "api": 168,
+     "truth": 168,
+     "copy_ngrams2": 168
+    },
+    "answer-generation": {
+     "api": 168,
+     "truth": 168,
+     "copy_ngrams2": 168
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 311,
+     "truth": 311,
+     "copy_ngrams2": 311
+    },
+    "retrieve-context": {
+     "api": 424,
+     "truth": 424,
+     "copy_ngrams2": 424
+    },
+    "answer-generation": {
+     "api": 182,
+     "truth": 311,
+     "copy_ngrams2": 311
+    }
+   }
+  },
+  "timeout": {
+   "input": {
+    "support-chat": {
+     "api": 128,
+     "truth": 128,
+     "copy_ngrams2": 128
+    },
+    "retrieve-context": {
+     "api": 128,
+     "truth": 128,
+     "copy_ngrams2": 128
+    },
+    "answer-generation": {
+     "api": 128,
+     "truth": 128,
+     "copy_ngrams2": 128
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 270,
+     "truth": 270,
+     "copy_ngrams2": 270
+    },
+    "retrieve-context": {
+     "api": 393,
+     "truth": 393,
+     "copy_ngrams2": 393
+    },
+    "answer-generation": {
+     "api": 270,
+     "truth": 270,
+     "copy_ngrams2": 270
+    }
+   }
+  },
+  "앱": {
+   "input": {
+    "support-chat": {
+     "api": 0,
+     "truth": 469,
+     "copy_ngrams2": 0
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 469,
+     "copy_ngrams2": 0
+    },
+    "answer-generation": {
+     "api": 0,
+     "truth": 469,
+     "copy_ngrams2": 0
+    }
+   },
+   "output": {
+    "support-chat": {
+     "api": 0,
+     "truth": 1067,
+     "copy_ngrams2": 0
+    },
+    "retrieve-context": {
+     "api": 0,
+     "truth": 1407,
+     "copy_ngrams2": 0
+    },
+    "answer-generation": {
+     "api": 392,
+     "truth": 1067,
+     "copy_ngrams2": 0
+    }
+   }
+  }
+ }
+}

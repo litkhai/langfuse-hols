@@ -1,0 +1,673 @@
+{
+ "versions": {
+  "LF": "26.8.22.13",
+  "FTS": "26.10.10.3"
+ },
+ "tokens": {
+  "splitByNonAlpha": {
+   "tokens": "['주택담보대출을','OTP가','API','timeout으로']",
+   "same_on_both": true
+  },
+  "icu('ko')": {
+   "tokens": "['주택담보대출을','OTP','가','API','timeout','으로']",
+   "same_on_both": true
+  },
+  "asciiCJK": {
+   "tokens": "['주','택','담','보','대','출','을','OTP','가','API','timeout','으','로']",
+   "same_on_both": true
+  },
+  "ngrams(2)": {
+   "tokens": "['주택','택담','담보','보대','대출','출을','을 ',' O','OT','TP','P가','가 ',' A','AP','PI','I ',' t','ti','im','me','eo','ou','ut','t으','으로']",
+   "same_on_both": true
+  },
+  "ngrams(3)": {
+   "tokens": "['주택담','택담보','담보대','보대출','대출을','출을 ','을 O',' OT','OTP','TP가','P가 ','가 A',' AP','API','PI ','I t',' ti','tim','ime','meo','eou','out','ut으','t으로']",
+   "same_on_both": true
+  },
+  "sparseGrams": {
+   "tokens": "['주택담','택담보','담보대','보대출','담보대출','대출을','담보대출을','출을 ','을 O',' OT','OTP',' OTP','TP가','P가 ','TP가 ','가 A','TP가 A',' OTP가 A','을 OTP가 A',' AP','API','PI ','API ',' API ','I t',' ti','tim',' tim','ime',' time','meo',' timeo','eou','out','eout','ut으','eout으',' timeout으','I timeout으',' API timeout으','t으로']",
+   "same_on_both": true
+  }
+ },
+ "decode": {
+  "LF": "[{\"role\":\"user\",\"content\":\"대출을 갚으면\"}]",
+  "FTS": "[{\"role\":\"user\",\"content\":\"대출을 갚으면\"}]"
+ },
+ "rows": 9000,
+ "truth": {
+  "대출": 1572,
+  "주택담보대출": 782,
+  "담보대출": 782,
+  "비밀번호 재설정": 836,
+  "환불요청": 1073,
+  "OTP": 1182,
+  "앱": 3767,
+  "timeout": 1069
+ },
+ "matrix": {
+  "splitByNonAlpha": {
+   "대출": {
+    "needle_tokens": "['대출']",
+    "hasAllTokens": {
+     "found": 1322,
+     "false_pos": 0,
+     "missed": 250
+    },
+    "hasPhrase": {
+     "found": 1322,
+     "false_pos": 0,
+     "missed": 250
+    },
+    "hasToken": {
+     "found": 1322,
+     "false_pos": 0,
+     "missed": 250
+    }
+   },
+   "주택담보대출": {
+    "needle_tokens": "['주택담보대출']",
+    "hasAllTokens": {
+     "found": 261,
+     "false_pos": 0,
+     "missed": 521
+    },
+    "hasPhrase": {
+     "found": 261,
+     "false_pos": 0,
+     "missed": 521
+    },
+    "hasToken": {
+     "found": 261,
+     "false_pos": 0,
+     "missed": 521
+    }
+   },
+   "담보대출": {
+    "needle_tokens": "['담보대출']",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 782
+    },
+    "hasPhrase": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 782
+    },
+    "hasToken": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 782
+    }
+   },
+   "비밀번호 재설정": {
+    "needle_tokens": "['비밀번호','재설정']",
+    "hasAllTokens": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasToken": {
+     "error": "FTS: Code: 277. DB::Exception: Index `idx` is not used and setting 'force_data_skipping_indices' contains it. (INDEX_NOT_USED) (version 26.10.10.3 (official build))"
+    }
+   },
+   "환불요청": {
+    "needle_tokens": "['환불요청']",
+    "hasAllTokens": {
+     "found": 903,
+     "false_pos": 0,
+     "missed": 170
+    },
+    "hasPhrase": {
+     "found": 903,
+     "false_pos": 0,
+     "missed": 170
+    },
+    "hasToken": {
+     "found": 903,
+     "false_pos": 0,
+     "missed": 170
+    }
+   },
+   "OTP": {
+    "needle_tokens": "['otp']",
+    "hasAllTokens": {
+     "found": 665,
+     "false_pos": 0,
+     "missed": 517
+    },
+    "hasPhrase": {
+     "found": 665,
+     "false_pos": 0,
+     "missed": 517
+    },
+    "hasToken": {
+     "found": 665,
+     "false_pos": 0,
+     "missed": 517
+    }
+   },
+   "앱": {
+    "needle_tokens": "['앱']",
+    "hasAllTokens": {
+     "found": 1289,
+     "false_pos": 0,
+     "missed": 2478
+    },
+    "hasPhrase": {
+     "found": 1289,
+     "false_pos": 0,
+     "missed": 2478
+    },
+    "hasToken": {
+     "found": 1289,
+     "false_pos": 0,
+     "missed": 2478
+    }
+   },
+   "timeout": {
+    "needle_tokens": "['timeout']",
+    "hasAllTokens": {
+     "found": 933,
+     "false_pos": 0,
+     "missed": 136
+    },
+    "hasPhrase": {
+     "found": 933,
+     "false_pos": 0,
+     "missed": 136
+    },
+    "hasToken": {
+     "found": 933,
+     "false_pos": 0,
+     "missed": 136
+    }
+   }
+  },
+  "icu('ko')": {
+   "대출": {
+    "needle_tokens": "['대출']",
+    "hasAllTokens": {
+     "found": 1322,
+     "false_pos": 0,
+     "missed": 250
+    }
+   },
+   "주택담보대출": {
+    "needle_tokens": "['주택담보대출']",
+    "hasAllTokens": {
+     "found": 261,
+     "false_pos": 0,
+     "missed": 521
+    }
+   },
+   "담보대출": {
+    "needle_tokens": "['담보대출']",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 782
+    }
+   },
+   "비밀번호 재설정": {
+    "needle_tokens": "['비밀번호','재설정']",
+    "hasAllTokens": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "환불요청": {
+    "needle_tokens": "['환불요청']",
+    "hasAllTokens": {
+     "found": 903,
+     "false_pos": 0,
+     "missed": 170
+    }
+   },
+   "OTP": {
+    "needle_tokens": "['otp']",
+    "hasAllTokens": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "앱": {
+    "needle_tokens": "['앱']",
+    "hasAllTokens": {
+     "found": 1289,
+     "false_pos": 0,
+     "missed": 2478
+    }
+   },
+   "timeout": {
+    "needle_tokens": "['timeout']",
+    "hasAllTokens": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    }
+   }
+  },
+  "asciiCJK": {
+   "대출": {
+    "needle_tokens": "['대','출']",
+    "hasAllTokens": {
+     "found": 1792,
+     "false_pos": 220,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1572,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "주택담보대출": {
+    "needle_tokens": "['주','택','담','보','대','출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "담보대출": {
+    "needle_tokens": "['담','보','대','출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "비밀번호 재설정": {
+    "needle_tokens": "['비','밀','번','호','재','설','정']",
+    "hasAllTokens": {
+     "found": 1147,
+     "false_pos": 311,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "환불요청": {
+    "needle_tokens": "['환','불','요','청']",
+    "hasAllTokens": {
+     "found": 1462,
+     "false_pos": 389,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1073,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "OTP": {
+    "needle_tokens": "['otp']",
+    "hasAllTokens": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "앱": {
+    "needle_tokens": "['앱']",
+    "hasAllTokens": {
+     "found": 3767,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 3767,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "timeout": {
+    "needle_tokens": "['timeout']",
+    "hasAllTokens": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    }
+   }
+  },
+  "ngrams(2)": {
+   "대출": {
+    "needle_tokens": "['대출']",
+    "hasAllTokens": {
+     "found": 1572,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1572,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "주택담보대출": {
+    "needle_tokens": "['주택','택담','담보','보대','대출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "담보대출": {
+    "needle_tokens": "['담보','보대','대출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "비밀번호 재설정": {
+    "needle_tokens": "['비밀','밀번','번호','호 ',' 재','재설','설정']",
+    "hasAllTokens": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "환불요청": {
+    "needle_tokens": "['환불','불요','요청']",
+    "hasAllTokens": {
+     "found": 1390,
+     "false_pos": 317,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1073,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "OTP": {
+    "needle_tokens": "['ot','tp']",
+    "hasAllTokens": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "앱": {
+    "needle_tokens": "[]",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 3767
+    },
+    "hasPhrase": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 3767
+    }
+   },
+   "timeout": {
+    "needle_tokens": "['ti','im','me','eo','ou','ut']",
+    "hasAllTokens": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    },
+    "hasPhrase": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    }
+   }
+  },
+  "ngrams(3)": {
+   "대출": {
+    "needle_tokens": "[]",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 1572
+    }
+   },
+   "주택담보대출": {
+    "needle_tokens": "['주택담','택담보','담보대','보대출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "담보대출": {
+    "needle_tokens": "['담보대','보대출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "비밀번호 재설정": {
+    "needle_tokens": "['비밀번','밀번호','번호 ','호 재',' 재설','재설정']",
+    "hasAllTokens": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "환불요청": {
+    "needle_tokens": "['환불요','불요청']",
+    "hasAllTokens": {
+     "found": 1073,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "OTP": {
+    "needle_tokens": "['otp']",
+    "hasAllTokens": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "앱": {
+    "needle_tokens": "[]",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 3767
+    }
+   },
+   "timeout": {
+    "needle_tokens": "['tim','ime','meo','eou','out']",
+    "hasAllTokens": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    }
+   }
+  },
+  "sparseGrams": {
+   "대출": {
+    "needle_tokens": "[]",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 1572
+    }
+   },
+   "주택담보대출": {
+    "needle_tokens": "['주택담','택담보','담보대','보대출','담보대출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "담보대출": {
+    "needle_tokens": "['담보대','보대출','담보대출']",
+    "hasAllTokens": {
+     "found": 782,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "비밀번호 재설정": {
+    "needle_tokens": "['비밀번','밀번호','번호 ','밀번호 ','호 재',' 재설','호 재설','재설정']",
+    "hasAllTokens": {
+     "found": 836,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "환불요청": {
+    "needle_tokens": "['환불요','불요청']",
+    "hasAllTokens": {
+     "found": 1073,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "OTP": {
+    "needle_tokens": "['otp']",
+    "hasAllTokens": {
+     "found": 1182,
+     "false_pos": 0,
+     "missed": 0
+    }
+   },
+   "앱": {
+    "needle_tokens": "[]",
+    "hasAllTokens": {
+     "found": 0,
+     "false_pos": 0,
+     "missed": 3767
+    }
+   },
+   "timeout": {
+    "needle_tokens": "['tim','ime','meo','eou','out','eout']",
+    "hasAllTokens": {
+     "found": 1069,
+     "false_pos": 0,
+     "missed": 0
+    }
+   }
+  }
+ },
+ "langfuse_ui": {
+  "중도상환수수료": {
+   "answer-generation": {
+    "ui": 0,
+    "ui_4_83": 0,
+    "truth": 188
+   },
+   "retrieve-context": {
+    "ui": 283,
+    "ui_4_83": 283,
+    "truth": 283
+   },
+   "support-chat": {
+    "ui": 188,
+    "ui_4_83": 188,
+    "truth": 188
+   }
+  },
+  "주택담보대출": {
+   "answer-generation": {
+    "ui": 87,
+    "ui_4_83": 87,
+    "truth": 233
+   },
+   "retrieve-context": {
+    "ui": 316,
+    "ui_4_83": 316,
+    "truth": 316
+   },
+   "support-chat": {
+    "ui": 233,
+    "ui_4_83": 233,
+    "truth": 233
+   }
+  },
+  "OTP": {
+   "answer-generation": {
+    "ui": 283,
+    "ui_4_83": 283,
+    "truth": 370
+   },
+   "retrieve-context": {
+    "ui": 442,
+    "ui_4_83": 442,
+    "truth": 442
+   },
+   "support-chat": {
+    "ui": 370,
+    "ui_4_83": 370,
+    "truth": 370
+   }
+  },
+  "대출": {
+   "answer-generation": {
+    "ui": 524,
+    "ui_4_83": 524,
+    "truth": 524
+   },
+   "retrieve-context": {
+    "ui": 524,
+    "ui_4_83": 524,
+    "truth": 524
+   },
+   "support-chat": {
+    "ui": 524,
+    "ui_4_83": 524,
+    "truth": 524
+   }
+  }
+ }
+}

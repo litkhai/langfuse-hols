@@ -1,0 +1,30 @@
+# Grafana OSS with the official ClickHouse datasource, on the shared v4 stack's network so it reaches
+# ClickHouse as clickhouse:8123. Everything it shows is provisioned from grafana/ (datasource and
+# dashboard as code); nothing is configured by hand in the UI.
+#   lab_compose up -d     (03-grafana-up.sh)
+services:
+  grafana:
+    image: grafana/grafana:13.2.6
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-58300}:3000"
+    environment:
+      GF_PLUGINS_PREINSTALL_SYNC: grafana-clickhouse-datasource@4.23.5
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run 03-grafana-up.sh}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/langfuse-kr.json
+      CH_USER: ${CLICKHOUSE_USER:?}
+      CH_PASSWORD: ${CLICKHOUSE_PASSWORD:?}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    mem_limit: 384m
+    networks: [langfuse]
+networks:
+  langfuse:
+    external: true
+    name: ${LF_NETWORK:-langfuse-hols-v4_default}

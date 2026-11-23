@@ -1,0 +1,610 @@
+{
+  "uid": "langfuse-kr",
+  "title": "Langfuse · ClickHouse SQL (KST · KRW)",
+  "editable": false,
+  "timezone": "Asia/Seoul",
+  "weekStart": "monday",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-14d/d",
+    "to": "now/d"
+  },
+  "refresh": "",
+  "tags": [
+    "langfuse",
+    "clickhouse"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Langfuse project id",
+        "type": "textbox",
+        "query": "llm-observability",
+        "current": {
+          "text": "llm-observability",
+          "value": "llm-observability"
+        }
+      },
+      {
+        "name": "environment",
+        "label": "environment",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "langfuse-ch"
+        },
+        "query": "SELECT DISTINCT environment FROM ${db}.events_core WHERE project_id = '${project}' AND start_time > now() - INTERVAL 90 DAY ORDER BY environment",
+        "multi": true,
+        "includeAll": false,
+        "refresh": 1,
+        "current": {
+          "text": [
+            "lab-ch-dashboard"
+          ],
+          "value": [
+            "lab-ch-dashboard"
+          ]
+        }
+      },
+      {
+        "name": "krw_per_usd",
+        "label": "KRW / USD",
+        "type": "textbox",
+        "query": "1400",
+        "current": {
+          "text": "1400",
+          "value": "1400"
+        }
+      },
+      {
+        "name": "db",
+        "label": "database",
+        "type": "custom",
+        "query": "default,lab_langfuse_ch_dashboard",
+        "current": {
+          "text": "default",
+          "value": "default"
+        },
+        "options": [
+          {
+            "text": "default",
+            "value": "default",
+            "selected": true
+          },
+          {
+            "text": "lab_langfuse_ch_dashboard",
+            "value": "lab_langfuse_ch_dashboard",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "langfuse_url",
+        "label": "Langfuse URL",
+        "type": "textbox",
+        "query": "http://localhost:3000",
+        "current": {
+          "text": "http://localhost:3000",
+          "value": "http://localhost:3000"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "서비스별 트래픽 (KST 일)",
+      "description": "root observation 수 = trace 수. 하루 경계는 Asia/Seoul 자정.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "sql",
+          "rawSql": "-- p1 · traces per KST day per service (root observations only: one row per trace)\n-- events_core: PRIMARY KEY (project_id, toStartOfMinute(start_time), …), so the project and the\n-- time filter prune granules before anything is read.\nSELECT\n    toStartOfDay(start_time, 'Asia/Seoul') AS time,\n    service_name,\n    count() AS traces\nFROM ${db}.events_core\nWHERE project_id = '${project}'\n  AND environment IN (${environment:singlequote})\n  AND parent_span_id = ''\n  AND $__timeFilter(start_time)\nGROUP BY time, service_name\nORDER BY time, service_name\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "${__field.labels.service_name}",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "팀별 모델 비용 (KRW, KST 일)",
+      "description": "Langfuse가 계산한 USD 비용 × 환율 변수 krw_per_usd.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "sql",
+          "rawSql": "-- p3 · model cost per KST day per team, in KRW (Langfuse's USD cost × the krw_per_usd variable)\n-- `team` is trace metadata (langfuse.trace.metadata.team); v4 copies it onto every observation,\n-- so no join back to the trace is needed.\nSELECT\n    toStartOfDay(start_time, 'Asia/Seoul') AS time,\n    metadata_values[indexOf(metadata_names, 'team')] AS team,\n    round(sum(calculated_total_cost) * ${krw_per_usd}, 0) AS cost_krw\nFROM ${db}.events_core\nWHERE project_id = '${project}'\n  AND environment IN (${environment:singlequote})\n  AND type = 'GENERATION'\n  AND $__timeFilter(start_time)\nGROUP BY time, team\nORDER BY time, team\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyKRW",
+          "displayName": "${__field.labels.team}",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "서비스별 지연 p50 / p95 (초, KST 일)",
+      "description": "root observation의 end_time − start_time.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "sql",
+          "rawSql": "-- p2 · trace latency p50 / p95 per KST day per service, in seconds (root observation duration)\nSELECT\n    toStartOfDay(start_time, 'Asia/Seoul') AS time,\n    service_name,\n    round(quantile(0.5)(dateDiff('millisecond', start_time, end_time)) / 1000, 2) AS p50,\n    round(quantile(0.95)(dateDiff('millisecond', start_time, end_time)) / 1000, 2) AS p95\nFROM ${db}.events_core\nWHERE project_id = '${project}'\n  AND environment IN (${environment:singlequote})\n  AND parent_span_id = ''\n  AND end_time IS NOT NULL\n  AND $__timeFilter(start_time)\nGROUP BY time, service_name\nORDER BY time, service_name\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^p50.*"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "점수 추이: judge 평균 · 👍 비율 (KST 일)",
+      "description": "judge-faithfulness 평균과 user-feedback 1 비율. 서비스는 trace의 root observation에서.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "sql",
+          "rawSql": "-- p7 · score trend per KST day per service: judge-faithfulness average and user-feedback 👍 rate\n-- Scores carry no service, so the trace's root observation supplies it (join on trace_id).\nSELECT\n    toStartOfDay(s.timestamp, 'Asia/Seoul') AS time,\n    t.service_name AS service,\n    round(avgIf(s.value, s.name = 'judge-faithfulness'), 3) AS judge_avg,\n    round(avgIf(s.value, s.name = 'user-feedback'), 3) AS thumbs_up_rate\nFROM ${db}.scores AS s\nINNER JOIN\n(\n    SELECT trace_id, service_name\n    FROM ${db}.events_core\n    WHERE project_id = '${project}'\n      AND environment IN (${environment:singlequote})\n      AND parent_span_id = ''\n      AND $__timeFilter(start_time)\n) AS t ON t.trace_id = s.trace_id\nWHERE s.project_id = '${project}'\n  AND s.name IN ('judge-faithfulness', 'user-feedback')\n  AND $__timeFilter(s.timestamp)\nGROUP BY time, service\nORDER BY time, service\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^thumbs.*"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "프롬프트 버전별 실패율 · judge 점수",
+      "description": "generation의 level = ERROR 비율. judge_avg는 같은 trace의 judge-faithfulness 평균.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "-- p4 · failure rate and judge score per prompt version (generations; ERROR level = failed)\nSELECT\n    prompt_name AS prompt,\n    prompt_version AS version,\n    formatDateTime(min(g.start_time), '%m-%d %H:%i', 'Asia/Seoul') AS first_seen_kst,\n    count() AS generations,\n    countIf(level = 'ERROR') AS failed,\n    round(100 * countIf(level = 'ERROR') / count(), 2) AS failure_pct,\n    round(avg(j.judge), 3) AS judge_avg\nFROM ${db}.events_core AS g\nLEFT JOIN\n(\n    SELECT trace_id, avg(value) AS judge\n    FROM ${db}.scores\n    WHERE project_id = '${project}'\n      AND name = 'judge-faithfulness'\n      AND $__timeFilter(timestamp)\n    GROUP BY trace_id\n) AS j ON j.trace_id = g.trace_id\nWHERE g.project_id = '${project}'\n  AND g.environment IN (${environment:singlequote})\n  AND g.type = 'GENERATION'\n  AND g.prompt_name != ''\n  AND $__timeFilter(g.start_time)\nGROUP BY prompt, version\nORDER BY prompt, version\nSETTINGS join_use_nulls = 1  -- traces without a judge score stay NULL, not 0\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_pct"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 4
+                    },
+                    {
+                      "color": "red",
+                      "value": 7
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "느린 trace 20개",
+      "description": "trace_id를 누르면 Langfuse trace 화면이 열린다.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "-- p5 · the 20 slowest traces in range; trace_id links back to the Langfuse trace page\nSELECT\n    trace_id,\n    formatDateTime(start_time, '%m-%d %H:%i:%S', 'Asia/Seoul') AS start_kst,\n    service_name AS service,\n    user_id,\n    round(dateDiff('millisecond', start_time, end_time) / 1000, 2) AS seconds,\n    level,\n    status_message\nFROM ${db}.events_core\nWHERE project_id = '${project}'\n  AND environment IN (${environment:singlequote})\n  AND parent_span_id = ''\n  AND end_time IS NOT NULL\n  AND $__timeFilter(start_time)\nORDER BY seconds DESC, trace_id\nLIMIT 20\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 290
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Langfuse에서 trace 열기",
+                    "url": "${langfuse_url}/project/${project}/traces/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "비싼 trace 20개 (KRW)",
+      "description": "trace_id를 누르면 Langfuse trace 화면이 열린다.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "langfuse-ch"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "langfuse-ch"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "-- p6 · the 20 costliest traces in range, in KRW (sum over the trace's generations)\nSELECT\n    trace_id,\n    formatDateTime(min(start_time), '%m-%d %H:%i:%S', 'Asia/Seoul') AS start_kst,\n    any(service_name) AS service,\n    any(metadata_values[indexOf(metadata_names, 'team')]) AS team,\n    any(user_id) AS user_id,\n    sum(usage_details['input']) AS input_tokens,\n    sum(usage_details['output']) AS output_tokens,\n    round(sum(calculated_total_cost) * ${krw_per_usd}, 1) AS cost_krw\nFROM ${db}.events_core\nWHERE project_id = '${project}'\n  AND environment IN (${environment:singlequote})\n  AND type = 'GENERATION'\n  AND $__timeFilter(start_time)\nGROUP BY trace_id\nORDER BY cost_krw DESC, trace_id\nLIMIT 20\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_krw"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyKRW"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 290
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Langfuse에서 trace 열기",
+                    "url": "${langfuse_url}/project/${project}/traces/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

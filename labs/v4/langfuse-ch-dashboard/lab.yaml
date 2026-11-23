@@ -1,0 +1,7 @@
+# Publishing keys (tools/lab.schema.md). `web` is not set: publishing the card is the owner's call (#113).
+title_ko: "Langfuse ClickHouse 데이터로 SQL 대시보드 (KST, 원화, 프롬프트 버전별 실패율)"
+summary_ko: "Langfuse 4.56.0 기본 대시보드에 없는 KST 일 단위, 팀별 원화 비용, 프롬프트 버전별 실패율, trace 링크를 Grafana OSS와 ClickHouse SQL로. 패널마다 읽은 행과 시간을 trace 366만 개에서 측정합니다."
+title_en: "SQL dashboards on Langfuse's ClickHouse data (KST, KRW, failure rate per prompt version)"
+summary_en: "What Langfuse 4.56.0's built-in dashboards leave out - KST days, KRW cost per team, failure rate per prompt version, links to traces - in Grafana OSS on ClickHouse SQL, with rows read and time per panel at 3.66 M traces."
+category: langfuse
+tags: [langfuse, llm, observability, performance]

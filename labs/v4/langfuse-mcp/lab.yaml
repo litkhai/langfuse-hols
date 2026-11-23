@@ -1,0 +1,7 @@
+# Publishing keys (tools/lab.schema.md). `web` is left unset: whether this lab gets a card is the owner's call.
+title_ko: "Langfuse trace를 MCP로 AI에게 묻기"
+summary_ko: "Langfuse의 ClickHouse에 붙인 ClickHouse MCP 서버와 Langfuse 자체 MCP 서버를 Claude Code로 비교합니다. 읽기 전용 사용자와 Viewer 키, 모델이 볼 수 있는 범위, 한국어 trace에 대한 질문과 생성된 SQL을 실제 실행으로 확인합니다."
+title_en: "Langfuse traces through MCP"
+summary_en: "ClickHouse MCP on Langfuse's ClickHouse vs Langfuse's own MCP server, from Claude Code: read-only user and Viewer key, what the model sees, questions with the generated SQL."
+category: langfuse
+tags: [langfuse, llm, ai-agents]

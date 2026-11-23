@@ -1,0 +1,881 @@
+{
+ "version": "26.8.22.13",
+ "copies": 220,
+ "runs": 5,
+ "date": "2026-11-23",
+ "build_ms": {
+  "b_none": 7534,
+  "b_word": 18659,
+  "b_ng2": 33795,
+  "b_cjk": 24453
+ },
+ "sizes": {
+  "b_none": {
+   "rows": 1992540,
+   "table_compressed": 9848295,
+   "table_uncompressed": 1048099809,
+   "parts": 1,
+   "content_compressed": 2473373,
+   "content_uncompressed": 911606850
+  },
+  "b_word": {
+   "rows": 1992540,
+   "table_compressed": 9848295,
+   "table_uncompressed": 1048099809,
+   "parts": 1,
+   "index_compressed": 64444316,
+   "index_uncompressed": 64658218,
+   "content_compressed": 2473373,
+   "content_uncompressed": 911606850
+  },
+  "b_cjk": {
+   "rows": 1992540,
+   "table_compressed": 9848295,
+   "table_uncompressed": 1048099809,
+   "parts": 1,
+   "index_compressed": 61268321,
+   "index_uncompressed": 61339739,
+   "content_compressed": 2473373,
+   "content_uncompressed": 911606850
+  },
+  "b_ng2": {
+   "rows": 1992540,
+   "table_compressed": 9848295,
+   "table_uncompressed": 1048099809,
+   "parts": 1,
+   "index_compressed": 175098292,
+   "index_uncompressed": 175101737,
+   "content_compressed": 2473373,
+   "content_uncompressed": 911606850
+  }
+ },
+ "results": [
+  {
+   "runs": 5,
+   "ms": 565,
+   "read_rows": 1992540,
+   "read_bytes": 968280728,
+   "marks": 244,
+   "ms_all": [
+    261,
+    398,
+    617,
+    565,
+    855
+   ],
+   "term": "대출",
+   "method": "LIKE, no index",
+   "table": "b_none",
+   "count": 347160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content LIKE '%대출%'"
+  },
+  {
+   "runs": 5,
+   "ms": 702,
+   "read_rows": 1992540,
+   "read_bytes": 968280728,
+   "marks": 244,
+   "ms_all": [
+    664,
+    793,
+    702,
+    559,
+    1031
+   ],
+   "term": "대출",
+   "method": "ILIKE, no index",
+   "table": "b_none",
+   "count": 347160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content ILIKE '%대출%'"
+  },
+  {
+   "runs": 5,
+   "ms": 125,
+   "read_rows": 1835008,
+   "read_bytes": 72483211,
+   "marks": 224,
+   "ms_all": [
+    189,
+    67,
+    154,
+    125,
+    122
+   ],
+   "term": "대출",
+   "method": "hasToken, splitByNonAlpha",
+   "table": "b_word",
+   "count": 292160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE hasToken(lower(content), '대출')"
+  },
+  {
+   "runs": 5,
+   "ms": 553,
+   "read_rows": 1835008,
+   "read_bytes": 905736176,
+   "marks": 224,
+   "ms_all": [
+    906,
+    1019,
+    404,
+    553,
+    540
+   ],
+   "term": "대출",
+   "method": "Langfuse UI form, splitByNonAlpha",
+   "table": "b_word",
+   "count": 292160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE content ILIKE '%대출%' AND hasAllTokens(lower(content), arraySlice(arrayDistinct(tokens(lower('%대출%'))), 1, 64))"
+  },
+  {
+   "runs": 5,
+   "ms": 714,
+   "read_rows": 1835008,
+   "read_bytes": 905736176,
+   "marks": 224,
+   "ms_all": [
+    786,
+    714,
+    701,
+    932,
+    460
+   ],
+   "term": "대출",
+   "method": "lower LIKE, ngrams(2)",
+   "table": "b_ng2",
+   "count": 347160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE lower(content) LIKE '%대출%'"
+  },
+  {
+   "runs": 5,
+   "ms": 112,
+   "read_rows": 1835008,
+   "read_bytes": 72483211,
+   "marks": 224,
+   "ms_all": [
+    163,
+    84,
+    121,
+    112,
+    72
+   ],
+   "term": "대출",
+   "method": "hasAllTokens, ngrams(2)",
+   "table": "b_ng2",
+   "count": 347160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasAllTokens(lower(content), '대출')"
+  },
+  {
+   "runs": 5,
+   "ms": 582,
+   "read_rows": 1835008,
+   "read_bytes": 905736176,
+   "marks": 224,
+   "ms_all": [
+    1055,
+    411,
+    582,
+    865,
+    370
+   ],
+   "term": "대출",
+   "method": "hasPhrase, ngrams(2)",
+   "table": "b_ng2",
+   "count": 347160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasPhrase(lower(content), '대출')"
+  },
+  {
+   "runs": 5,
+   "ms": 585,
+   "read_rows": 1908736,
+   "read_bytes": 941973070,
+   "marks": 233,
+   "ms_all": [
+    585,
+    402,
+    1003,
+    1147,
+    472
+   ],
+   "term": "대출",
+   "method": "hasPhrase, asciiCJK",
+   "table": "b_cjk",
+   "count": 347160,
+   "truth": 347160,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_cjk WHERE hasPhrase(lower(content), '대출')"
+  },
+  {
+   "runs": 5,
+   "ms": 266,
+   "read_rows": 1992540,
+   "read_bytes": 955078050,
+   "marks": 244,
+   "ms_all": [
+    246,
+    285,
+    274,
+    266,
+    251
+   ],
+   "term": "중도상환수수료",
+   "method": "LIKE, no index",
+   "table": "b_none",
+   "count": 145860,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content LIKE '%중도상환수수료%'"
+  },
+  {
+   "runs": 5,
+   "ms": 236,
+   "read_rows": 1992540,
+   "read_bytes": 955078050,
+   "marks": 244,
+   "ms_all": [
+    236,
+    391,
+    467,
+    178,
+    223
+   ],
+   "term": "중도상환수수료",
+   "method": "ILIKE, no index",
+   "table": "b_none",
+   "count": 145860,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content ILIKE '%중도상환수수료%'"
+  },
+  {
+   "runs": 5,
+   "ms": 2,
+   "read_rows": 0,
+   "read_bytes": 0,
+   "marks": 0,
+   "ms_all": [
+    1,
+    1,
+    2,
+    2,
+    2
+   ],
+   "term": "중도상환수수료",
+   "method": "hasToken, splitByNonAlpha",
+   "table": "b_word",
+   "count": 0,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE hasToken(lower(content), '중도상환수수료')"
+  },
+  {
+   "runs": 5,
+   "ms": 3,
+   "read_rows": 0,
+   "read_bytes": 0,
+   "marks": 0,
+   "ms_all": [
+    3,
+    3,
+    4,
+    2,
+    3
+   ],
+   "term": "중도상환수수료",
+   "method": "Langfuse UI form, splitByNonAlpha",
+   "table": "b_word",
+   "count": 0,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE content ILIKE '%중도상환수수료%' AND hasAllTokens(lower(content), arraySlice(arrayDistinct(tokens(lower('%중도상환수수료%'))), 1, 64))"
+  },
+  {
+   "runs": 5,
+   "ms": 209,
+   "read_rows": 1622016,
+   "read_bytes": 801432106,
+   "marks": 198,
+   "ms_all": [
+    209,
+    220,
+    203,
+    552,
+    203
+   ],
+   "term": "중도상환수수료",
+   "method": "lower LIKE, ngrams(2)",
+   "table": "b_ng2",
+   "count": 145860,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE lower(content) LIKE '%중도상환수수료%'"
+  },
+  {
+   "runs": 5,
+   "ms": 74,
+   "read_rows": 1622016,
+   "read_bytes": 64070307,
+   "marks": 198,
+   "ms_all": [
+    62,
+    74,
+    69,
+    113,
+    105
+   ],
+   "term": "중도상환수수료",
+   "method": "hasAllTokens, ngrams(2)",
+   "table": "b_ng2",
+   "count": 145860,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasAllTokens(lower(content), '중도상환수수료')"
+  },
+  {
+   "runs": 5,
+   "ms": 228,
+   "read_rows": 1622016,
+   "read_bytes": 801432106,
+   "marks": 198,
+   "ms_all": [
+    448,
+    216,
+    369,
+    228,
+    201
+   ],
+   "term": "중도상환수수료",
+   "method": "hasPhrase, ngrams(2)",
+   "table": "b_ng2",
+   "count": 145860,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasPhrase(lower(content), '중도상환수수료')"
+  },
+  {
+   "runs": 5,
+   "ms": 332,
+   "read_rows": 1884160,
+   "read_bytes": 926833994,
+   "marks": 230,
+   "ms_all": [
+    424,
+    246,
+    329,
+    332,
+    526
+   ],
+   "term": "중도상환수수료",
+   "method": "hasPhrase, asciiCJK",
+   "table": "b_cjk",
+   "count": 145860,
+   "truth": 145860,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_cjk WHERE hasPhrase(lower(content), '중도상환수수료')"
+  },
+  {
+   "runs": 5,
+   "ms": 253,
+   "read_rows": 1992540,
+   "read_bytes": 964043290,
+   "marks": 244,
+   "ms_all": [
+    190,
+    253,
+    256,
+    204,
+    254
+   ],
+   "term": "비밀번호 재설정",
+   "method": "LIKE, no index",
+   "table": "b_none",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content LIKE '%비밀번호 재설정%'"
+  },
+  {
+   "runs": 5,
+   "ms": 213,
+   "read_rows": 1992540,
+   "read_bytes": 964043290,
+   "marks": 244,
+   "ms_all": [
+    173,
+    213,
+    233,
+    258,
+    164
+   ],
+   "term": "비밀번호 재설정",
+   "method": "ILIKE, no index",
+   "table": "b_none",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content ILIKE '%비밀번호 재설정%'"
+  },
+  {
+   "runs": 5,
+   "ms": 218,
+   "read_rows": 1695744,
+   "read_bytes": 838584697,
+   "marks": 207,
+   "ms_all": [
+    349,
+    218,
+    160,
+    203,
+    274
+   ],
+   "term": "비밀번호 재설정",
+   "method": "Langfuse UI form, splitByNonAlpha",
+   "table": "b_word",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE content ILIKE '%비밀번호 재설정%' AND hasAllTokens(lower(content), arraySlice(arrayDistinct(tokens(lower('%비밀번호 재설정%'))), 1, 64))"
+  },
+  {
+   "runs": 5,
+   "ms": 140,
+   "read_rows": 1695744,
+   "read_bytes": 838584697,
+   "marks": 207,
+   "ms_all": [
+    140,
+    94,
+    118,
+    249,
+    302
+   ],
+   "term": "비밀번호 재설정",
+   "method": "lower LIKE, ngrams(2)",
+   "table": "b_ng2",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE lower(content) LIKE '%비밀번호 재설정%'"
+  },
+  {
+   "runs": 5,
+   "ms": 44,
+   "read_rows": 1695744,
+   "read_bytes": 66982035,
+   "marks": 207,
+   "ms_all": [
+    49,
+    39,
+    52,
+    44,
+    38
+   ],
+   "term": "비밀번호 재설정",
+   "method": "hasAllTokens, ngrams(2)",
+   "table": "b_ng2",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasAllTokens(lower(content), '비밀번호 재설정')"
+  },
+  {
+   "runs": 5,
+   "ms": 255,
+   "read_rows": 1695744,
+   "read_bytes": 838584697,
+   "marks": 207,
+   "ms_all": [
+    255,
+    311,
+    195,
+    244,
+    289
+   ],
+   "term": "비밀번호 재설정",
+   "method": "hasPhrase, ngrams(2)",
+   "table": "b_ng2",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasPhrase(lower(content), '비밀번호 재설정')"
+  },
+  {
+   "runs": 5,
+   "ms": 348,
+   "read_rows": 1810432,
+   "read_bytes": 892929756,
+   "marks": 221,
+   "ms_all": [
+    306,
+    348,
+    347,
+    462,
+    927
+   ],
+   "term": "비밀번호 재설정",
+   "method": "hasPhrase, asciiCJK",
+   "table": "b_cjk",
+   "count": 184800,
+   "truth": 184800,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_cjk WHERE hasPhrase(lower(content), '비밀번호 재설정')"
+  },
+  {
+   "runs": 5,
+   "ms": 626,
+   "read_rows": 1992540,
+   "read_bytes": 965073383,
+   "marks": 244,
+   "ms_all": [
+    1037,
+    626,
+    679,
+    584,
+    323
+   ],
+   "term": "timeout",
+   "method": "LIKE, no index",
+   "table": "b_none",
+   "count": 236500,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content LIKE '%timeout%'"
+  },
+  {
+   "runs": 5,
+   "ms": 326,
+   "read_rows": 1992540,
+   "read_bytes": 965073383,
+   "marks": 244,
+   "ms_all": [
+    469,
+    295,
+    399,
+    326,
+    294
+   ],
+   "term": "timeout",
+   "method": "ILIKE, no index",
+   "table": "b_none",
+   "count": 236500,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content ILIKE '%timeout%'"
+  },
+  {
+   "runs": 5,
+   "ms": 91,
+   "read_rows": 1761280,
+   "read_bytes": 69569781,
+   "marks": 215,
+   "ms_all": [
+    144,
+    100,
+    91,
+    49,
+    58
+   ],
+   "term": "timeout",
+   "method": "hasToken, splitByNonAlpha",
+   "table": "b_word",
+   "count": 206580,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE hasToken(lower(content), 'timeout')"
+  },
+  {
+   "runs": 5,
+   "ms": 361,
+   "read_rows": 1761280,
+   "read_bytes": 867902571,
+   "marks": 215,
+   "ms_all": [
+    274,
+    352,
+    402,
+    361,
+    368
+   ],
+   "term": "timeout",
+   "method": "Langfuse UI form, splitByNonAlpha",
+   "table": "b_word",
+   "count": 206580,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE content ILIKE '%timeout%' AND hasAllTokens(lower(content), arraySlice(arrayDistinct(tokens(lower('%timeout%'))), 1, 64))"
+  },
+  {
+   "runs": 5,
+   "ms": 383,
+   "read_rows": 1777664,
+   "read_bytes": 875841648,
+   "marks": 217,
+   "ms_all": [
+    501,
+    245,
+    525,
+    319,
+    383
+   ],
+   "term": "timeout",
+   "method": "lower LIKE, ngrams(2)",
+   "table": "b_ng2",
+   "count": 236500,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE lower(content) LIKE '%timeout%'"
+  },
+  {
+   "runs": 5,
+   "ms": 52,
+   "read_rows": 1777664,
+   "read_bytes": 70216848,
+   "marks": 217,
+   "ms_all": [
+    51,
+    47,
+    52,
+    68,
+    62
+   ],
+   "term": "timeout",
+   "method": "hasAllTokens, ngrams(2)",
+   "table": "b_ng2",
+   "count": 236500,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasAllTokens(lower(content), 'timeout')"
+  },
+  {
+   "runs": 5,
+   "ms": 257,
+   "read_rows": 1777664,
+   "read_bytes": 875841648,
+   "marks": 217,
+   "ms_all": [
+    327,
+    331,
+    256,
+    217,
+    257
+   ],
+   "term": "timeout",
+   "method": "hasPhrase, ngrams(2)",
+   "table": "b_ng2",
+   "count": 236500,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasPhrase(lower(content), 'timeout')"
+  },
+  {
+   "runs": 5,
+   "ms": 318,
+   "read_rows": 1777664,
+   "read_bytes": 875841648,
+   "marks": 217,
+   "ms_all": [
+    331,
+    484,
+    318,
+    302,
+    238
+   ],
+   "term": "timeout",
+   "method": "hasPhrase, asciiCJK",
+   "table": "b_cjk",
+   "count": 236500,
+   "truth": 236500,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_cjk WHERE hasPhrase(lower(content), 'timeout')"
+  },
+  {
+   "runs": 5,
+   "ms": 317,
+   "read_rows": 1992540,
+   "read_bytes": 906573213,
+   "marks": 244,
+   "ms_all": [
+    213,
+    317,
+    333,
+    211,
+    347
+   ],
+   "term": "E1371066",
+   "method": "LIKE, no index",
+   "table": "b_none",
+   "count": 28,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content LIKE '%E1371066%'"
+  },
+  {
+   "runs": 5,
+   "ms": 261,
+   "read_rows": 1992540,
+   "read_bytes": 906573213,
+   "marks": 244,
+   "ms_all": [
+    246,
+    261,
+    287,
+    212,
+    488
+   ],
+   "term": "E1371066",
+   "method": "ILIKE, no index",
+   "table": "b_none",
+   "count": 28,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_none WHERE content ILIKE '%E1371066%'"
+  },
+  {
+   "runs": 5,
+   "ms": 12,
+   "read_rows": 98304,
+   "read_bytes": 3882987,
+   "marks": 12,
+   "ms_all": [
+    17,
+    26,
+    9,
+    12,
+    11
+   ],
+   "term": "E1371066",
+   "method": "hasToken, splitByNonAlpha",
+   "table": "b_word",
+   "count": 19,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE hasToken(lower(content), 'e1371066')"
+  },
+  {
+   "runs": 5,
+   "ms": 29,
+   "read_rows": 98304,
+   "read_bytes": 48050289,
+   "marks": 12,
+   "ms_all": [
+    29,
+    23,
+    20,
+    127,
+    72
+   ],
+   "term": "E1371066",
+   "method": "Langfuse UI form, splitByNonAlpha",
+   "table": "b_word",
+   "count": 19,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_word WHERE content ILIKE '%E1371066%' AND hasAllTokens(lower(content), arraySlice(arrayDistinct(tokens(lower('%E1371066%'))), 1, 64))"
+  },
+  {
+   "runs": 5,
+   "ms": 73,
+   "read_rows": 122880,
+   "read_bytes": 60419862,
+   "marks": 15,
+   "ms_all": [
+    51,
+    45,
+    80,
+    97,
+    73
+   ],
+   "term": "E1371066",
+   "method": "lower LIKE, ngrams(2)",
+   "table": "b_ng2",
+   "count": 28,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE lower(content) LIKE '%e1371066%'"
+  },
+  {
+   "runs": 5,
+   "ms": 10,
+   "read_rows": 122880,
+   "read_bytes": 4853767,
+   "marks": 15,
+   "ms_all": [
+    26,
+    10,
+    13,
+    8,
+    6
+   ],
+   "term": "E1371066",
+   "method": "hasAllTokens, ngrams(2)",
+   "table": "b_ng2",
+   "count": 28,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasAllTokens(lower(content), 'e1371066')"
+  },
+  {
+   "runs": 5,
+   "ms": 31,
+   "read_rows": 122880,
+   "read_bytes": 60419862,
+   "marks": 15,
+   "ms_all": [
+    32,
+    16,
+    31,
+    20,
+    46
+   ],
+   "term": "E1371066",
+   "method": "hasPhrase, ngrams(2)",
+   "table": "b_ng2",
+   "count": 28,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_ng2 WHERE hasPhrase(lower(content), 'e1371066')"
+  },
+  {
+   "runs": 5,
+   "ms": 15,
+   "read_rows": 122880,
+   "read_bytes": 60419862,
+   "marks": 15,
+   "ms_all": [
+    31,
+    15,
+    15,
+    15,
+    11
+   ],
+   "term": "E1371066",
+   "method": "hasPhrase, asciiCJK",
+   "table": "b_cjk",
+   "count": 28,
+   "truth": 28,
+   "marks_total": 245,
+   "sql": "SELECT count(), uniqExact(trace_id) FROM lab_langfuse_ch_fts.b_cjk WHERE hasPhrase(lower(content), 'e1371066')"
+  }
+ ],
+ "host_load_1min": {
+  "start": 34.9,
+  "end": 36.6
+ },
+ "host": {
+  "max_threads": "12",
+  "memory_limit": "3 GiB (docker --memory)"
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "insert": {
+  "events_full_rows": 60,
+  "copy_rows": 60,
+  "missing_in_copy": 0,
+  "seconds_until_in_events_full": 2.1,
+  "daechul_index": 6,
+  "daechul_truth": 6
+ },
+ "delete": {
+  "trace_id": "569351ac53d868d37f825f24c6242ff4",
+  "seconds_until_gone": 67.5,
+  "statement_kind": "Delete",
+  "copy_rows_after_delete": 3
+ },
+ "reconcile": {
+  "copy_rows_after": 0
+ }
+}

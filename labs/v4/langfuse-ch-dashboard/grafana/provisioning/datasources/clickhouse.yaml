@@ -1,0 +1,18 @@
+# The Langfuse ClickHouse as a Grafana datasource (grafana-clickhouse-datasource, HTTP on 8123).
+# $CH_USER / $CH_PASSWORD come from the container environment (docker-compose.yml), so no secret is
+# written to this file.
+apiVersion: 1
+datasources:
+  - name: langfuse-clickhouse
+    uid: langfuse-ch
+    type: grafana-clickhouse-datasource
+    isDefault: true
+    editable: false
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      username: $CH_USER
+      defaultDatabase: default
+    secureJsonData:
+      password: $CH_PASSWORD

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Write grafana/dashboards/langfuse-kr.json from sql/*.sql — the SQL files are the single source.
+"""Write grafana/dashboards/langfuse-kr.json from sql/*.sql.tmpl — the SQL files are the single source. They end in .sql.tmpl, not
+.sql: Grafana macros and ${variables} are not ClickHouse syntax, and the CI parses every tracked .sql.
 
 Each panel's rawSql is the file's text as is (Grafana macros and ${variables} included); 04-measure.py
 expands the same files the way the datasource plugin does. Run after editing a panel's SQL:
@@ -21,7 +22,7 @@ TRACE_LINK = "${langfuse_url}/project/${project}/traces/${__value.raw}"
 
 
 def sql(name: str) -> str:
-    return (LAB / "sql" / f"{name}.sql").read_text()
+    return (LAB / "sql" / f"{name}.sql.tmpl").read_text()
 
 
 def target(name: str, fmt: int) -> dict:

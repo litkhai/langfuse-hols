@@ -160,3 +160,20 @@ trace 82a8d6531b071502912ecb0c7c52d331
 # run finished 2026-11-23 20:06:08 KST
 exit=0
 ```
+
+## Re-run after renaming the panel files (2026-11-23 20:12–20:16 KST)
+
+CI's `SQL parse` job parses every tracked `.sql`, and the panel files hold Grafana macros, so `sql/*.sql` and
+`sql-fixes/*.sql` became `*.sql.tmpl`; `build_dashboard.py`, `05-measure.py` and `07-check.py` read the new names.
+`02-seed.py` found the window seeded and sent nothing; every other step ran again: `07-check.py` 15 PASS, `--fault` 1 FAIL,
+`08-captures.mjs` wrote the same five screenshots (the committed ones were kept). Measurements: `results/*-2016.md`.
+
+```text
+✓ already seeded: 3659 traces in 2026-11-09 … 2026-11-22 KST (--force sends again)
+✓ Grafana 13.2.6, grafana-clickhouse-datasource 4.23.5, ClickHouse 26.8.22.13
+✓ lab_langfuse_ch_dashboard.events_core: 10977000 rows, 3659000 traces, 1.01 GiB on disk; scores: 1881000 (192 s)
+✓ all checks passed
+✗ loan-advisor failure %: v2 at least twice v3 {1: 1.47, 2: 1.66, 3: 7.14}
+✗ 1 check(s) failed
+# run finished 2026-11-23 20:16:54 KST
+```

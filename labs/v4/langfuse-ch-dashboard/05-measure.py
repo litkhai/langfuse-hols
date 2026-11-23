@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """05 — query cost of every panel: rows and bytes read, duration, peak memory (system.query_log).
 
-Expands each sql/*.sql the way grafana-clickhouse-datasource 4.23.5 does ($__timeFilter(c) →
+Expands each sql/*.sql.tmpl (SQL with Grafana macros, so not plain .sql) the way grafana-clickhouse-datasource 4.23.5 does ($__timeFilter(c) →
 `c >= toDateTime(<from>) AND c <= toDateTime(<to>)`, ${var} → its value; checked against the
 queries Grafana sent, which query_log records with `grafana_panel:<id>` in http_user_agent), runs it
 --runs times with the query cache off, and reports the median. The first run is a warm-up and not
@@ -54,11 +54,12 @@ def main() -> int:
               f"WHERE project_id = '{PROJECT}' AND environment = '{ENVIRONMENT}' "
               f"AND start_time >= toDateTime({t_from}) AND start_time <= toDateTime({t_to})")[0]
     total = ch(f"SELECT count() AS rows FROM {a.db}.events_core")[0]["rows"]
-    files = sorted(p for p in (LAB_DIR / a.sql_dir).glob("*.sql") if not a.only or re.search(a.only, p.name))
+    files = sorted(p for p in (LAB_DIR / a.sql_dir).glob("*.sql.tmpl") if not a.only or re.search(a.only, p.name))
     rows = []
     for p in files:
         q = expand(p.read_text(), a.db, t_from, t_to, a.krw)
-        tag = f"chd-{p.stem}-{uuid.uuid4().hex[:8]}"
+        name = p.name.removesuffix(".sql.tmpl")
+        tag = f"chd-{name}-{uuid.uuid4().hex[:8]}"
         busy = 0
         for i in range(a.runs + 1):
             busy = max(busy, int(ch("SELECT count() AS n FROM system.processes WHERE query_id != queryID()")[0]["n"]))
@@ -68,9 +69,9 @@ def main() -> int:
 FROM system.query_log WHERE type = 'QueryFinish' AND log_comment LIKE '{tag}-%'
   AND log_comment != '{tag}-0' AND event_date >= yesterday()""")
         med = lambda k: statistics.median(int(r[k]) for r in log)
-        rows.append(dict(panel=p.stem, ms=med("ms"), read_rows=med("read_rows"), read_bytes=med("read_bytes"),
+        rows.append(dict(panel=name, ms=med("ms"), read_rows=med("read_rows"), read_bytes=med("read_bytes"),
                          mem=med("memory_usage"), result=int(log[0]["result_rows"]), n=len(log), busy=busy))
-        print(f"  {p.stem:28s} {rows[-1]['ms']:>7.0f} ms  {rows[-1]['read_rows']:>11,.0f} rows  "
+        print(f"  {name:28s} {rows[-1]['ms']:>7.0f} ms  {rows[-1]['read_rows']:>11,.0f} rows  "
               f"{rows[-1]['read_bytes'] / 2**20:>8.1f} MiB  mem {rows[-1]['mem'] / 2**20:>7.1f} MiB  "
               f"(other queries running: up to {busy})", flush=True)
 

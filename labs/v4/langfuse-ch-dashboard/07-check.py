@@ -70,12 +70,12 @@ sc = {r["name"]: int(r["n"]) for r in ch(f"SELECT name, count() AS n FROM defaul
                                          f"AND environment = '{ENVIRONMENT}' GROUP BY name")}
 check(sc.get("user-feedback", 0) > 0 and sc.get("judge-faithfulness", 0) > 0, f"scores: {sc}")
 
-for p in sorted((LAB_DIR / "sql").glob("*.sql")):
+for p in sorted((LAB_DIR / "sql").glob("*.sql.tmpl")):
     n = grafana(p.read_text())
     neg = grafana(p.read_text(), env="no-such-environment")
-    check(n > 0 and neg == 0, f"Grafana {p.stem}: {n} rows (unknown environment: {neg})")
+    check(n > 0 and neg == 0, f"Grafana {p.name.removesuffix('.sql.tmpl')}: {n} rows (unknown environment: {neg})")
 
-rows = ch(measure.expand((LAB_DIR / "sql" / "p4-failure-by-prompt.sql").read_text(), "default", F, T, "1400"))
+rows = ch(measure.expand((LAB_DIR / "sql" / "p4-failure-by-prompt.sql.tmpl").read_text(), "default", F, T, "1400"))
 loan = {int(r["version"]): float(r["failure_pct"]) for r in rows if r["prompt"] == "ch-dash-loan-advisor"}
 hi, lo = (2, 3) if "--fault" in sys.argv else (3, 2)
 check(loan.get(hi, 0) >= 2 * loan.get(lo, 99), f"loan-advisor failure %: v{hi} at least twice v{lo} {loan}")
@@ -88,8 +88,8 @@ check(int(k["kst"]) != int(k["utc"]), f"2026-11-09 traces: KST day {k['kst']}, U
 if ch(f"SELECT count() AS n FROM system.tables WHERE database = '{LAB_DB}' AND name = 'cost_team_day'")[0]["n"] != "0":
     for fix, orig in [("p3-cost-team-krw.tags", "p3-cost-team-krw"), ("p3-cost-team-krw.rollup", "p3-cost-team-krw"),
                       ("p6-costly-traces.two-step", "p6-costly-traces")]:
-        a = ch(measure.expand((LAB_DIR / "sql" / f"{orig}.sql").read_text(), LAB_DB, F, T, "1400"))
-        b = ch(measure.expand((LAB_DIR / "sql-fixes" / f"{fix}.sql").read_text(), LAB_DB, F, T, "1400"))
+        a = ch(measure.expand((LAB_DIR / "sql" / f"{orig}.sql.tmpl").read_text(), LAB_DB, F, T, "1400"))
+        b = ch(measure.expand((LAB_DIR / "sql-fixes" / f"{fix}.sql.tmpl").read_text(), LAB_DB, F, T, "1400"))
         check(len(a) > 0 and json.dumps(a) == json.dumps(b), f"{fix} = {orig} on {LAB_DB} ({len(a)} rows)")
 else:
     print(f"- {LAB_DB}.cost_team_day not there: run 04-scale-copy.py and 06-rollup.sql for check 5")

@@ -1,4 +1,4 @@
--- 03-mv.sql — run by 03-mv.sh, which replaces {CUTOFF} with a time a little in the future.
+-- 03-mv.sql — run by 03-mv.sh, which puts a time a little in the future into the CUTOFF placeholder below (a string literal, so this file parses as is).
 -- Target tables and incremental materialized views in lab_langfuse_ch_mv. The views read FROM
 -- default.events_full (the table Langfuse v4 writes every observation to) and keep only this lab's rows.
 -- Drop the has(tags, 'lab:langfuse-ch-mv') filter to roll up a whole project.
@@ -77,7 +77,7 @@ ENGINE = ReplacingMergeTree(event_ts)
 PARTITION BY toYYYYMM(start_time)
 ORDER BY (project_id, toDate(start_time), trace_id, span_id);
 
--- The views. created_at >= {CUTOFF}: rows written before the cutoff come from the backfill in 03-mv.sh,
+-- The views. created_at >= toDateTime64('{CUTOFF}', 6): rows written before the cutoff come from the backfill in 03-mv.sh,
 -- rows written after it from the view, so no row is counted twice or missed.
 CREATE MATERIALIZED VIEW lab_langfuse_ch_mv.obs_hourly_by_service_mv TO lab_langfuse_ch_mv.obs_hourly_by_service AS
 SELECT
@@ -96,7 +96,7 @@ SELECT
     quantilesTDigestStateIf(0.5, 0.95, 0.99)(
         toUInt32(greatest(dateDiff('millisecond', start_time, end_time), 0)), end_time IS NOT NULL) AS latency_ms
 FROM default.events_full
-WHERE has(tags, 'lab:langfuse-ch-mv') AND is_deleted = 0 AND created_at >= {CUTOFF}
+WHERE has(tags, 'lab:langfuse-ch-mv') AND is_deleted = 0 AND created_at >= toDateTime64('{CUTOFF}', 6)
 GROUP BY project_id, hour, service_name, type, model;
 
 CREATE MATERIALIZED VIEW lab_langfuse_ch_mv.obs_hourly_by_tag_mv TO lab_langfuse_ch_mv.obs_hourly_by_tag AS
@@ -113,7 +113,7 @@ SELECT
     quantilesTDigestStateIf(0.5, 0.95, 0.99)(
         toUInt32(greatest(dateDiff('millisecond', start_time, end_time), 0)), end_time IS NOT NULL) AS latency_ms
 FROM default.events_full
-WHERE has(tags, 'lab:langfuse-ch-mv') AND is_deleted = 0 AND created_at >= {CUTOFF}
+WHERE has(tags, 'lab:langfuse-ch-mv') AND is_deleted = 0 AND created_at >= toDateTime64('{CUTOFF}', 6)
 GROUP BY project_id, hour, tag, type;
 
 CREATE MATERIALIZED VIEW lab_langfuse_ch_mv.review_observations_mv TO lab_langfuse_ch_mv.review_observations AS
@@ -125,4 +125,4 @@ SELECT
     cost_details['total']       AS cost_usd,
     input, output, event_ts
 FROM default.events_full
-WHERE has(tags, 'lab:langfuse-ch-mv') AND has(tags, 'review:needed') AND is_deleted = 0 AND created_at >= {CUTOFF};
+WHERE has(tags, 'lab:langfuse-ch-mv') AND has(tags, 'review:needed') AND is_deleted = 0 AND created_at >= toDateTime64('{CUTOFF}', 6);

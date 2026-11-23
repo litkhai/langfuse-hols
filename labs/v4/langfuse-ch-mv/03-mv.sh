@@ -15,7 +15,7 @@ if [[ "$(ch "SELECT count() FROM system.databases WHERE name = '$LAB_DB'")" != 0
 fi
 CUTOFF=$(ch "SELECT toString(toStartOfSecond(now64(6)) + INTERVAL 20 SECOND)")
 echo "cutoff: $CUTOFF (server time zone $(ch "SELECT timezone()"))"
-sed "s/{CUTOFF}/toDateTime64('$CUTOFF', 6)/g" "$HERE/03-mv.sql" > "$RESULTS/.03-mv.rendered.sql"
+sed "s/{CUTOFF}/$CUTOFF/g" "$HERE/03-mv.sql" > "$RESULTS/.03-mv.rendered.sql"
 chf "$RESULTS/.03-mv.rendered.sql"
 echo "$CUTOFF" > "$RESULTS/.cutoff"
 

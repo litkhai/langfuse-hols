@@ -18,6 +18,7 @@ Differences from the core repository:
   (`tools/lab.schema.md`), written by `tools/labs_json.py` and checked locally with `--check`
   (README, Repository checks). Never set `web` without the owner's choice for that lab.
 - Enable the guard once per clone: `git config core.hooksPath .githooks`.
+- History of the split and of the #33 track move (`git filter-repo` renames, `git log` hints): `MAINTAINING.md`.
 
 ## Rules for this repository
 
@@ -35,20 +36,6 @@ Differences from the core repository:
   (e.g. *Langfuse v4.48.0 / SDK 4.16.0 / CH 26.8.15.10*). Each track has its own.
 - `labs/v3/langfuse-ee/08-generate-pii-traces.py` and its `labs/v4/` copy fabricate PII on
   purpose and are allowlisted in `.gitleaks.toml` by exact path. Do not widen that allowlist to a directory.
-
-## Where things came from
-
-Paths were renamed by `git filter-repo`, so `git log --follow` works across the
-split. The original locations:
-
-| In clickhouse-hols | Here, until #33 | Here, since #33 |
-|---|---|---|
-| `usecase/langfuse-ee/` | `labs/langfuse-ee/` | `labs/v4/langfuse-ee/` (moved), `labs/v3/langfuse-ee/` (restored) |
-| `usecase/langfuse-eval/` | `labs/langfuse-eval/` | `labs/v4/langfuse-eval/` (moved), `labs/v3/langfuse-eval/` (restored) |
-
-`labs/v4/` was moved with `git mv`, so `--follow` reaches back through the v4 port. `labs/v3/`
-was written from `git show 1a93628:…`, so its own history starts at #33; for what came before,
-run `git log 1a93628 -- labs/langfuse-ee`.
 
 <!-- harness:core start — khai-harness core@cc48e1b · context public · 손으로 고치지 마세요 -->
 **Context: public.** Public sources only — nothing from company connectors, internal hosts, internal wikis or
